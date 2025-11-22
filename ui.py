@@ -6,6 +6,43 @@ import os
 import json
 import re
 
+# Import CTkMenuBar (which includes CTkTitleMenu)
+try:
+    from CTkMenuBar import CTkTitleMenu, CustomDropdownMenu
+    MENUBAR_AVAILABLE = True
+except ImportError:
+    # Define dummy classes with proper inheritance for type checking
+    import customtkinter as ctk
+    
+    class FallbackCTkTitleMenu(ctk.CTkFrame):
+        def __init__(self, master=None, **kwargs):
+            # Extract title_bar_color if present
+            title_bar_color = kwargs.pop('title_bar_color', None)
+            super().__init__(master, **kwargs)
+        
+        def add_cascade(self, text, **kwargs):
+            # Return a dummy button that mimics the interface
+            return ctk.CTkButton(self, text=text, **kwargs)
+    
+    class FallbackCustomDropdownMenu:
+        def __init__(self, widget=None, **kwargs):
+            self.widget = widget
+        
+        def add_option(self, option, command=None):
+            pass
+        
+        def add_separator(self):
+            pass
+        
+        def add_submenu(self, submenu_name):
+            return self
+    
+    # Assign fallback classes to the expected names
+    CTkTitleMenu = FallbackCTkTitleMenu
+    CustomDropdownMenu = FallbackCustomDropdownMenu
+    MENUBAR_AVAILABLE = False
+    print("CTkMenuBar not available. Menu bar will not be displayed.")
+
 # استيراد دوال قاعدة البيانات
 try:
     from db_utils import init_db as init_db_real, get_counter as get_counter_real, increment_counter as increment_counter_real
@@ -107,18 +144,24 @@ class InvoiceRow:
 
     def calculate(self, event=None):
         try:
-            cnt = float(self.count_var.get()) if self.count_var.get() else 0
+            cnt_str = self.count_var.get()
+            cnt = float(cnt_str) if cnt_str else 0
             l = float(self.len_var.get()) if self.len_var.get() else 0
             h = float(self.height_var.get()) if self.height_var.get() else 0
             p = float(self.price_var.get()) if self.price_var.get() else 0
-            
+
             area = cnt * l * h
             total = area * p
 
-            self.area_var.set(f"{area:.3f}")
-            self.total_var.set(f"{total:.2f}")
+            # Format area with 2 decimal places (always show 2 decimals)
+            self.area_var.set(f"{area:.2f}")
+            # Format total with 2 decimal places (always show 2 decimals)
+            self.total_var.set(f"{int(round(total))}")
         except ValueError:
-            pass
+           # If user input is invalid, just ignore calculation
+            self.area_var.set("0.00")
+            self.total_var.set("0")
+
 
     def get_data(self):
         desc = self.combo_desc.get().strip()
@@ -149,11 +192,19 @@ class InvoiceUI(ctk.CTk):
         super().__init__()
         self.save_callback = save_callback
         
-        self.title("Invoice Creator")
+        self.title("مصنع السويفي - ادارة الفواتير")
         self.geometry("1150x700")
         ctk.set_appearance_mode("System")
         ctk.set_default_color_theme("blue")
 
+        # Enhanced RTL support for the entire application
+        try:
+            self.wm_attributes('-layout', 'RTL')
+            # Try to set right-to-left layout for the window
+            self.tk.call('tk', 'scaling', 1.0)
+        except:
+            pass
+        
         self.base_dir = os.path.dirname(__file__)
         self.products_path = os.path.join(self.base_dir, 'res', 'products.json')
         self.db_path = os.path.join(self.base_dir, 'res', 'invoice.db')
@@ -163,12 +214,41 @@ class InvoiceUI(ctk.CTk):
         self.op_counter = get_counter(self.db_path)
         self.rows = [] 
 
+        # Create menu bar if available
+        if MENUBAR_AVAILABLE:
+            self.create_menu_bar()
+
         self.grid_rowconfigure(1, weight=1) 
         self.grid_columnconfigure(0, weight=1)
 
         self.create_header()
         self.create_items_area()
         self.create_footer()
+
+    def create_menu_bar(self):
+        """Create the application menu bar"""
+        # Guard clause to ensure CTkMenuBar is available
+        if not MENUBAR_AVAILABLE:
+            return
+            
+        self.menu_bar = CTkTitleMenu(master=self)
+        
+        # File menu
+        self.file_menu = self.menu_bar.add_cascade("ملف")
+        self.file_dropdown = CustomDropdownMenu(widget=self.file_menu)
+        self.file_dropdown.add_option(option="فاتورة جديدة", command=self.reset_form)
+        self.file_dropdown.add_option(option="حفظ الفاتورة", command=self.save_excel)
+        self.file_dropdown.add_separator()
+        self.file_dropdown.add_option(option="خروج", command=self.quit)
+        
+        # Help menu
+        self.help_menu = self.menu_bar.add_cascade("مساعدة")
+        self.help_dropdown = CustomDropdownMenu(widget=self.help_menu)
+        self.help_dropdown.add_option(option="حول", command=self.show_about)
+
+    def show_about(self):
+        """Show about dialog"""
+        messagebox.showinfo("About", "Invoice Creator Application\nVersion 1.0\n\nA GUI application for creating invoices and exporting them to Excel format.")
 
     def create_header(self):
         """
@@ -256,7 +336,7 @@ class InvoiceUI(ctk.CTk):
         headers = [
             (10, ""), (9, "البيان"), (8, "رقم البلوك"), (7, "السمك"), 
             (6, "الخامة"), (5, "العدد"), (4, "الطول"), (3, "الارتفاع"), 
-            (2, "بالمتر"), (1, "السعر"), (0, "الإجمالي")
+            (2, "المسطح"), (1, "السعر"), (0, "الإجمالي")
         ]
         
         header_font = ("Arial", 13, "bold")
@@ -365,7 +445,7 @@ class InvoiceUI(ctk.CTk):
                 font=("Arial", 10),
                 selectmode='day',
                 showweeknumbers=False,
-                firstweekday='sunday',
+                firstweekday='friday',
                 showothermonthdays=False
             )
             
