@@ -169,6 +169,7 @@ class InvoiceRow:
             current_disc = float(self.discount_var.value) if self.discount_var.value else 0
             
             # If this is the first time entering a length, set base_length
+            # If discount was already entered, base_length should include it
             if self.base_length == 0:
                 self.base_length = current_len + current_disc
             
@@ -178,8 +179,6 @@ class InvoiceRow:
                 if new_net_len < 0:
                     new_net_len = 0
                 # Only update if the value is significantly different to avoid fighting the user
-                # and only if the user isn't currently deleting (which we can't easily detect, 
-                # but checking if value is empty handled above helps)
                 if abs(float(self.len_var.value) - new_net_len) > 0.01:
                      # Format to remove trailing zeros if integer
                     self.len_var.value = f"{new_net_len:g}"
@@ -192,30 +191,24 @@ class InvoiceRow:
         try:
             current_disc = float(self.discount_var.value) if self.discount_var.value else 0
             
-            # Check if length field is empty - if so, don't apply discount
-            if not self.len_var.value or self.len_var.value.strip() == "":
-                # Length is empty, don't apply discount yet
-                self.calculate(e)
-                return
-            
-            # If base_length is 0 and length field has value, initialize base_length
-            if self.base_length == 0 and self.len_var.value and self.len_var.value.strip() != "":
-                current_len = float(self.len_var.value) if self.len_var.value else 0
-                self.base_length = current_len + current_disc
-            
-            # If base_length is still 0, it means length hasn't been entered yet
-            # In this case, we'll store the discount value and apply it when length is entered
-            if self.base_length == 0:
-                # Just store the discount value, will be applied when length is entered
-                pass
-            else:
+            # Store the discount value regardless of whether length is entered
+            # If length is already entered, apply the discount immediately
+            if self.len_var.value and self.len_var.value.strip() != "":
+                # Length is entered, apply discount now
+                if self.base_length == 0:
+                    # Initialize base_length if not already set
+                    current_len = float(self.len_var.value) if self.len_var.value else 0
+                    self.base_length = current_len + current_disc
+                
                 # Update displayed length: Net = Base - Discount
-                new_net_len = self.base_length - current_disc
-                if new_net_len < 0:
-                    new_net_len = 0
-                # Format to remove trailing zeros if integer
-                self.len_var.value = f"{new_net_len:g}"
-                self.page.update()
+                if self.base_length > 0:
+                    new_net_len = self.base_length - current_disc
+                    if new_net_len < 0:
+                        new_net_len = 0
+                    # Format to remove trailing zeros if integer
+                    self.len_var.value = f"{new_net_len:g}"
+                    self.page.update()
+            # If length is not entered yet, just store the discount value for later use
         except ValueError:
             pass
         self.calculate(e)
