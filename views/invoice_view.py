@@ -120,8 +120,10 @@ class InvoiceRow:
         self.price_var.on_change = self.calculate
         
         # Special handlers for length and discount
-        self.len_var.on_change = self.on_length_change
-        self.discount_var.on_change = self.on_discount_change
+        self.len_var.on_change = self.calculate
+        self.len_var.on_blur = self.on_length_blur
+        self.discount_var.on_change = self.calculate
+        self.discount_var.on_blur = self.on_discount_blur
 
     def on_block_change(self, e):
         val = self.block_var.value
@@ -188,6 +190,61 @@ class InvoiceRow:
         self.calculate(e)
 
     def on_discount_change(self, e):
+        try:
+            current_disc = float(self.discount_var.value) if self.discount_var.value else 0
+            
+            # Store the discount value regardless of whether length is entered
+            # If length is already entered, apply the discount immediately
+            if self.len_var.value and self.len_var.value.strip() != "":
+                # Length is entered, apply discount now
+                if self.base_length == 0:
+                    # Initialize base_length if not already set
+                    current_len = float(self.len_var.value) if self.len_var.value else 0
+                    self.base_length = current_len + current_disc
+                
+                # Update displayed length: Net = Base - Discount
+                if self.base_length > 0:
+                    new_net_len = self.base_length - current_disc
+                    if new_net_len < 0:
+                        new_net_len = 0
+                    # Format to remove trailing zeros if integer
+                    self.len_var.value = f"{new_net_len:g}"
+                    self.page.update()
+            # If length is not entered yet, just store the discount value for later use
+        except ValueError:
+            pass
+        self.calculate(e)
+
+    def on_length_blur(self, e):
+        try:
+            # If empty, just return
+            if not self.len_var.value:
+                self.calculate(e)
+                return
+
+            current_len = float(self.len_var.value) if self.len_var.value else 0
+            current_disc = float(self.discount_var.value) if self.discount_var.value else 0
+            
+            # If this is the first time entering a length, set base_length
+            # If discount was already entered, base_length should include it
+            if self.base_length == 0:
+                self.base_length = current_len + current_disc
+            
+            # If discount was entered first, update the displayed length now
+            if current_disc > 0 and self.base_length > 0:
+                new_net_len = self.base_length - current_disc
+                if new_net_len < 0:
+                    new_net_len = 0
+                # Only update if the value is significantly different to avoid fighting the user
+                if abs(float(self.len_var.value) - new_net_len) > 0.01:
+                     # Format to remove trailing zeros if integer
+                    self.len_var.value = f"{new_net_len:g}"
+                    self.page.update()
+        except ValueError:
+            pass
+        self.calculate(e)
+
+    def on_discount_blur(self, e):
         try:
             current_disc = float(self.discount_var.value) if self.discount_var.value else 0
             
