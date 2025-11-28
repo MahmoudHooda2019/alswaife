@@ -1,0 +1,543 @@
+"""
+Excel Utilities for Invoice Creation
+This module provides functions to generate Excel invoices from invoice data.
+"""
+
+import xlsxwriter
+from typing import List, Tuple
+
+
+def save_invoice(filepath: str, op_num: str, client: str, driver: str,
+                 items: List[Tuple], date_str: str = "", phone: str = ""):
+    """
+    Save invoice data to an Excel file with proper formatting.
+    
+    Args:
+        filepath (str): Path to save the Excel file
+        op_num (str): Operation/invoice number
+        client (str): Client name
+        driver (str): Driver name
+        items (List[Tuple]): List of invoice items, each tuple contains:
+            (description, block, thickness, material, count, length, height, price)
+        date_str (str, optional): Date string. Defaults to "".
+        phone (str, optional): Phone number. Defaults to "".
+    """
+    
+    workbook = xlsxwriter.Workbook(filepath)
+    worksheet = workbook.add_worksheet("فاتورة")
+
+    # RTL + Page Break Preview
+    worksheet.right_to_left()
+    worksheet.set_pagebreak_view()
+    worksheet.hide_gridlines(2)  # Hide screen and printed gridlines
+
+    # ================
+    #  PAGE SETTINGS
+    # ================
+    worksheet.set_paper(9)         # A4
+    worksheet.set_landscape()
+    worksheet.set_margins(0.3, 0.3, 0.5, 0.5)
+    worksheet.fit_to_pages(1, 1)   # صفحة واحدة عرض + صفحة واحدة طول
+
+    # ==========================
+    #   FORMATS
+    # ==========================
+
+    header_fmt = workbook.add_format({
+        'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter',
+        'font_name': 'Arial', 'font_size': 14, 'bg_color': '#4472C4', 'font_color': '#FFFFFF'
+    })
+
+    label_fmt = workbook.add_format({
+        'bold': True, 'border': 1,
+        'align': 'center', 'valign': 'vcenter',
+        'font_name': 'Arial', 'font_size': 12, 'bg_color': '#D9E1F2', 'font_color': '#000000'
+    })
+
+    border_fmt = workbook.add_format({
+        'border': 1, 'align': 'center', 'valign': 'vcenter',
+        'font_name': 'Arial', 'font_size': 10
+    })
+
+    # Format for integer numbers (no decimal places)
+    integer_fmt = workbook.add_format({
+        'border': 1, 'align': 'center', 'valign': 'vcenter',
+        'font_name': 'Arial', 'font_size': 10,
+        'num_format': '0'  # أعداد صحيحة فقط
+    })
+
+    # Format for phone numbers (text format to prevent scientific notation)
+    phone_fmt = workbook.add_format({
+        'border': 1, 'align': 'center', 'valign': 'vcenter',
+        'font_name': 'Arial', 'font_size': 10,
+        'num_format': '@'  # Text format
+    })
+
+    # Format for area (always 2 decimal places, يحافظ على الصفر الأخير)
+    area_fmt = workbook.add_format({
+        'border': 1, 'align': 'center',
+        'font_name': 'Arial', 'font_size': 10,
+        'num_format': '0.00'  # يظهر دائمًا منزلتين عشريتين
+    })
+
+    # Format for money (always 2 decimal places, يحافظ على الصفر الأخير)
+    money_fmt = workbook.add_format({
+        'border': 1, 'align': 'center',
+        'font_name': 'Arial', 'font_size': 10,
+        'num_format': '0'
+    })
+
+
+
+    # ==========================
+    #   SPACE
+    # ==========================
+    worksheet.set_row(0, 12)
+    worksheet.set_row(1, 12)
+
+    start_row = 2
+
+    # ==========================
+    #   عنوان — Merge
+    # ==========================
+    worksheet.merge_range(start_row, 3, start_row, 8,
+                          f"فاتورة رقم ( {op_num} )", header_fmt)
+
+    # ==========================
+    #   جدول العميل / التاريخ
+    # ==========================
+    r = start_row + 2
+
+    # العميل
+    worksheet.write(r, 1, "العميل", label_fmt)
+    worksheet.merge_range(r, 2, r, 3, client or "", border_fmt)
+
+    # التاريخ
+    worksheet.write(r, 4, "التاريخ", label_fmt)
+    worksheet.merge_range(r, 5, r, 6, date_str or "", border_fmt)
+
+    # عدد السيارات - expand label to span two columns, remove merge from value cell
+    worksheet.merge_range(r, 7, r, 8, "عدد السيارات", label_fmt)
+    worksheet.write(r, 9, "1", integer_fmt)
+
+    r += 1
+
+    # السائق
+    worksheet.write(r, 1, "اسم السائق", label_fmt)
+    worksheet.merge_range(r, 2, r, 3, driver or "", border_fmt)
+
+    # تليفون
+    worksheet.write(r, 4, "ت", label_fmt)
+    worksheet.merge_range(r, 5, r, 6, phone or "", phone_fmt)
+
+    # نوع السيارة - expand label to span two columns, remove merge from value cell
+    worksheet.merge_range(r, 7, r, 8, "سيارة", label_fmt)
+    worksheet.write(r, 9, "", border_fmt)
+
+    r += 2
+
+    # ==========================
+    #   جدول الصنف مع المقاسات الفرعية
+    # ==========================
+    worksheet.merge_range(r, 1, r+1, 1, "البيان", header_fmt)
+    worksheet.merge_range(r, 2, r+1, 2, "رقم البلوك", header_fmt)
+    worksheet.merge_range(r, 3, r+1, 3, "السمك", header_fmt)
+    worksheet.merge_range(r, 4, r+1, 4, "الخامة", header_fmt)
+    
+    # دمج 3 أعمدةللعنوان العام للمقاس
+    worksheet.merge_range(r, 5, r, 7, "المقاس", header_fmt)
+    worksheet.write(r+1, 5, "العدد", header_fmt)
+    worksheet.write(r+1, 6, "الطول", header_fmt)
+    worksheet.write(r+1, 7, "الارتفاع", header_fmt)
+    
+    worksheet.merge_range(r, 8, r+1, 8, "المسطح م2", header_fmt)
+    worksheet.merge_range(r, 9, r+1, 9, "السعر", header_fmt)
+    worksheet.merge_range(r, 10, r+1, 10, "إجمالي السعر", header_fmt)
+
+    first_item_row = None
+    r += 2
+
+    # ==========================
+    #   العناصر
+    # ==========================
+    for item in items:
+        try:
+            desc = item[0]
+            block = item[1]
+            thickness = item[2]
+            material = item[3]
+            count = float(item[4])
+            length = float(item[5])
+            height = float(item[6])
+            price_val =  int(item[7])
+        except (ValueError, IndexError):
+            continue
+
+        if first_item_row is None:
+            first_item_row = r
+
+        worksheet.write(r, 1, desc, border_fmt)
+        worksheet.write(r, 2, block, border_fmt)
+        worksheet.write(r, 3, thickness, border_fmt)
+        worksheet.write(r, 4, material, border_fmt)
+        # القيم توضع مباشرة في الأعمدة الثلاثة
+        worksheet.write_number(r, 5, count, integer_fmt)      # العدد
+        worksheet.write_number(r, 6, length, border_fmt)     # الطول
+        worksheet.write_number(r, 7, height, border_fmt)     # الارتفاع
+        
+        # الصيغ يحسبها Excel تلقائياً
+        excel_row = r + 1
+        worksheet.write_formula(r, 8, f"=F{excel_row}*G{excel_row}*H{excel_row}", area_fmt)
+        worksheet.write_number(r, 9, price_val, money_fmt)
+        # تقريب الناتج إلى أقرب عدد صحيح
+        worksheet.write_formula(r, 10, f"=ROUND(I{excel_row}*J{excel_row},0)", money_fmt)
+
+        r += 1
+
+    # ==========================
+    #   المجموع
+    # ==========================
+    if first_item_row is not None:
+        total_row = r
+        worksheet.merge_range(total_row, 1, total_row, 4, "المجموع", header_fmt)
+        excel_first = first_item_row + 1
+        excel_last = r
+        
+        # Sum for count (column 5)
+        worksheet.write(total_row, 5, f"=SUM(F{excel_first}:F{excel_last})", integer_fmt)
+        
+        # Sum for area (column 8)
+        worksheet.write(total_row, 8, f"=SUM(I{excel_first}:I{excel_last})", area_fmt)
+        
+        # Sum for total price (column 10)
+        worksheet.write(total_row, 10, f"=SUM(K{excel_first}:K{excel_last})", money_fmt)
+
+        # ==========================
+        #   Aggregated Invoice Summary Table
+        # ==========================
+        summary_start_row = total_row + 2
+        worksheet.merge_range(summary_start_row, 1, summary_start_row, 6, "اجمالي الفاتورة", header_fmt)
+
+        # Write summary table headers
+        summary_header_row = summary_start_row + 1
+        worksheet.write(summary_header_row, 1, "البيان", header_fmt)
+        worksheet.write(summary_header_row, 2, "النوع", header_fmt)
+        worksheet.write(summary_header_row, 3, "المسطح م2", header_fmt)
+        worksheet.write(summary_header_row, 4, "إجمالي السعر", header_fmt)
+        worksheet.write(summary_header_row, 5, "السمك", header_fmt)
+        worksheet.write(summary_header_row, 6, "سعر المتر", header_fmt)
+
+        # Process items to identify unique combinations
+        aggregated_data = {}
+
+        for item in items:
+            try:
+                desc = item[0] or ""
+                material = item[3] or ""
+                thickness = item[2] or ""
+                key = (desc, material, thickness)
+                if key not in aggregated_data:
+                    aggregated_data[key] = {
+                        "description": desc,
+                        "material": material,
+                        "thickness": thickness
+                    }
+            except (ValueError, IndexError):
+                continue
+
+        summary_data_start_row = summary_header_row + 1
+        row_counter = 0
+
+        for (desc, material, thickness), data in aggregated_data.items():
+            row_num = summary_data_start_row + row_counter
+
+            # Static values
+            worksheet.write(row_num, 1, desc, border_fmt)
+            worksheet.write(row_num, 2, material, border_fmt)
+            worksheet.write(row_num, 5, thickness, border_fmt)
+
+            # ================================
+            #   CORRECTED SUMIFS FORMULAS
+            # ================================
+
+            # Area aggregation (column I)
+            area_formula = (
+                f"=SUMIFS(I{excel_first}:I{excel_last}, "
+                f"B{excel_first}:B{excel_last}, \"={desc}\", "
+                f"E{excel_first}:E{excel_last}, \"={material}\", "
+                f"D{excel_first}:D{excel_last}, \"={thickness}\")"
+            )
+            worksheet.write_formula(row_num, 3, area_formula, area_fmt)
+
+            # Total price aggregation (column K)
+            price_formula = (
+                f"=SUMIFS(K{excel_first}:K{excel_last}, "
+                f"B{excel_first}:B{excel_last}, \"={desc}\", "
+                f"E{excel_first}:E{excel_last}, \"={material}\", "
+                f"D{excel_first}:D{excel_last}, \"={thickness}\")"
+            )
+            worksheet.write_formula(row_num, 4, price_formula, money_fmt)
+
+            # Price per meter = total / area
+            # Column numbers based on the summary table
+            # Area = column 3 => D
+            # Price = column 4 => E
+            price_per_meter_formula = f"=IF(D{row_num+1}=0,0, E{row_num+1}/D{row_num+1})"
+            worksheet.write_formula(row_num, 6, price_per_meter_formula, money_fmt)
+
+            row_counter += 1
+
+        # If no aggregated data was found
+        if row_counter == 0:
+            worksheet.write(summary_data_start_row, 1, "لا توجد عناصر للتجميع", border_fmt)
+            row_counter = 1
+
+        # Summary TOTAL for the aggregated table
+        summary_total_row = summary_data_start_row + row_counter
+        worksheet.merge_range(summary_total_row, 1, summary_total_row, 2, "المجموع", header_fmt)
+
+        # Total area
+        area_sum_formula = f"=SUM(D{summary_data_start_row}:{'D'}{summary_total_row-1})"
+        worksheet.write_formula(summary_total_row, 3, area_sum_formula, area_fmt)
+
+        # Total price
+        price_sum_formula = f"=SUM(E{summary_data_start_row}:{'E'}{summary_total_row-1})"
+        worksheet.write_formula(summary_total_row, 4, price_sum_formula, money_fmt)
+
+        # ==========================
+        #   Signature Section
+        # ==========================
+        signature_row = summary_total_row + 1  # Position directly after the summary table
+        
+        # Create a format for centered text (both vertically and horizontally)
+        center_fmt = workbook.add_format({
+            'align': 'center',
+            'valign': 'vcenter',
+            'font_name': 'Arial',
+            'font_size': 10
+        })
+        
+        # Merge cells for signature section on the right side (columns 8-10, three columns wide) with centering
+        worksheet.merge_range(signature_row, 8, signature_row, 10, "التوقيع(_____________)", center_fmt)
+        
+        # Merge cells for name on the right side (columns 8-10, same position) with centering
+        signature_name_row = signature_row + 1
+        worksheet.merge_range(signature_name_row, 8, signature_name_row, 10, "أ/ مصطفي السويفي", center_fmt)
+        
+        # Merge cells for title on the right side (columns 8-10, same position) with centering
+        signature_title_row = signature_name_row + 1
+        worksheet.merge_range(signature_title_row, 8, signature_title_row, 10, "رئيس مجلس الإدارة", center_fmt)
+
+    # ==========================
+    #   عرض الأعمدة
+    # ==========================
+    worksheet.set_column(0, 0, 3)
+    worksheet.set_column(1, 1, 16)  # البيان
+    worksheet.set_column(2, 2, 10)  # رقم البلوك
+    worksheet.set_column(3, 3, 10)  # السمك
+    worksheet.set_column(4, 4, 12)  # الخامة
+    worksheet.set_column(5, 5, 8)   # العدد
+    worksheet.set_column(6, 6, 8)   # الطول
+    worksheet.set_column(7, 7, 8)   # # الارتفاع
+    worksheet.set_column(8, 8, 10)  # الإجمالي م2
+    worksheet.set_column(9, 9, 10)  # السعر
+    worksheet.set_column(10, 10, 14)  # إجمالي السعر
+
+    workbook.close()
+
+def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_num: str, 
+                         total_amount: float, driver: str = "", invoice_items: list = None):
+    """
+    Update or create the client's cumulative ledger Excel file with detailed information.
+    
+    Args:
+        folder_path (str): The directory where the ledger should be saved.
+        client_name (str): The name of the client.
+        date_str (str): The date of the invoice.
+        op_num (str): The invoice number.
+        total_amount (float): The total amount of the invoice.
+        driver (str): Driver name.
+        invoice_items (list): List of aggregated invoice items (desc, material, thickness, area, price)
+    
+    Returns:
+        tuple: (success: bool, error_message: str or None)
+    """
+    import os
+    from datetime import datetime
+    
+    filename = f"{client_name}.xlsx"
+    filepath = os.path.join(folder_path, filename)
+    
+    # Check if file exists to determine if we need to create headers
+    file_exists = os.path.exists(filepath)
+    
+    try:
+        if file_exists:
+            import openpyxl
+            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+            
+            workbook = openpyxl.load_workbook(filepath)
+            sheet = workbook.active
+            
+            # Find next empty row (skip header and total debt rows)
+            next_row = sheet.max_row + 1
+            
+            # Add invoice items to the ledger
+            if invoice_items:
+                for item_data in invoice_items:
+                    desc, material, thickness, area, price = item_data
+                    
+                    sheet.cell(row=next_row, column=1, value=op_num)
+                    sheet.cell(row=next_row, column=2, value=driver)
+                    sheet.cell(row=next_row, column=3, value=date_str)
+                    sheet.cell(row=next_row, column=4, value=f"{material} - {thickness}")
+                    sheet.cell(row=next_row, column=5, value=area)
+                    sheet.cell(row=next_row, column=6, value=price)
+                    sheet.cell(row=next_row, column=7, value=area * price)  # المبلغ
+                    sheet.cell(row=next_row, column=8, value="")  # تاريخ الدفع
+                    sheet.cell(row=next_row, column=9, value=0)  # الدفعات
+                    
+                    # الرصيد = المبلغ - الدفعات (معادلة)
+                    sheet.cell(row=next_row, column=10, value=f"=G{next_row}-I{next_row}")
+                    
+                    sheet.cell(row=next_row, column=11, value="")  # ملاحظات
+                    
+                    # Apply borders
+                    thin_border = Border(
+                        left=Side(style='thin'),
+                        right=Side(style='thin'),
+                        top=Side(style='thin'),
+                        bottom=Side(style='thin')
+                    )
+                    for col in range(1, 12):
+                        cell = sheet.cell(row=next_row, column=col)
+                        cell.border = thin_border
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                    
+                    next_row += 1
+            
+            # Update total debt formula in cell B2
+            # إجمالي الديون = مجموع عمود الرصيد (J)
+            sheet.cell(row=2, column=2, value=f"=SUM(J4:J{next_row-1})")
+            
+            workbook.save(filepath)
+            return (True, None)
+            
+        else:
+            # Create new file with detailed structure
+            import openpyxl
+            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+            from openpyxl.styles.numbers import FORMAT_NUMBER_COMMA_SEPARATED1
+            
+            workbook = openpyxl.Workbook()
+            sheet = workbook.active
+            sheet.title = "كشف حساب"
+            
+            # RTL
+            sheet.sheet_view.rightToLeft = True
+            
+            # Title: كشف الحساب - [Client Name]
+            sheet.merge_cells('A1:K1')
+            title_cell = sheet['A1']
+            title_cell.value = f"كشف الحساب - {client_name}"
+            title_cell.font = Font(name='Arial', size=16, bold=True, color="FFFFFF")
+            title_cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            title_cell.alignment = Alignment(horizontal='center', vertical='center')
+            sheet.row_dimensions[1].height = 30
+            
+            # Total debt row
+            sheet.merge_cells('A2:A2')
+            debt_label = sheet['A2']
+            debt_label.value = "إجمالي الديون:"
+            debt_label.font = Font(name='Arial', size=12, bold=True)
+            debt_label.fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
+            debt_label.alignment = Alignment(horizontal='center', vertical='center')
+            
+            # Formula for total debt (will calculate automatically)
+            debt_value = sheet['B2']
+            row_count = 4 + len(invoice_items) if invoice_items else 4
+            debt_value.value = f"=SUM(J4:J{row_count})"
+            debt_value.font = Font(name='Arial', size=12, bold=True, color="FF0000")
+            debt_value.fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+            debt_value.alignment = Alignment(horizontal='center', vertical='center')
+            debt_value.number_format = '#,##0'
+            sheet.row_dimensions[2].height = 25
+            
+            # Headers
+            headers = [
+                "رقم الفاتورة",
+                "اسم السائق", 
+                "تاريخ التحميل",
+                "النوع (الخامة)",
+                "المسطح م2",
+                "إجمالي السعر",
+                "المبلغ",
+                "تاريخ الدفع",
+                "الدفعات",
+                "الرصيد",
+                "ملاحظات"
+            ]
+            
+            header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+            header_font = Font(name='Arial', size=11, bold=True)
+            border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            for col, header in enumerate(headers, start=1):
+                cell = sheet.cell(row=3, column=col)
+                cell.value = header
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.border = border
+                cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            
+            sheet.row_dimensions[3].height = 30
+            
+            # Set column widths
+            column_widths = [12, 12, 12, 15, 10, 12, 12, 12, 10, 10, 15]
+            for col, width in enumerate(column_widths, start=1):
+                sheet.column_dimensions[openpyxl.utils.get_column_letter(col)].width = width
+            
+            # Add first invoice data
+            row = 4
+            if invoice_items:
+                for item_data in invoice_items:
+                    desc, material, thickness, area, price = item_data
+                    
+                    sheet.cell(row=row, column=1, value=op_num)
+                    sheet.cell(row=row, column=2, value=driver)
+                    sheet.cell(row=row, column=3, value=date_str)
+                    sheet.cell(row=row, column=4, value=f"{material} - {thickness}")
+                    sheet.cell(row=row, column=5, value=area)
+                    sheet.cell(row=row, column=6, value=price)
+                    sheet.cell(row=row, column=7, value=area * price)
+                    sheet.cell(row=row, column=8, value="")
+                    sheet.cell(row=row, column=9, value=0)
+                    
+                    # الرصيد = المبلغ - الدفعات (معادلة)
+                    sheet.cell(row=row, column=10, value=f"=G{row}-I{row}")
+                    
+                    sheet.cell(row=row, column=11, value="")
+                    
+                    # Apply borders and alignment
+                    for col in range(1, 12):
+                        cell = sheet.cell(row=row, column=col)
+                        cell.border = border
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                    
+                    row += 1
+            
+            workbook.save(filepath)
+            return (True, None)
+            
+    except PermissionError as e:
+        # File is open in Excel
+        return (False, "file_locked")
+    except ImportError:
+        return (False, "openpyxl_missing")
+    except Exception as e:
+        return (False, f"error: {str(e)}")

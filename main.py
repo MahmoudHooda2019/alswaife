@@ -1,59 +1,83 @@
 #!/usr/bin/env python3
 """
-Invoice Creator Application
-A GUI application for creating invoices and exporting them to Excel format.
+مصنع السويفي - نظام الإدارة
+تطبيق رسومي لإدارة المصنع والفواتير.
 """
 
 import sys
 import os
 import traceback
-from tkinter import messagebox
-import customtkinter as ctk
+import flet as ft
+from utils.path_utils import resource_path
 
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from ui import InvoiceUI
-from excel_utils import save_invoice
+# Set locale for Arabic support
+import locale
+try:
+    # Try to set Arabic locale
+    locale.setlocale(locale.LC_ALL, 'ar_SA.UTF-8')
+except:
+    pass
+
+from views.dashboard_view import DashboardView
+from utils.excel_utils import save_invoice
 
 
 def save_callback(filepath, op_num, client, driver, date_str, phone, items):
     """
-    Callback function to save invoice data to Excel.
+    دالة رد الاتصال لحفظ بيانات الفاتورة إلى Excel.
     
     Args:
-        filepath (str): Path to save the Excel file
-        op_num (str): Operation/invoice number
-        client (str): Client name
-        driver (str): Driver name
-        date_str (str): Date string
-        phone (str): Phone number
-        items (list): List of invoice items
+        filepath (str): المسار لحفظ ملف Excel
+        op_num (str): رقم العملية/الفاتورة
+        client (str): اسم العميل
+        driver (str): اسم السائق
+        date_str (str): سلسلة التاريخ
+        phone (str): رقم الهاتف
+        items (list): قائمة عناصر الفاتورة
     """
     save_invoice(filepath, op_num, client, driver, items, date_str=date_str, phone=phone)
 
 
-def main():
-    """Main application entry point."""
+def main(page: ft.Page):
+    """نقطة الدخول الرئيسية للتطبيق."""
     try:
-        app = InvoiceUI(save_callback)
-        app.mainloop()
+        # Configure window properties
+        page.title = "مصنع السويفي"
+        
+        # Set window to maximized
+        page.window.maximized = True
+        icon_path = resource_path(os.path.join("res", "icon.ico"))
+        page.window.icon = icon_path
+        
+        # Create and show the Dashboard
+        dashboard = DashboardView(page)
+        dashboard.show(save_callback)
+        
     except Exception as e:
         # Log the full traceback for debugging
-        error_msg = f"An unexpected error occurred:\n{str(e)}\n\n"
-        error_msg += "Details:\n" + traceback.format_exc()
+        error_msg = f"حدث خطأ غير متوقع:\n{str(e)}\n\n"
+        error_msg += "تفاصيل:\n" + traceback.format_exc()
+        print(error_msg)
         
-        # Try to show a message box, but fall back to console if GUI fails
-        try:
-            root = ctk.CTk()
-            root.withdraw()  # Hide the main window
-            messagebox.showerror("Application Error", error_msg)
-            root.destroy()
-        except:
-            print(error_msg)
+        # Show error dialog
+        def close_dlg(e):
+            dlg.open = False
+            page.update()
         
+        dlg = ft.AlertDialog(
+            title=ft.Text("خطأ في التطبيق"),
+            content=ft.Text(error_msg),
+            actions=[ft.TextButton("موافق", on_click=close_dlg)]
+        )
+        page.overlay.append(dlg)
+        dlg.open = True
+        page.update()
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+    # Run as desktop app with assets directory
+    ft.app(target=main, view=ft.AppView.FLET_APP, assets_dir='res')
