@@ -167,8 +167,10 @@ class InvoiceRow:
 
             current_len = float(self.len_var.value) if self.len_var.value else 0
             current_disc = float(self.discount_var.value) if self.discount_var.value else 0
-            # Update base length: Base = Net + Discount
-            self.base_length = current_len + current_disc
+            
+            # If this is the first time entering a length, set base_length
+            if self.base_length == 0:
+                self.base_length = current_len + current_disc
             
             # If discount was entered first, update the displayed length now
             if current_disc > 0 and self.base_length > 0:
@@ -189,6 +191,12 @@ class InvoiceRow:
     def on_discount_change(self, e):
         try:
             current_disc = float(self.discount_var.value) if self.discount_var.value else 0
+            
+            # Check if length field is empty - if so, don't apply discount
+            if not self.len_var.value or self.len_var.value.strip() == "":
+                # Length is empty, don't apply discount yet
+                self.calculate(e)
+                return
             
             # If base_length is 0 and length field has value, initialize base_length
             if self.base_length == 0 and self.len_var.value and self.len_var.value.strip() != "":
