@@ -217,57 +217,74 @@ class InvoiceRow:
 
     def on_length_blur(self, e):
         try:
+            print(f"on_length_blur called. Length value: '{self.len_var.value}', Discount value: '{self.discount_var.value}'")
             # If empty, just return
             if not self.len_var.value:
+                print("Length is empty, returning")
                 self.calculate(e)
                 return
 
             current_len = float(self.len_var.value) if self.len_var.value else 0
             current_disc = float(self.discount_var.value) if self.discount_var.value else 0
+            print(f"Parsed values - Length: {current_len}, Discount: {current_disc}")
             
             # If this is the first time entering a length, set base_length
             # If discount was already entered, base_length should include it
             if self.base_length == 0:
                 self.base_length = current_len + current_disc
+                print(f"Set base_length to: {self.base_length}")
             
             # If discount was entered first, update the displayed length now
             if current_disc > 0 and self.base_length > 0:
                 new_net_len = self.base_length - current_disc
                 if new_net_len < 0:
                     new_net_len = 0
+                print(f"Applying discount. Base: {self.base_length}, Discount: {current_disc}, New net length: {new_net_len}")
                 # Only update if the value is significantly different to avoid fighting the user
                 if abs(float(self.len_var.value) - new_net_len) > 0.01:
                      # Format to remove trailing zeros if integer
                     self.len_var.value = f"{new_net_len:g}"
+                    print(f"Updated length field to: {self.len_var.value}")
                     self.page.update()
-        except ValueError:
-            pass
+        except ValueError as ex:
+            print(f"ValueError in on_length_blur: {ex}")
+        except Exception as ex:
+            print(f"Exception in on_length_blur: {ex}")
         self.calculate(e)
 
     def on_discount_blur(self, e):
         try:
+            print(f"on_discount_blur called. Discount value: '{self.discount_var.value}', Length value: '{self.len_var.value}'")
             current_disc = float(self.discount_var.value) if self.discount_var.value else 0
+            print(f"Parsed discount value: {current_disc}")
             
             # Store the discount value regardless of whether length is entered
             # If length is already entered, apply the discount immediately
             if self.len_var.value and self.len_var.value.strip() != "":
-                # Length is entered, apply discount now
+                print("Length is already entered, applying discount now")
                 if self.base_length == 0:
                     # Initialize base_length if not already set
                     current_len = float(self.len_var.value) if self.len_var.value else 0
                     self.base_length = current_len + current_disc
+                    print(f"Set base_length to: {self.base_length}")
                 
                 # Update displayed length: Net = Base - Discount
                 if self.base_length > 0:
                     new_net_len = self.base_length - current_disc
                     if new_net_len < 0:
                         new_net_len = 0
+                    print(f"Applying discount. Base: {self.base_length}, Discount: {current_disc}, New net length: {new_net_len}")
                     # Format to remove trailing zeros if integer
                     self.len_var.value = f"{new_net_len:g}"
+                    print(f"Updated length field to: {self.len_var.value}")
                     self.page.update()
+            else:
+                print("Length is not entered yet, storing discount for later use")
             # If length is not entered yet, just store the discount value for later use
-        except ValueError:
-            pass
+        except ValueError as ex:
+            print(f"ValueError in on_discount_blur: {ex}")
+        except Exception as ex:
+            print(f"Exception in on_discount_blur: {ex}")
         self.calculate(e)
 
     def on_product_select(self, e):
@@ -350,14 +367,24 @@ class InvoiceRow:
             # Discount is already applied to 'l' (Length field)
             p = float(self.price_var.value) if self.price_var.value else 0
 
+            print(f"Calculate called with: Count={cnt}, Length={l}, Height={h}, Price={p}")
+
             area = cnt * l * h
             total = area * p
+
+            print(f"Calculated area: {area}, total: {total}")
 
             # Format area with 2 decimal places (always show 2 decimals)
             self.area_var.value = f"{area:.2f}"
             # Format total with 2 decimal places (always show 2 decimals)
             self.total_var.value = f"{int(round(total))}"
-        except ValueError:
+        except ValueError as ex:
+            print(f"ValueError in calculate: {ex}")
+            # If user input is invalid, just ignore calculation
+            self.area_var.value = "0.00"
+            self.total_var.value = "0"
+        except Exception as ex:
+            print(f"Exception in calculate: {ex}")
             # If user input is invalid, just ignore calculation
             self.area_var.value = "0.00"
             self.total_var.value = "0"
