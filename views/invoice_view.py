@@ -245,7 +245,10 @@ class InvoiceRow:
                      # Format to remove trailing zeros if integer
                     self.len_var.value = f"{new_net_len:g}"
                     print(f"Updated length field to: {self.len_var.value}")
+                    # Force an update and recalculate
                     self.page.update()
+                    self.calculate(None)
+                    return
         except ValueError as ex:
             print(f"ValueError in on_length_blur: {ex}")
         except Exception as ex:
@@ -277,7 +280,10 @@ class InvoiceRow:
                     # Format to remove trailing zeros if integer
                     self.len_var.value = f"{new_net_len:g}"
                     print(f"Updated length field to: {self.len_var.value}")
+                    # Force an update and recalculate
                     self.page.update()
+                    self.calculate(None)
+                    return
             else:
                 print("Length is not entered yet, storing discount for later use")
             # If length is not entered yet, just store the discount value for later use
