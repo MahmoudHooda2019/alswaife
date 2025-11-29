@@ -430,11 +430,15 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                     
                     next_row += 1
             
-            # Update total debt formula in cell B2
+            # Update total debt formula in cell I1 (merged cells I1:K1)
             # إجمالي الديون = مجموع عمود الرصيد (J)
-            # We need to dynamically calculate the range based on the actual data
-            # The data starts at row 4 and goes to next_row-1
-            sheet.cell(row=2, column=2, value=f"=SUM(J4:J{next_row-1})")
+            # The debt formula should be consistent with initial creation
+            try:
+                debt_value = sheet['I1']  # This represents the merged range I1:K1
+                debt_value.value = f"=SUM(J4:J{next_row-1})"
+            except:
+                # Fallback: try to update just cell I1
+                sheet.cell(row=1, column=9, value=f"=SUM(J4:J{next_row-1})")
             
             workbook.save(filepath)
             return (True, None)
@@ -466,12 +470,19 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
             title_cell.alignment = Alignment(horizontal='center', vertical='center')
             sheet.row_dimensions[1].height = 30
             
+            # Merge empty row 2 for better visual separation
+            sheet.merge_cells('A2:K2')
+            empty_row = sheet['A2']
+            empty_row.fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+            
             # Total debt - placing it next to client name instead of below
             sheet.merge_cells('G1:H1')  # Merge cells G1 and H1 for debt label
             debt_label = sheet['G1']
             debt_label.value = "إجمالي الديون:"
             debt_label.font = Font(name='Arial', size=12, bold=True)
-            debt_label.fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
+            # Improved color scheme to match sheet design
+            debt_label.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            debt_label.font = Font(name='Arial', size=12, bold=True, color="FFFFFF")
             debt_label.alignment = Alignment(horizontal='center', vertical='center')
             
             # Formula for total debt
@@ -481,8 +492,9 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
             # Data starts at row 4, and we add len(invoice_items) rows
             last_row = 4 + len(invoice_items) - 1 if invoice_items else 4
             debt_value.value = f"=SUM(J4:J{last_row})"
-            debt_value.font = Font(name='Arial', size=12, bold=True, color="FF0000")
-            debt_value.fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+            debt_value.font = Font(name='Arial', size=12, bold=True, color="4472C4")
+            # Improved color scheme to match sheet design
+            debt_value.fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
             debt_value.alignment = Alignment(horizontal='center', vertical='center')
             debt_value.number_format = '#,##0'
             
