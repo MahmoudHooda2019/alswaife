@@ -11,14 +11,23 @@ if os.path.exists('dist'):
 # Define resources to include
 # Format: "source;dest" for Windows
 res_path = os.path.join("res")
-add_data = f"{res_path};res"
+version_file = "version.py"
+changelog_file = "CHANGELOG.md"
+readme_file = "README.md"
+release_notes_file = "RELEASE_NOTES.md"
 
-PyInstaller.__main__.run([
+args = [
     'main.py',
     '--name=AlSawifeFactory',
     '--onefile',
     '--noconsole',
-    f'--add-data={add_data}',
+    f'--add-data={res_path};res',
+    f'--add-data={version_file};.',
+    f'--add-data={changelog_file};.',
+    f'--add-data={readme_file};.',
+    f'--add-data={release_notes_file};.',
     '--icon=res/icon.ico',
     '--clean',
-])
+]
+
+PyInstaller.__main__.run(args)

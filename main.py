@@ -9,6 +9,12 @@ import traceback
 import flet as ft
 from utils.path_utils import resource_path
 
+# Version information
+try:
+    from version import __version__
+except ImportError:
+    __version__ = "1.0.0"
+
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -44,7 +50,7 @@ def main(page: ft.Page):
     """نقطة الدخول الرئيسية للتطبيق."""
     try:
         # Configure window properties
-        page.title = "مصنع السويفي"
+        page.title = f"مصنع السويفي - الإصدار {__version__}"
         
         # Set window to maximized
         page.window.maximized = True
