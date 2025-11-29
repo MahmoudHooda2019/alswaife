@@ -432,6 +432,8 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
             
             # Update total debt formula in cell B2
             # إجمالي الديون = مجموع عمود الرصيد (J)
+            # We need to dynamically calculate the range based on the actual data
+            # The data starts at row 4 and goes to next_row-1
             sheet.cell(row=2, column=2, value=f"=SUM(J4:J{next_row-1})")
             
             workbook.save(filepath)
@@ -465,23 +467,24 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
             sheet.row_dimensions[1].height = 30
             
             # Total debt - placing it next to client name instead of below
-            debt_label = sheet['G1']  # Place in column G next to title
+            sheet.merge_cells('G1:H1')  # Merge cells G1 and H1 for debt label
+            debt_label = sheet['G1']
             debt_label.value = "إجمالي الديون:"
             debt_label.font = Font(name='Arial', size=12, bold=True)
             debt_label.fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
             debt_label.alignment = Alignment(horizontal='center', vertical='center')
             
             # Formula for total debt
-            debt_value = sheet['H1']  # Place in column H next to label
-            row_count = 4 + len(invoice_items) if invoice_items else 4
-            debt_value.value = f"=SUM(J4:J{row_count})"
+            sheet.merge_cells('I1:K1')  # Merge cells I1, J1, K1 for debt value
+            debt_value = sheet['I1']
+            # Calculate the last row for the SUM formula
+            # Data starts at row 4, and we add len(invoice_items) rows
+            last_row = 4 + len(invoice_items) - 1 if invoice_items else 4
+            debt_value.value = f"=SUM(J4:J{last_row})"
             debt_value.font = Font(name='Arial', size=12, bold=True, color="FF0000")
             debt_value.fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
             debt_value.alignment = Alignment(horizontal='center', vertical='center')
             debt_value.number_format = '#,##0'
-            
-            # Empty cells for spacing
-            sheet.merge_cells('I1:K1')  # Merge remaining cells for clean appearance
             
             # Headers
             headers = [
