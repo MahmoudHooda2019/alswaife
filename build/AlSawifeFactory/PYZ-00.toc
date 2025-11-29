@@ -2977,6 +2977,7 @@
   ('uuid',
    'C:\\Users\\Admin\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\uuid.py',
    'PYMODULE'),
+  ('version', 'C:\\Users\\Admin\\Desktop\\al swaife\\version.py', 'PYMODULE'),
   ('views', '-', 'PYMODULE'),
   ('views.dashboard_view',
    'C:\\Users\\Admin\\Desktop\\al swaife\\views\\dashboard_view.py',
