@@ -171,7 +171,7 @@ class AttendanceView:
             self.day_field.value = ""
     
     def load_existing_data(self):
-        """Load existing attendance data for current date"""
+        """Load existing attendance data for current date and shift"""
         # Clear existing controls
         if self.employees_container is not None:
             self.employees_container.controls.clear()
@@ -181,58 +181,56 @@ class AttendanceView:
         alswaife_path = os.path.join(documents_path, "alswaife")
         attendance_path = os.path.join(alswaife_path, "حضور وانصراف")
         
-        # Generate filename with date only
+        # Use single attendance file
         try:
-            if self.date_field is not None and self.date_field.value:
-                date_obj = datetime.strptime(self.date_field.value, '%d/%m/%Y')
+            filename = "attendance.xlsx"
+            filepath = os.path.join(attendance_path, filename)
+            
+            if os.path.exists(filepath):
+                # Load from Excel
+                success, data, error = load_attendance_data(filepath)
                 
-                # Format date as DD-MM
-                date_str = date_obj.strftime('%d-%m')
-                
-                # Create filename with date only
-                filename = f"{date_str}.xlsx"
-                filepath = os.path.join(attendance_path, filename)
-                
-                if os.path.exists(filepath):
-                    # Load from Excel
-                    success, data, error = load_attendance_data(filepath)
+                if success and data:
+                    self.current_file = filepath
                     
-                    if success and data:
-                        self.current_file = filepath
-                        # Create a dictionary for quick lookup
-                        employee_data = {emp['name']: emp for emp in data}
+                    # Filter data for the current date
+                    filtered_data = self.filter_data_for_date_and_shift(data)
+                    
+                    # Create a dictionary for quick lookup
+                    employee_data = {emp['name']: emp for emp in filtered_data}
+                    
+                    # Create employee rows with existing data
+                    for emp in self.employees_list:
+                        emp_name = emp['name']
+                        price = emp.get('price', 0)
                         
-                        # Create employee rows with existing data
-                        for emp in self.employees_list:
-                            emp_name = emp['name']
-                            price = emp.get('price', 0)
-                            
-                            # Check if employee has attendance data
-                            is_present = False
-                            emp_price = price  # Default to JSON price
-                            if emp_name in employee_data:
-                                emp_record = employee_data[emp_name]
-                                shift_key = self.get_shift_key()
-                                if shift_key and emp_record.get(shift_key, 0) > 0:
-                                    is_present = True
-                                # Use price from existing record if available
-                                if 'price' in emp_record:
-                                    emp_price = emp_record['price']
-                            
-                            self.add_employee_row(emp_name, emp_price, is_present)
-                    else:
-                        # Create employee rows without existing data
-                        for emp in self.employees_list:
-                            emp_name = emp['name']
-                            price = emp.get('price', 0)
-                            self.add_employee_row(emp_name, price, False)
+                        # Check if employee has attendance data for current date/shift
+                        is_present = False
+                        emp_price = price  # Default to JSON price
+                        if emp_name in employee_data:
+                            emp_record = employee_data[emp_name]
+                            shift_key = self.get_shift_key()
+                            if shift_key and emp_record.get(shift_key, 0) > 0:
+                                is_present = True
+                            # Use price from existing record if available
+                            if 'price' in emp_record and emp_record['price'] != 0:
+                                emp_price = emp_record['price']
+                        
+                        self.add_employee_row(emp_name, emp_price, is_present)
                 else:
                     # Create employee rows without existing data
                     for emp in self.employees_list:
                         emp_name = emp['name']
                         price = emp.get('price', 0)
                         self.add_employee_row(emp_name, price, False)
-        except:
+            else:
+                # Create employee rows without existing data
+                for emp in self.employees_list:
+                    emp_name = emp['name']
+                    price = emp.get('price', 0)
+                    self.add_employee_row(emp_name, price, False)
+        except Exception as e:
+            print(f"Error loading existing data: {e}")
             # Create employee rows without existing data
             for emp in self.employees_list:
                 emp_name = emp['name']
@@ -240,6 +238,23 @@ class AttendanceView:
                 self.add_employee_row(emp_name, price, False)
         
         self.page.update()
+    
+    def filter_data_for_date_and_shift(self, all_data):
+        """Filter data to show only records for the current date"""
+        if not self.date_field or not self.date_field.value:
+            return []
+        
+        current_date = self.date_field.value
+        filtered_data = []
+        
+        for emp_record in all_data:
+            # Check if the record matches the current date
+            # Handle potential date format differences
+            record_date = emp_record.get('date', '')
+            if record_date and str(record_date) == str(current_date):
+                filtered_data.append(emp_record)
+        
+        return filtered_data
     
     def get_shift_key(self):
         """Get the shift key based on current day and shift selection"""
@@ -274,6 +289,9 @@ class AttendanceView:
     
     def add_employee_row(self, name, price, is_present=False):
         """Add an employee row to the UI with improved layout"""
+        # Determine if controls should be enabled (only when a shift is selected)
+        shift_selected = bool(self.shift_dropdown and self.shift_dropdown.value)
+        
         # Create price field first
         price_field = ft.TextField(
             value=str(price),
@@ -281,7 +299,8 @@ class AttendanceView:
             text_align=ft.TextAlign.CENTER,
             keyboard_type=ft.KeyboardType.NUMBER,
             label="السعر",
-            dense=True
+            dense=True,
+            disabled=not shift_selected,
         )
         
         # Create card container for better visual appearance
@@ -291,7 +310,8 @@ class AttendanceView:
                     controls=[
                         # Checkbox for attendance
                         ft.Checkbox(
-                            value=is_present,
+                            value=is_present if shift_selected else False,
+                            disabled=not shift_selected,
                             on_change=lambda e, n=name: self.on_attendance_change(n, e.control.value)
                         ),
                         # Employee name
@@ -308,11 +328,11 @@ class AttendanceView:
             elevation=2,
         )
         
-        # Store attendance status and price field reference
+        # Store attendance status and field references
         self.attendance_data[name] = {
             'card': card,
             'price_field': price_field,
-            'present': is_present
+            'present': is_present if shift_selected else False
         }
         
         if self.employees_container is not None:
@@ -341,41 +361,38 @@ class AttendanceView:
             self.show_message("الرجاء اختيار الوردية", error=True)
             return
         
-        # Generate filename with only the date
+        # Generate filename for single attendance file
         try:
-            if self.date_field is not None and self.date_field.value:
-                date_obj = datetime.strptime(self.date_field.value, '%d/%m/%Y')
-                
-                # Format date as DD-MM
-                date_str = date_obj.strftime('%d-%m')
-                
-                # Create filename with date only
-                filename = f"{date_str}.xlsx"
-                filepath = os.path.join(attendance_path, filename)
-            else:
-                self.show_message("تنسيق التاريخ غير صحيح", error=True)
-                return
+            filename = "attendance.xlsx"  # Single file for all attendance data
+            filepath = os.path.join(attendance_path, filename)
         except Exception as ex:
             self.show_message(f"خطأ في إنشاء اسم الملف: {ex}", error=True)
             return
         
-        # Prepare employees data
-        employees_data = []
-        
         # Load existing data if file exists
-        existing_data = {}
+        existing_data = []
         if os.path.exists(filepath):
             success, data, error = load_attendance_data(filepath)
             if success and data:
-                existing_data = {emp['name']: emp for emp in data}
+                existing_data = data
+        
+        # Prepare employees data
+        employees_data = []
         
         # Process each employee
         for emp in self.employees_list:
             emp_name = emp['name']
             
-            # Start with existing data or create new record
-            if emp_name in existing_data:
-                emp_record = existing_data[emp_name].copy()
+            # Check if employee already has a record for this date
+            existing_record = None
+            for record in existing_data:
+                if record['name'] == emp_name and record.get('date', '') == (self.date_field.value if self.date_field else ""):
+                    existing_record = record.copy()
+                    break
+            
+            # Create or update employee record
+            if existing_record:
+                emp_record = existing_record
             else:
                 emp_record = {
                     'name': emp_name,
@@ -414,8 +431,22 @@ class AttendanceView:
             
             employees_data.append(emp_record)
         
-        # Save to Excel (removed shift_name and day_name parameters as they're no longer needed)
-        success, error = create_or_update_attendance(filepath, employees_data)
+        # Combine existing data with new/updated data
+        # Remove existing records for today's date and employees
+        final_data = []
+        current_date = self.date_field.value if self.date_field else ""
+        employee_names = [emp['name'] for emp in employees_data]
+        
+        for record in existing_data:
+            # Keep records that are not for today's date or not for current employees
+            if record.get('date', '') != current_date or record['name'] not in employee_names:
+                final_data.append(record)
+        
+        # Add updated/new records
+        final_data.extend(employees_data)
+        
+        # Save to Excel
+        success, error = create_or_update_attendance(filepath, final_data)
         
         if success:
             self.current_file = filepath
