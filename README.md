@@ -1,15 +1,12 @@
-# Al Sawife Factory Management System
+## Al Sawife Factory Management
 
-A comprehensive factory management system for Al Sawife Factory.
+Simple desktop app to manage invoices, employees, and attendance for Al Sawife Factory.
 
-## Features
-- Invoice Management
-- Attendance & Departure Tracking
-- Employee Management
-- Excel Export Capabilities
+### Main features
+- **Invoices**: create, edit, and print customer invoices
+- **Attendance**: track daily attendance and export to Excel
+- **Employees**: manage basic employee data and wages
 
-## Installation
-Run the executable installer or extract the portable version.
-
-## Usage
-Launch AlSawifeFactory.exe to start the application.
+### How to run
+- Windows: double‑click `AlSawifeFactory.exe`
+- Make sure the `res` folder stays in the same directory as the EXE
