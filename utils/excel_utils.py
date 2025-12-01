@@ -150,7 +150,7 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
     worksheet.write(r+1, 6, "الطول", header_fmt)
     worksheet.write(r+1, 7, "الارتفاع", header_fmt)
     
-    worksheet.merge_range(r, 8, r+1, 8, "المسطح م2", header_fmt)
+    worksheet.merge_range(r, 8, r+1, 8, "المسطح م٢", header_fmt)
     worksheet.merge_range(r, 9, r+1, 9, "السعر", header_fmt)
     worksheet.merge_range(r, 10, r+1, 10, "إجمالي السعر", header_fmt)
 
@@ -222,7 +222,7 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
         summary_header_row = summary_start_row + 1
         worksheet.write(summary_header_row, 1, "البيان", header_fmt)
         worksheet.write(summary_header_row, 2, "النوع", header_fmt)
-        worksheet.write(summary_header_row, 3, "المسطح م2", header_fmt)
+        worksheet.write(summary_header_row, 3, "المسطح م٢", header_fmt)
         worksheet.write(summary_header_row, 4, "إجمالي السعر", header_fmt)
         worksheet.write(summary_header_row, 5, "السمك", header_fmt)
         worksheet.write(summary_header_row, 6, "سعر المتر", header_fmt)
@@ -349,7 +349,7 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
     worksheet.set_column(5, 5, 8)   # العدد
     worksheet.set_column(6, 6, 8)   # الطول
     worksheet.set_column(7, 7, 8)   # # الارتفاع
-    worksheet.set_column(8, 8, 10)  # الإجمالي م2
+    worksheet.set_column(8, 8, 10)  # الإجمالي م٢
     worksheet.set_column(9, 9, 10)  # السعر
     worksheet.set_column(10, 10, 14)  # إجمالي السعر
 
@@ -504,7 +504,7 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                 "اسم السائق", 
                 "تاريخ التحميل",
                 "النوع (الخامة)",
-                "المسطح م2",
+                "المسطح م٢",
                 "إجمالي السعر",
                 "المبلغ",
                 "تاريخ الدفع",

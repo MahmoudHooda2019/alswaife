@@ -1,6 +1,7 @@
 import flet as ft
 import os
 from views.invoice_view import InvoiceView
+from views.attendance_view import AttendanceView
 from utils.path_utils import resource_path
 
 class DashboardView:
@@ -30,34 +31,49 @@ class DashboardView:
                     animate_opacity=1000,
                 ),
                 ft.Container(height=50),
-                self.create_menu_button("إدارة الفواتير", ft.Icons.RECEIPT_LONG, self.open_invoices),
-                self.create_menu_button("الحضور والإنصراف", ft.Icons.PERSON, None),
-                self.create_menu_button("المخازن", ft.Icons.INVENTORY_2, None),
-                self.create_menu_button("العملاء", ft.Icons.PEOPLE, None),
-                self.create_menu_button("الإعدادات", ft.Icons.SETTINGS, None),
+                # Create card-based menu grid
+                ft.GridView(
+                    controls=[
+                        self.create_menu_card("إدارة الفواتير", ft.Icons.RECEIPT_LONG, self.open_invoices, ft.Colors.BLUE_700),
+                        self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.GREEN_700),
+                        self.create_menu_card("المخازن", ft.Icons.INVENTORY_2, None, ft.Colors.ORANGE_700),
+                        self.create_menu_card("العملاء", ft.Icons.PEOPLE, None, ft.Colors.PURPLE_700),
+                        self.create_menu_card("الإعدادات", ft.Icons.SETTINGS, None, ft.Colors.RED_700),
+                        self.create_menu_card("التقارير", ft.Icons.ASSESSMENT, None, ft.Colors.TEAL_700),
+                    ],
+                    runs_count=2,
+                    max_extent=200,
+                    spacing=20,
+                    run_spacing=20,
+                    padding=20,
+                )
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=20
+            spacing=20,
+            expand=True
         )
 
-    def create_menu_button(self, text, icon, on_click):
-        return ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Icon(icon, size=30, color=ft.Colors.WHITE),
-                    ft.Text(text, size=20, weight=ft.FontWeight.W_500)
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                spacing=15
+    def create_menu_card(self, text, icon, on_click, color):
+        return ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Icon(icon, size=50, color=ft.Colors.WHITE),
+                        ft.Text(text, size=18, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=15,
+                ),
+                padding=20,
+                alignment=ft.alignment.center,
+                bgcolor=color,
+                border_radius=15,
+                ink=True,
+                on_click=on_click if on_click else lambda e: self.show_placeholder(text),
+                animate=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
             ),
-            width=300,
-            height=60,
-            bgcolor=ft.Colors.BLUE_GREY_800,
-            border_radius=10,
-            ink=True,
-            on_click=on_click if on_click else lambda e: self.show_placeholder(text),
-            animate=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
-            padding=10
+            elevation=5,
         )
 
     def show_placeholder(self, feature):
@@ -104,6 +120,26 @@ class DashboardView:
              app.build_ui()
         else:
              self.page.add(ft.Text("Error: Save callback not found"))
+
+    def open_attendance(self, e):
+        # Animate out
+        self.main_container.opacity = 0
+        self.page.update()
+        
+        # Wait for animation (simulated)
+        import time
+        time.sleep(0.3)
+        
+        # Clear page and load AttendanceView
+        self.page.clean()
+        
+        # Store save_callback for later use
+        if hasattr(self, 'save_callback'):
+            setattr(self.page, '_save_callback', self.save_callback)
+        
+        app = AttendanceView(self.page)
+        app.build_ui()
+
 
     def reset_ui(self):
         self.page.clean()
