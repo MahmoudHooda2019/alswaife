@@ -149,8 +149,9 @@ class DashboardView:
         time.sleep(0.3)
         self.page.clean()
         blocks_view = BlocksView(self.page, on_back=self.go_back)
-        blocks_view.build_ui()
-
+        content = blocks_view.build_ui()
+        self.page.add(content)
+        self.page.update()
 
     def reset_ui(self):
         self.page.clean()

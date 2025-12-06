@@ -83,5 +83,5 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    # Run as desktop app with assets directory
+    # Run as desktop app with assets [directory]
     ft.app(target=main, view=ft.AppView.FLET_APP, assets_dir='res')
