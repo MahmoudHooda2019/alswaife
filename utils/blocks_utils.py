@@ -67,9 +67,9 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
                 block_data.get("machine_number", ""),
                 block_data.get("block_number", ""),
                 block_data.get("material", ""),
-                block_data.get("length", ""),
+                "",  # الطول (معادلة) - سيتم حسابه من UI + 0.20
                 "",  # العرض (معادلة)
-                block_data.get("height", ""),
+                "",  # الارتفاع (معادلة) - سيتم حسابه من مرحلة النشر
                 "",  # م3 (معادلة)
                 block_data.get("weight", ""),
                 "",  # وزن البلوك (معادلة)
@@ -83,6 +83,18 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
                 cell.border = thin_border
                 cell.alignment = center_alignment
             
+            # Length formula: length from UI + 0.20
+            # We need to put the raw length value in a cell and then reference it in a formula
+            length_value = block_data.get("length", "")
+            if length_value != "":
+                # Put the raw length value in a temporary cell (we'll use column 50 for this)
+                worksheet.cell(row=excel_row, column=50, value=length_value).border = thin_border
+                # Create formula that references this cell and adds 0.20
+                length_formula = f'={get_column_letter(50)}{excel_row}+0.20'
+                worksheet.cell(row=excel_row, column=8, value=length_formula).border = thin_border
+            else:
+                worksheet.cell(row=excel_row, column=8, value="").border = thin_border
+            
             # معادلات الجدول الأول (نفس كودك السابق)
             thickness_col = get_column_letter(26) # Z
             count_col = get_column_letter(28)     # AB (لاحظ أن مكان العدد في الجدول الثاني سيتغير مكانه في الكود بالأسفل، لذا يجب التأكد من العمود الصحيح لاحقاً)
@@ -93,6 +105,12 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
             width_formula = f'=((VALUE(SUBSTITUTE({thickness_col}{excel_row},"سم",""))+1)*{count_col_fixed}{excel_row})'
             cell = worksheet.cell(row=excel_row, column=9, value=width_formula)
             cell.border = thin_border; cell.alignment = center_alignment
+            
+            # Height formula: height in publishing stage + 0.5
+            # Publishing stage height is in column 31 (AE)
+            publish_height_col = get_column_letter(31)
+            height_formula = f'={publish_height_col}{excel_row}+0.5'
+            worksheet.cell(row=excel_row, column=10, value=height_formula).border = thin_border
             
             length_col = get_column_letter(8); width_col = get_column_letter(9); height_col = get_column_letter(10)
             worksheet.cell(row=excel_row, column=11, value=f"={length_col}{excel_row}*{width_col}{excel_row}*{height_col}{excel_row}").border = thin_border
@@ -124,9 +142,16 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
             # 27: العدد (كان سابقاً يوضع مكانه خانة فارغة خطأ)
             worksheet.cell(row=excel_row, column=27, value=block_data.get("quantity", 1)).border = thin_border
             
-            # 28: الطول
-            publish_length = block_data.get("publish_length", block_data.get("length", ""))
-            worksheet.cell(row=excel_row, column=28, value=publish_length).border = thin_border
+            # 28: الطول (length from UI + 0.20)
+            length_value = block_data.get("length", "")
+            if length_value != "":
+                # Put the raw length value in a temporary cell (we'll use column 51 for this)
+                worksheet.cell(row=excel_row, column=51, value=length_value).border = thin_border
+                # Create formula that references this cell and adds 0.20
+                length_formula = f'={get_column_letter(51)}{excel_row}+0.20'
+                worksheet.cell(row=excel_row, column=28, value=length_formula).border = thin_border
+            else:
+                worksheet.cell(row=excel_row, column=28, value="").border = thin_border
             
             # 30: الخصم (نضعه هنا قبل المعادلة لتكون جاهزة، ترتيب الأعمدة في إكسل حسب القائمة: 11=الطول بعد، 12=الخصم)
             # حسب القائمة: الطول (10) -> الطول بعد (11) -> الخصم (12)
@@ -140,7 +165,7 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
             cell.border = thin_border; cell.alignment = center_alignment
 
             # 31: الارتفاع
-            publish_height = block_data.get("publish_height", float(block_data.get("height", 0) or 0) - 0.5)
+            publish_height = block_data.get("publish_height", float(block_data.get("height", 0) or 0))
             worksheet.cell(row=excel_row, column=31, value=publish_height).border = thin_border
             
             # 32: الكمية م2 = الطول بعد × الارتفاع × العدد
@@ -199,7 +224,7 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
     worksheet.merge_range(0, 0, 0, total_cols, "سجل البلوكات", title_fmt)
     worksheet.merge_range(1, 0, 1, len(TABLE1_COLUMNS) - 1, "مقاس البلوك في الأرضية", table_title_fmt)
     worksheet.merge_range(1, len(TABLE1_COLUMNS), 2, len(TABLE1_COLUMNS), "", gap_fmt)
-    worksheet.merge_range(1, len(TABLE1_COLUMNS) + 1, 1, total_cols + 1, "مرحلة النشر", table_title_fmt)
+    worksheet.merge_range(1, len(TABLE1_COLUMNS) + 1, 1, total_cols , "مرحلة النشر", table_title_fmt)
     
     for idx, col in enumerate(TABLE1_COLUMNS): worksheet.write(2, idx, col, header_fmt)
     worksheet.write(2, len(TABLE1_COLUMNS), "", gap_fmt)
@@ -218,12 +243,21 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         table1_values = [
             block_data.get("trip_number", ""), block_data.get("trip_count", ""), block_data.get("date", ""), 
             block_data.get("quarry", ""), block_data.get("machine_number", ""), block_data.get("block_number", ""),
-            block_data.get("material", ""), block_data.get("length", ""), "", block_data.get("height", ""),
+            block_data.get("material", ""), "", "", "",
             "", block_data.get("weight", ""), "", block_data.get("price_per_ton", ""), "", block_data.get("trip_price", "")
         ]
         
         for col_idx, value in enumerate(table1_values):
             worksheet.write(excel_row, col_idx, value, data_fmt)
+        
+        # Length formula: length from UI + 0.20
+        length_value = block_data.get("length", "")
+        if length_value != "":
+            # Put the raw length value in a temporary cell (we'll use column 50 for this)
+            worksheet.write(excel_row, 49, length_value, data_fmt)  # Column 50 (0-indexed = 49)
+            # Create formula that references this cell and adds 0.20
+            length_formula = f'={get_column_letter(50)}{excel_row + 1}+0.20'
+            worksheet.write_formula(excel_row, 7, length_formula, data_fmt)  # Column 8 (0-indexed = 7)
         
         # معادلات الجدول الأول وتصحيح مرجع العدد
         # العدد موجود الآن في col_offset + 9 (index 9 في TABLE2_COLUMNS)
@@ -232,6 +266,12 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         
         width_formula = f'=((VALUE(SUBSTITUTE({thickness_col}{excel_row + 1},"سم",""))+1)*{count_col_fixed}{excel_row + 1})'
         worksheet.write_formula(excel_row, 8, width_formula, data_fmt)
+        
+        # Height formula: height in publishing stage + 0.5
+        # Publishing stage height is in col_offset + 13
+        publish_height_col = get_column_letter(col_offset + 13 + 1)
+        height_formula = f'={publish_height_col}{excel_row + 1}+0.5'
+        worksheet.write_formula(excel_row, 9, height_formula, data_fmt)
         
         # باقي معادلات الجدول الأول
         l_col = get_column_letter(8); w_col = get_column_letter(9); h_col = get_column_letter(10)
@@ -266,9 +306,16 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         # 9: Count (تم حذف العمود الفارغ ووضع العدد هنا)
         worksheet.write(excel_row, col_offset + 9, block_data.get("quantity", 1), data_fmt)
         
-        # 10: Length
-        publish_length = block_data.get("publish_length", block_data.get("length", ""))
-        worksheet.write(excel_row, col_offset + 10, publish_length, data_fmt)
+        # 10: Length (length from UI + 0.20)
+        length_value = block_data.get("length", "")
+        if length_value != "":
+            # Put the raw length value in a temporary cell (we'll use column 51 for this)
+            worksheet.write(excel_row, 50, length_value, data_fmt)  # Column 51 (0-indexed = 50)
+            # Create formula that references this cell and adds 0.20
+            length_formula = f'={get_column_letter(51)}{excel_row + 1}+0.20'
+            worksheet.write_formula(excel_row, col_offset + 10, length_formula, data_fmt)
+        else:
+            worksheet.write(excel_row, col_offset + 10, "", data_fmt)
         
         # 11: Length After (Formula) -> نكتبها لاحقاً بعد تعريف الأعمدة
         
@@ -281,7 +328,7 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         worksheet.write_formula(excel_row, col_offset + 11, f'={len_cell}{excel_row + 1}-{disc_cell}{excel_row + 1}', data_fmt)
         
         # 13: Height
-        publish_height = block_data.get("publish_height", float(block_data.get("height", 0) or 0) - 0.5)
+        publish_height = block_data.get("publish_height", float(block_data.get("height", 0) or 0))
         worksheet.write(excel_row, col_offset + 13, publish_height, data_fmt)
         
         # 14: Qty m2 (Formula) = Length After (11) * Height (13) * Count (9)
