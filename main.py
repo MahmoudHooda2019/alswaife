@@ -54,6 +54,8 @@ def main(page: ft.Page):
         
         # Set window to maximized
         page.window.maximized = True
+        
+        # Set app icon
         icon_path = resource_path(os.path.join("res", "icon.ico"))
         page.window.icon = icon_path
         

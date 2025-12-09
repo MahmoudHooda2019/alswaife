@@ -130,7 +130,9 @@ class InvoiceRow:
             new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B')
             if new_val != val:
                 self.block_var.value = new_val
-                self.page.update()
+                # Only update if value changed
+                if hasattr(self, 'page') and self.page:
+                    self.page.update()
 
     def on_product_select(self, e):
         """عند اختيار البيان، إرساله إلى خانة الخامة بدون حرف الشين"""
@@ -205,13 +207,13 @@ class InvoiceRow:
                 self.price_var.value = "0"
                 
             # Trigger calculation to update area and total
-            self.calculate()
+            self.calculate(update_page=False)
             
         except Exception as ex:
             # Handle any exceptions silently
             self.price_var.value = "0"
             # Trigger calculation to update area and total
-            self.calculate()
+            self.calculate(update_page=False)
 
     def update_scale(self, scale_factor, update_page=True):
         self.scale_factor = scale_factor
@@ -251,10 +253,6 @@ class InvoiceRow:
         # Do not modify the user's input - preserve exactly what they typed
         # This allows users to enter "2.90" and have it stay as "2.90"
         
-        # Update the page
-        if hasattr(self, 'page') and self.page:
-            self.page.update()
-            
         # When length changes, update the price based on current product and thickness selection
         # This is needed for products with price ranges based on length
         selected_product = self.product_dropdown.value
@@ -267,6 +265,9 @@ class InvoiceRow:
             
             # Update the price based on product, thickness, and new length
             self.update_price(clean_product_name)
+        else:
+            # Just recalculate without updating price
+            self.calculate(update_page=False)
 
     def on_thickness_change(self, e):
         """عند تغيير السمك"""
@@ -281,8 +282,11 @@ class InvoiceRow:
             
             # Update the price based on product and new thickness
             self.update_price(clean_product_name)
+        else:
+            # Just recalculate without updating price
+            self.calculate(update_page=False)
 
-    def calculate(self, e=None):
+    def calculate(self, e=None, update_page=True):
         """Calculate area and total based on current values"""
         try:
             # Get values from input fields
@@ -301,22 +305,21 @@ class InvoiceRow:
             self.area_var.value = f"{area:.2f}"
             self.total_var.value = f"{total:.2f}"
             
-            # Update the page to reflect changes
-            if hasattr(self, 'page') and self.page:
+            # Update the page to reflect changes only if requested
+            if update_page and hasattr(self, 'page') and self.page:
                 self.page.update()
                 
         except ValueError:
             # Handle case where conversion to float fails
             self.area_var.value = "0.00"
             self.total_var.value = "0.00"
-            if hasattr(self, 'page') and self.page:
+            if update_page and hasattr(self, 'page') and self.page:
                 self.page.update()
         except Exception:
             # Handle any other exceptions silently
             pass
 
     def get_controls(self):
-
         """Return Flet controls for this row in reversed order"""
         return [
             self.btn_del,
@@ -399,8 +402,13 @@ class InvoiceView:
         self.ent_driver = ft.TextField(label="اسم السائق")
         self.ent_phone = ft.TextField(label="رقم التليفون")
         
-        # Main container - no scroll to prevent conflicts
-        self.rows_container = ft.Column()
+        # Main container - using ListView for better performance with many rows
+        self.rows_container = ft.ListView(
+            expand=True,
+            spacing=10,
+            padding=10,
+            auto_scroll=False
+        )
         
         # Floating add button
         self.floating_add_btn = ft.FloatingActionButton(
@@ -467,9 +475,6 @@ class InvoiceView:
         self.suggestions_list.controls.clear()
         self.page.update()
 
-
-
-
     def load_products(self):
         if not os.path.exists(self.products_path):
             return {}
@@ -500,48 +505,41 @@ class InvoiceView:
         new_row = InvoiceRow(self.page, row_idx, self.products, self.delete_row, self.scale_factor)
         self.rows.append(new_row)
         
-        # Create a row container WITHOUT individual scrolling
+        # Create a row container for the ListView
         row_controls = new_row.get_controls()
         row_container = ft.Row(
             controls=row_controls, 
             spacing=5
-            # Removed scroll to prevent individual row scrolling
         )
         
-        # Store reference to the row container for deletion in the InvoiceUI class
-        if not hasattr(self, 'row_containers'):
-            self.row_containers = {}
-        self.row_containers[new_row] = row_container
+        # Wrap the row in a Container for better styling and spacing
+        row_wrapper = ft.Container(
+            content=row_container,
+            padding=10,
+            border=ft.border.all(1, ft.Colors.GREY_700),
+            border_radius=5,
+            bgcolor=ft.Colors.GREY_900
+        )
         
-        self.rows_container.controls.append(row_container)
+        # Store reference to the row wrapper for deletion
+        if not hasattr(self, 'row_wrappers'):
+            self.row_wrappers = {}
+        self.row_wrappers[new_row] = row_wrapper
         
-        # Add spacing after each row to prevent scroll overlap
-        spacer = ft.Container(height=20)
-        self.rows_container.controls.append(spacer)
-        # Store reference to the spacer as well
-        if not hasattr(self, 'row_spacers'):
-            self.row_spacers = {}
-        self.row_spacers[new_row] = spacer
+        # Add to ListView instead of Column
+        self.rows_container.controls.append(row_wrapper)
         
         self.page.update()
         
     def delete_row(self, row_obj):
         if row_obj in self.rows:
-            # Remove the row container from the UI
-            if hasattr(self, 'row_containers') and row_obj in self.row_containers:
-                row_container = self.row_containers[row_obj]
-                if row_container in self.rows_container.controls:
-                    self.rows_container.controls.remove(row_container)
+            # Remove the row wrapper from the UI
+            if hasattr(self, 'row_wrappers') and row_obj in self.row_wrappers:
+                row_wrapper = self.row_wrappers[row_obj]
+                if row_wrapper in self.rows_container.controls:
+                    self.rows_container.controls.remove(row_wrapper)
                 # Clean up the reference
-                del self.row_containers[row_obj]
-            
-            # Remove the spacer from the UI
-            if hasattr(self, 'row_spacers') and row_obj in self.row_spacers:
-                spacer = self.row_spacers[row_obj]
-                if spacer in self.rows_container.controls:
-                    self.rows_container.controls.remove(spacer)
-                # Clean up the reference
-                del self.row_spacers[row_obj]
+                del self.row_wrappers[row_obj]
             
             # Remove the row from the data structure
             self.rows.remove(row_obj)
@@ -996,6 +994,16 @@ class InvoiceView:
         
         self.page.update()
 
+    def update_rows_scale(self):
+        for row in self.rows:
+            row.update_scale(self.scale_factor)
+        self.page.update()
+        
+    # Add a method to batch update the UI for better performance
+    def batch_update(self):
+        """Batch update the UI to improve performance"""
+        self.page.update()
+
     def minimize_window(self, e):
         """Minimize the application window"""
         try:
@@ -1043,11 +1051,6 @@ class InvoiceView:
             self.update_rows_scale()
             set_zoom_level(self.db_path, self.scale_factor)
 
-    def update_rows_scale(self):
-        for row in self.rows:
-            row.update_scale(self.scale_factor)
-        self.page.update()
-        
     def build_ui(self):
         # Create AppBar with menu
         self.page.appbar = ft.AppBar(
@@ -1087,20 +1090,13 @@ class InvoiceView:
             ]),
         ], spacing=20)
         
-        # Wrap rows container in a horizontally scrollable container
-        rows_wrapper = ft.Row(
-            controls=[self.rows_container],
-            scroll=ft.ScrollMode.ALWAYS,  # Always show horizontal scrollbar
-            expand=True
-        )
-        
-        # Main layout with reduced bottom spacing since we're adding spacing in rows container
+        # Main layout with ListView for rows
         main_layout = ft.Column([
             header,
             ft.Divider(),
-            rows_wrapper,
-            ft.Container(height=20)  # Reduced space at bottom
-        ], expand=True, scroll=ft.ScrollMode.AUTO)
+            self.rows_container,  # ListView instead of wrapped Column
+            ft.Container(height=20)  # Space at bottom
+        ], expand=True)
         
         # Add initial row
         self.add_row()

@@ -224,8 +224,16 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
     worksheet.merge_range(0, 0, 0, total_cols, "سجل البلوكات", title_fmt)
     worksheet.merge_range(1, 0, 1, len(TABLE1_COLUMNS) - 1, "مقاس البلوك في الأرضية", table_title_fmt)
     worksheet.merge_range(1, len(TABLE1_COLUMNS), 2, len(TABLE1_COLUMNS), "", gap_fmt)
-    worksheet.merge_range(1, len(TABLE1_COLUMNS) + 1, 1, total_cols , "مرحلة النشر", table_title_fmt)
-    
+    worksheet.merge_range(1, len(TABLE1_COLUMNS) + 1, 1, total_cols - 4 , "مرحلة النشر", table_title_fmt)
+    # اجمالي الكميه م2 - Formula to sum all values in the column
+    qty_m2_col = get_column_letter(total_cols - 3 + 1)  # Convert to Excel column letter (AF)
+    worksheet.write_formula(1, total_cols - 3, f"=SUM({qty_m2_col}3:{qty_m2_col}1000)", table_title_fmt) # اجمالي الكميه م2
+    worksheet.write(1, total_cols - 2, "", table_title_fmt)
+    # اجمالي اجمالي سعر النشر - Formula to sum all values in the column
+    total_price_col = get_column_letter(total_cols - 1 + 1)  # Convert to Excel column letter (AH)
+    worksheet.write_formula(1, total_cols - 1, f"=SUM({total_price_col}3:{total_price_col}1000)", table_title_fmt) # اجمالي اجمالي سعر النشر
+    worksheet.write(1, total_cols, "", table_title_fmt)
+
     for idx, col in enumerate(TABLE1_COLUMNS): worksheet.write(2, idx, col, header_fmt)
     worksheet.write(2, len(TABLE1_COLUMNS), "", gap_fmt)
     for idx, col in enumerate(TABLE2_COLUMNS): worksheet.write(2, len(TABLE1_COLUMNS) + 1 + idx, col, header_fmt)
