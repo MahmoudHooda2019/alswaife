@@ -1,5 +1,16 @@
 import sys
 import os
+import flet as ft
+import json
+import re
+import sqlite3
+from datetime import datetime
+from tkinter import filedialog, messagebox
+import traceback
+import subprocess
+import platform
+import urllib.request
+import urllib.error
 
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -44,11 +55,11 @@ class InvoiceRow:
         self.original_length = 0  # لحفظ الطول الأصلي
         
         # المتغيرات
-        # Default widths
+        # Default widths (minimum widths)
         self.default_widths = {
-            'block': 100, 'thick': 120, 'mat': 120, 'count': 80, 
-            'len': 80, 'height': 80, 'area': 100, 
-            'price': 80, 'total': 100, 'product': 160
+            'block': 125, 'thick': 125, 'mat': 100, 'count': 90, 
+            'len_before': 100, 'discount': 90, 'len': 90, 'height': 90, 'area': 100, 
+            'price': 90, 'total': 100, 'product': 160
         }
 
         # المتغيرات
@@ -67,30 +78,49 @@ class InvoiceRow:
             label="العدد", 
             width=self.default_widths['count'],
             keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=ft.NumbersOnlyInputFilter(),
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
             on_change=self.calculate
         )
+        # New field for length before discount
+        self.len_before_var = ft.TextField(
+            label="الطول قبل", 
+            width=self.default_widths['len_before'],
+            label_style=ft.TextStyle(size=10.0),
+            keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
+            on_change=self.on_len_before_change  # Use new handler
+        )
+        # New field for discount
+        self.discount_var = ft.TextField(
+            label="الخصم", 
+            width=self.default_widths['discount'],
+            label_style=ft.TextStyle(size=10.0),
+            keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
+            on_change=self.on_discount_change,  # Use new handler
+            value="0.20"  # Set default value to 0.20
+        )
+        # Modified length field - now readonly
         self.len_var = ft.TextField(
             label="الطول", 
             width=self.default_widths['len'],
-            keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*$"),
-            on_change=self.on_length_change
+            disabled=True,  # Make it non-editable
+            value="0"
         )
         self.height_var = ft.TextField(
             label="الارتفاع", 
             width=self.default_widths['height'],
             keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*$"),
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
             on_change=self.calculate
         )
-
+        
         self.area_var = ft.TextField(label="المسطح", width=self.default_widths['area'], disabled=True)
         self.price_var = ft.TextField(
             label="السعر", 
             width=self.default_widths['price'],
             keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*$"),
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
             on_change=self.calculate
         )
         self.total_var = ft.TextField(label="الإجمالي", width=self.default_widths['total'], disabled=True)
@@ -102,11 +132,11 @@ class InvoiceRow:
         self.product_dropdown = ft.Dropdown(
             label="البيان",
             options=prefixed_options,
-            on_change=self.on_product_select,
-            width=self.default_widths['product']
+            width=self.default_widths['product'],
+            on_change=self.on_product_select
         )
         
-        # Apply initial scale
+        # Apply initial scale to ensure fields are displayed at the correct size
         self.update_scale(self.scale_factor, update_page=False)
         
         # Delete button
@@ -117,7 +147,8 @@ class InvoiceRow:
         )
         
         # Bind event for length changes
-        self.len_var.on_change = self.on_length_change
+        self.len_before_var.on_change = self.on_len_before_change
+        self.discount_var.on_change = self.on_discount_change
         # Bind event for thickness changes
         self.thick_var.on_change = self.on_thickness_change
 
@@ -127,12 +158,49 @@ class InvoiceRow:
             # Replace Arabic characters with their English counterparts
             # 'ش' is 'a' on Arabic keyboard
             # 'لا' (lam-alif) is 'b' on Arabic keyboard
-            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B')
+            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B').replace('ِ', 'A').replace('لآ', 'B')
             if new_val != val:
                 self.block_var.value = new_val
                 # Only update if value changed
                 if hasattr(self, 'page') and self.page:
                     self.page.update()
+
+    def handle_arabic_decimal_input(self, text_field):
+        """Handle Arabic decimal separator (Zein letter) and replace with decimal point"""
+        if text_field.value:
+            # Replace Arabic decimal separator (Zein letter 'زين') with decimal point
+            # The Zein letter on Arabic keyboard typically maps to the comma key or 'z'
+            new_value = text_field.value.replace('،', '.')  # Arabic comma/decimal separator
+            new_value = new_value.replace('ز', '.')  # Arabic 'zein' letter often maps to 'z' key
+            # Also handle potential Arabic digit inputs
+            arabic_digits = {'٠': '0', '٢': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'}
+            for arabic_digit, english_digit in arabic_digits.items():
+                new_value = new_value.replace(arabic_digit, english_digit)
+            
+            if new_value != text_field.value:
+                text_field.value = new_value
+                return True
+        return False
+
+    def on_len_before_change(self, e):
+        """Handle input changes for length before field with Arabic decimal handling"""
+        # Handle Arabic decimal separator
+        changed = self.handle_arabic_decimal_input(self.len_before_var)
+        # Recalculate length
+        self.calculate_length()
+        # Update UI if value changed
+        if changed and hasattr(self, 'page') and self.page:
+            self.page.update()
+
+    def on_discount_change(self, e):
+        """Handle input changes for discount field with Arabic decimal handling"""
+        # Handle Arabic decimal separator
+        changed = self.handle_arabic_decimal_input(self.discount_var)
+        # Recalculate length
+        self.calculate_length()
+        # Update UI if value changed
+        if changed and hasattr(self, 'page') and self.page:
+            self.page.update()
 
     def on_product_select(self, e):
         """عند اختيار البيان، إرساله إلى خانة الخامة بدون حرف الشين"""
@@ -221,16 +289,23 @@ class InvoiceRow:
         # Calculate new font size (default is usually around 14-16)
         new_text_size = 14 * scale_factor
         
+        # Update all text fields with scaling
         controls_map = {
             'block': self.block_var, 'thick': self.thick_var, 'mat': self.mat_var,
-            'count': self.count_var, 'len': self.len_var, 'height': self.height_var,
+            'count': self.count_var, 'len_before': self.len_before_var, 'discount': self.discount_var,
+            'len': self.len_var, 'height': self.height_var,
             'area': self.area_var, 'price': self.price_var,
             'total': self.total_var, 'product': self.product_dropdown
         }
         
         for key, control in controls_map.items():
-            control.width = self.default_widths[key] * scale_factor
+            # Scale the width based on the scale factor but maintain a minimum width
+            # Ensure the width doesn't go below the default width
+            scaled_width = self.default_widths[key] * scale_factor
+            control.width = max(scaled_width, self.default_widths[key] * 0.8)  # Minimum 80% of default width
             control.text_size = new_text_size
+            
+            # Update label styles
             if isinstance(control, ft.TextField):
                 control.label_style = ft.TextStyle(size=new_text_size * 0.9)
             elif isinstance(control, ft.Dropdown):
@@ -239,35 +314,24 @@ class InvoiceRow:
         if update_page:
             self.page.update()
 
-    def on_length_change(self, e):
-        """عند تغيير الطول"""
-        # Get the raw input value
-        input_value = self.len_var.value or "0"
-        
+    def calculate_length(self, e=None):
+        """Calculate the final length based on length before discount minus discount"""
         try:
-            # Store the numeric value for calculations
-            self.original_length = float(input_value)
-        except ValueError:
-            self.original_length = 0
-        
-        # Do not modify the user's input - preserve exactly what they typed
-        # This allows users to enter "2.90" and have it stay as "2.90"
-        
-        # When length changes, update the price based on current product and thickness selection
-        # This is needed for products with price ranges based on length
-        selected_product = self.product_dropdown.value
-        if selected_product:
-            # Remove the "ش " prefix if present
-            if selected_product.startswith("ش "):
-                clean_product_name = selected_product[2:]  # Remove "ش " prefix
-            else:
-                clean_product_name = selected_product
+            len_before = float(self.len_before_var.value or 0)
+            discount = float(self.discount_var.value or 0)
+            final_length = len_before - discount
             
-            # Update the price based on product, thickness, and new length
-            self.update_price(clean_product_name)
-        else:
-            # Just recalculate without updating price
-            self.calculate(update_page=False)
+            # Update the readonly length field with formatted value (00.00 format)
+            self.len_var.value = f"{final_length:.2f}" if final_length >= 0 else "0.00"
+        except ValueError:
+            self.len_var.value = "0.00"
+        
+        # Update calculations
+        self.calculate(update_page=False)
+        
+        # Update the page if available
+        if hasattr(self, 'page') and self.page:
+            self.page.update()
 
     def on_thickness_change(self, e):
         """عند تغيير السمك"""
@@ -328,7 +392,9 @@ class InvoiceRow:
             self.thick_var,
             self.mat_var,
             self.count_var,
-            self.len_var,
+            self.discount_var,    # New field (moved before len_before_var)
+            self.len_before_var,  # New field (moved after discount_var)
+            self.len_var,         # Final calculated length
             self.height_var,
             self.area_var,
             self.price_var,
@@ -353,6 +419,9 @@ class InvoiceView:
         self.page.title = "مصنع السويفي - ادارة الفواتير"
         self.page.rtl = True  # Right-to-left support for Arabic
         self.page.theme_mode = ft.ThemeMode.DARK  # Dark theme
+        
+        # Add keyboard event handler
+        self.page.on_keyboard_event = self.on_keyboard_event
         
         self.products_path = resource_path(os.path.join('res', 'products.json'))
         # Use Documents folder for database instead of resources (which is read-only)
@@ -384,7 +453,13 @@ class InvoiceView:
         
         # Form fields
         self.ent_op = ft.TextField(label="رقم العملية", value=str(self.op_counter))
-        self.date_var = ft.TextField(label="التاريخ", value=datetime.now().strftime('%d/%m/%Y'))
+        
+        # Get date - try internet first, fallback to local time
+        date_value = self.get_internet_date()
+        if not date_value:
+            date_value = datetime.now().strftime('%d/%m/%Y')
+            
+        self.date_var = ft.TextField(label="التاريخ", value=date_value)
         
         # Client selection with autocomplete suggestions
         self.client_suggestions = self.load_clients()
@@ -418,8 +493,32 @@ class InvoiceView:
         
         self.page.update()
 
+    def get_internet_date(self):
+        """Get current date from internet, fallback to local time if unavailable"""
+        try:
+            # Try to get date from worldtimeapi.org
+            response = urllib.request.urlopen('http://worldtimeapi.org/api/timezone/Africa/Cairo', timeout=5)
+            if response.getcode() == 200:
+                import json
+                data = json.loads(response.read().decode())
+                # Parse the datetime string and format it as DD/MM/YYYY
+                dt = datetime.fromisoformat(data['datetime'].replace('Z', '+00:00'))
+                return dt.strftime('%d/%m/%Y')
+        except Exception as e:
+            # If worldtimeapi.org fails, try another service
+            try:
+                # Try to get date from httpbin.org as fallback
+                response = urllib.request.urlopen('http://httpbin.org/json', timeout=5)
+                if response.getcode() == 200:
+                    # If we can connect, use local time (we just verified internet connectivity)
+                    return datetime.now().strftime('%d/%m/%Y')
+            except Exception as e2:
+                # Internet not available, return None to use local time
+                pass
+        return None
+    
     def load_clients(self):
-        """Load existing client names from the 'الفواتير' directory"""
+        """Load existing client names from the 'فواتير' directory"""
         # Use Documents/alswaife folder
         documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
         
@@ -505,11 +604,12 @@ class InvoiceView:
         new_row = InvoiceRow(self.page, row_idx, self.products, self.delete_row, self.scale_factor)
         self.rows.append(new_row)
         
-        # Create a row container for the ListView
+        # Create a row container for the ListView with responsive layout
         row_controls = new_row.get_controls()
         row_container = ft.Row(
             controls=row_controls, 
-            spacing=5
+            spacing=5,
+            wrap=False  # Don't wrap controls to next line
         )
         
         # Wrap the row in a Container for better styling and spacing
@@ -609,13 +709,14 @@ class InvoiceView:
         items_data = []
         for row in self.rows:
             # Collect actual data from the row controls and format it as expected by excel_utils
+            # Note: We only send the final calculated length, not the "before" or "discount" values
             item_data = (
                 row.product_dropdown.value or "",  # description
                 row.block_var.value or "",         # block
                 row.thick_var.value or "",         # thickness
                 row.mat_var.value or "",           # material
                 row.count_var.value or "0",        # count
-                row.len_var.value or "0",          # length (already net)
+                row.len_var.value or "0",          # length (final calculated value only)
                 row.height_var.value or "0",       # height
                 row.price_var.value or "0"         # price
             )
@@ -654,101 +755,14 @@ class InvoiceView:
              self.page.update()
              return
 
-        fname = f"{sanitize(op_num)}_{now.strftime('%Y-%m-%d_%H-%M-%S')}.xlsx"
+        # Update filename format
+        fname = f"فاتورة رقم {sanitize(op_num)} - بتاريخ {date_str.replace('/', '-')}.xlsx"
         full_path = os.path.join(my_invoices_dir, fname)
         
         try:
             # Save the invoice
             self.save_callback(full_path, op_num, client, driver, date_str, phone, items_data)
-            
-            # Update ledger with aggregated data
-            # Aggregate items by (description, material, thickness)
-            aggregated_items = {}
-            total_amount = 0
-            
-            for item in items_data:
-                try:
-                    # item structure: (desc, block, thick, mat, count, len, height, price)
-                    desc = item[0] or ""
-                    material = item[3] or ""
-                    thickness = item[2] or ""
-                    count = float(item[4])
-                    length = float(item[5])
-                    height = float(item[6])
-                    price = float(item[7])
-                    
-                    area = count * length * height
-                    item_total = area * price
-                    total_amount += item_total
-                    
-                    # Create key for aggregation (material, thickness)
-                    key = (desc, material, thickness)
-                    
-                    if key in aggregated_items:
-                        # Add to existing entry
-                        aggregated_items[key]['area'] += area
-                        aggregated_items[key]['total'] += item_total
-                    else:
-                        # Create new entry
-                        aggregated_items[key] = {
-                            'desc': desc,
-                            'material': material,
-                            'thickness': thickness,
-                            'area': area,
-                            'price': price,  # Use first price encountered
-                            'total': item_total
-                        }
-                except:
-                    pass
-            
-            # Convert aggregated items to list format for ledger
-            # Format: (desc, material, thickness, area, price_per_unit)
-            ledger_items = []
-            for key, data in aggregated_items.items():
-                # Calculate average price per square meter
-                price_per_sqm = data['total'] / data['area'] if data['area'] > 0 else 0
-                ledger_items.append((
-                    data['desc'],
-                    data['material'],
-                    data['thickness'],
-                    data['area'],
-                    price_per_sqm
-                ))
-            
-            update_result = update_client_ledger(client_dir, client, date_str, op_num, total_amount, driver, ledger_items)
-            
-            # Check if ledger update succeeded
-            if not update_result[0]:
-                error_type = update_result[1]
-                if error_type == "file_locked":
-                    # Show warning dialog about file being open
-                    def close_warning(e):
-                        warning_dlg.open = False
-                        self.page.update()
-                    
-                    warning_dlg = ft.AlertDialog(
-                        title=ft.Text("⚠️ تنبيه", color="orange"),
-                        content=ft.Text(
-                            f"تم حفظ الفاتورة بنجاح ولكن لم يتم تحديث كشف الحساب.\n\n"
-                            f"السبب: ملف كشف الحساب مفتوح حالياً.\n\n"
-                            f"الحل: الرجاء إغلاق ملف:\n{client}.xlsx\n\n"
-                            f"ثم حاول حفظ الفاتورة مرة أخرى.",
-                            text_align=ft.TextAlign.RIGHT
-                        ),
-                        actions=[
-                            ft.TextButton("حسناً", on_click=close_warning)
-                        ],
-                        actions_alignment=ft.MainAxisAlignment.END
-                    )
-                    self.page.overlay.append(warning_dlg)
-                    warning_dlg.open = True
-                    self.page.update()
-                    return  # Don't show success dialog
-            
-            # Refresh client list if new client
-            if client_safe not in self.client_suggestions:
-                self.client_suggestions = self.load_clients()
-            
+                
             def open_file(e):
                 try:
                     if platform.system() == 'Windows':
@@ -818,7 +832,7 @@ class InvoiceView:
 
             dlg = ft.AlertDialog(
                 title=ft.Text("نجاح"),
-                content=ft.Text(f"تم حفظ الفاتورة وتحديث كشف الحساب بنجاح.\nالمسار: {full_path}"),
+                content=ft.Text(f"تم حفظ الفاتورة وتحديث كشف الحساب بنجاح.\المسار: {full_path}"),
                 actions=[
                     ft.TextButton("فتح الفاتورة", on_click=open_file),
                     ft.TextButton("فتح كشف الحساب", on_click=open_ledger),
@@ -840,7 +854,6 @@ class InvoiceView:
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
-
 
     def _save_revenue_invoice(self, op_num, client, date_str, driver, phone):
         """Save revenue invoice to a separate directory without creating a ledger"""
@@ -904,7 +917,7 @@ class InvoiceView:
         try:
             # Save the invoice
             self.save_callback(full_path, op_num, client, driver, date_str, phone, items_data)
-            
+                
             def open_file(e):
                 try:
                     if platform.system() == 'Windows':
@@ -947,7 +960,7 @@ class InvoiceView:
 
             dlg = ft.AlertDialog(
                 title=ft.Text("نجاح"),
-                content=ft.Text(f"تم حفظ فاتورة الإيراد بنجاح.\nالمسار: {full_path}"),
+                content=ft.Text(f"تم حفظ فاتورة الإيراد بنجاح.\نالمسار: {full_path}"),
                 actions=[
                     ft.TextButton("فتح الفاتورة", on_click=open_file),
                     ft.TextButton("فتح المجلد", on_click=open_folder),
@@ -968,7 +981,6 @@ class InvoiceView:
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
-
 
     def increment_op(self):
         try:
@@ -995,10 +1007,27 @@ class InvoiceView:
         self.page.update()
 
     def update_rows_scale(self):
+        # Update header fields as well
+        self.update_header_scale()
+        
+        # Update row fields
         for row in self.rows:
             row.update_scale(self.scale_factor)
         self.page.update()
         
+    def update_header_scale(self):
+        """Update the scale of header fields"""
+        # Calculate new font size (default is usually around 14-16)
+        new_text_size = 14 * self.scale_factor
+        
+        # Update header fields
+        header_fields = [self.ent_op, self.date_var, self.ent_client, self.ent_driver, self.ent_phone]
+        for field in header_fields:
+            if hasattr(field, 'text_size'):
+                field.text_size = new_text_size
+            if hasattr(field, 'label_style') and field.label_style:
+                field.label_style = ft.TextStyle(size=new_text_size * 0.9)
+
     # Add a method to batch update the UI for better performance
     def batch_update(self):
         """Batch update the UI to improve performance"""
@@ -1040,14 +1069,20 @@ class InvoiceView:
         except Exception as ex:
             print(f"Error closing window: {ex}")
 
+    def on_keyboard_event(self, e: ft.KeyboardEvent):
+        """Handle keyboard events"""
+        # Check if the '+' or '=' key was pressed
+        if e.key == '+' or e.key == '=' and not e.ctrl and not e.shift and not e.alt:
+            # Add a new row when '+' is pressed
+            self.add_row()
+            
     def zoom_in(self, e):
-        self.scale_factor += 0.1
+        self.scale_factor += 0.15  # Increased zoom increment for better visibility
         self.update_rows_scale()
         set_zoom_level(self.db_path, self.scale_factor)
-
     def zoom_out(self, e):
-        if self.scale_factor > 0.5:
-            self.scale_factor -= 0.1
+        if self.scale_factor > 0.4:  # Lower minimum zoom level
+            self.scale_factor -= 0.15  # Match the zoom in increment
             self.update_rows_scale()
             set_zoom_level(self.db_path, self.scale_factor)
 
@@ -1094,9 +1129,9 @@ class InvoiceView:
         main_layout = ft.Column([
             header,
             ft.Divider(),
-            self.rows_container,  # ListView instead of wrapped Column
+            self.rows_container,
             ft.Container(height=20)  # Space at bottom
-        ], expand=True)
+        ], expand=True, scroll=ft.ScrollMode.AUTO)
         
         # Add initial row
         self.add_row()
@@ -1108,6 +1143,4 @@ class InvoiceView:
         self.page.floating_action_button = self.floating_add_btn
         
         self.page.update()
-
-
 
