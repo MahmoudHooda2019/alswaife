@@ -102,56 +102,61 @@ class DashboardView:
         self.main_container.opacity = 0
         self.page.update()
         
-        # Wait for animation (simulated)
-        import time
-        time.sleep(0.3)
+        # Use async approach instead of blocking sleep
+        def load_invoice_view():
+            # Clear page and load InvoiceView
+            self.page.clean()
+            
+            if hasattr(self, 'save_callback'):
+                 app = InvoiceView(self.page, self.save_callback)
+                 # Add a back button to the app
+                 back_btn = ft.IconButton(
+                     icon=ft.Icons.ARROW_BACK, 
+                     on_click=lambda _: self.go_back(),
+                     tooltip="العودة للقائمة الرئيسية"
+                 )
+                 self.page.add(ft.Row([back_btn]))
+                 app.build_ui()
+            else:
+                 self.page.add(ft.Text("Error: Save callback not found"))
         
-        # Clear page and load InvoiceView
-        self.page.clean()
-        
-        
-        if hasattr(self, 'save_callback'):
-             app = InvoiceView(self.page, self.save_callback)
-             # Add a back button to the app
-             back_btn = ft.IconButton(
-                 icon=ft.Icons.ARROW_BACK, 
-                 on_click=lambda _: self.go_back(),
-                 tooltip="العودة للقائمة الرئيسية"
-             )
-             self.page.add(ft.Row([back_btn]))
-             app.build_ui()
-        else:
-             self.page.add(ft.Text("Error: Save callback not found"))
+        # Schedule the loading asynchronously
+        self.page.run_thread(load_invoice_view)
 
     def open_attendance(self, e):
         # Animate out
         self.main_container.opacity = 0
         self.page.update()
         
-        # Wait for animation (simulated)
-        import time
-        time.sleep(0.3)
+        # Use async approach instead of blocking sleep
+        def load_attendance_view():
+            # Clear page and load AttendanceView
+            self.page.clean()
+            
+            # Store save_callback for later use
+            if hasattr(self, 'save_callback'):
+                setattr(self.page, '_save_callback', self.save_callback)
+            
+            app = AttendanceView(self.page)
+            app.build_ui()
         
-        # Clear page and load AttendanceView
-        self.page.clean()
-        
-        # Store save_callback for later use
-        if hasattr(self, 'save_callback'):
-            setattr(self.page, '_save_callback', self.save_callback)
-        
-        app = AttendanceView(self.page)
-        app.build_ui()
+        # Schedule the loading asynchronously
+        self.page.run_thread(load_attendance_view)
 
     def open_blocks(self, e):
         self.main_container.opacity = 0
         self.page.update()
-        import time
-        time.sleep(0.3)
-        self.page.clean()
-        blocks_view = BlocksView(self.page, on_back=self.go_back)
-        content = blocks_view.build_ui()
-        self.page.add(content)
-        self.page.update()
+        
+        # Use async approach instead of blocking sleep
+        def load_blocks_view():
+            self.page.clean()
+            blocks_view = BlocksView(self.page, on_back=self.go_back)
+            content = blocks_view.build_ui()
+            self.page.add(content)
+            self.page.update()
+        
+        # Schedule the loading asynchronously
+        self.page.run_thread(load_blocks_view)
 
     def reset_ui(self):
         self.page.clean()

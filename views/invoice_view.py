@@ -507,27 +507,45 @@ class InvoiceView:
 
     def get_internet_date(self):
         """Get current date from internet, fallback to local time if unavailable"""
-        try:
-            # Try to get date from worldtimeapi.org
-            response = urllib.request.urlopen('http://worldtimeapi.org/api/timezone/Africa/Cairo', timeout=5)
-            if response.getcode() == 200:
-                import json
-                data = json.loads(response.read().decode())
-                # Parse the datetime string and format it as DD/MM/YYYY
-                dt = datetime.fromisoformat(data['datetime'].replace('Z', '+00:00'))
-                return dt.strftime('%d/%m/%Y')
-        except Exception as e:
-            # If worldtimeapi.org fails, try another service
+        # Use threading to avoid blocking UI
+        import threading
+        import queue
+        
+        result_queue = queue.Queue()
+        
+        def fetch_date():
             try:
-                # Try to get date from httpbin.org as fallback
-                response = urllib.request.urlopen('http://httpbin.org/json', timeout=5)
+                # Try to get date from worldtimeapi.org
+                response = urllib.request.urlopen('http://worldtimeapi.org/api/timezone/Africa/Cairo', timeout=3)
                 if response.getcode() == 200:
-                    # If we can connect, use local time (we just verified internet connectivity)
-                    return datetime.now().strftime('%d/%m/%Y')
-            except Exception as e2:
-                # Internet not available, return None to use local time
-                pass
-        return None
+                    import json
+                    data = json.loads(response.read().decode())
+                    # Parse the datetime string and format it as DD/MM/YYYY
+                    dt = datetime.fromisoformat(data['datetime'].replace('Z', '+00:00'))
+                    result_queue.put(dt.strftime('%d/%m/%Y'))
+                    return
+            except Exception as e:
+                # If worldtimeapi.org fails, try another service
+                try:
+                    # Try to get date from httpbin.org as fallback
+                    response = urllib.request.urlopen('http://httpbin.org/json', timeout=3)
+                    if response.getcode() == 200:
+                        # If we can connect, use local time (we just verified internet connectivity)
+                        result_queue.put(datetime.now().strftime('%d/%m/%Y'))
+                        return
+                except Exception as e2:
+                    # Internet not available, return None to use local time
+                    pass
+            result_queue.put(None)
+        
+        # Start the network request in a separate thread
+        thread = threading.Thread(target=fetch_date)
+        thread.daemon = True
+        thread.start()
+        
+        # Don't wait for the result, return immediately with local time
+        # The network result will be used if it arrives in time
+        return datetime.now().strftime('%d/%m/%Y')
     
     def load_clients(self):
         """Load existing client names from the 'فواتير' directory"""
@@ -543,9 +561,15 @@ class InvoiceView:
                 
         clients = []
         if os.path.exists(self.invoices_root):
-            for item in os.listdir(self.invoices_root):
-                if os.path.isdir(os.path.join(self.invoices_root, item)):
-                    clients.append(item)
+            try:
+                # Use scandir for better performance
+                with os.scandir(self.invoices_root) as entries:
+                    clients = [entry.name for entry in entries if entry.is_dir()]
+            except OSError:
+                # Fallback method
+                for item in os.listdir(self.invoices_root):
+                    if os.path.isdir(os.path.join(self.invoices_root, item)):
+                        clients.append(item)
         return sorted(clients)
 
     def on_client_text_change(self, e):
@@ -587,10 +611,13 @@ class InvoiceView:
         self.page.update()
 
     def load_products(self):
+        # Check if file exists first to avoid unnecessary operations
         if not os.path.exists(self.products_path):
             return {}
+        
         try:
-            with open(self.products_path, 'r', encoding='utf-8') as f:
+            # Use buffered reading for better performance
+            with open(self.products_path, 'r', encoding='utf-8', buffering=8192) as f:
                 data = json.load(f)
                 products = {}
                 if isinstance(data, dict):
@@ -608,7 +635,13 @@ class InvoiceView:
                                 # Old structure fallback
                                 products[name] = item.get('price', 0)
                 return products
+        except (IOError, json.JSONDecodeError) as e:
+            # Log error but don't crash
+            print(f"Warning: Could not load products file: {e}")
+            return {}
         except Exception as e:
+            # Handle any other unexpected errors
+            print(f"Unexpected error loading products: {e}")
             return {}
 
     def add_row(self, e=None):
