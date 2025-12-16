@@ -5,16 +5,18 @@ import openpyxl
 from openpyxl.styles import Border, Side, Alignment, PatternFill, Font
 from openpyxl.utils import get_column_letter
 
+# Table column definitions
 TABLE1_COLUMNS = [
-    "رقم النقلة", "عدد النقلات", "التاريخ", "المحجر", "رقم الماكينة",
-    "رقم البلوك", "الخامة", "الطول", "العرض", "الارتفاع",
-    "م3", "الوزن", "وزن البلوك", "سعر الطن", "إجمالي سعر البلوك", "سعر النقلة"
+    "رقم النقله", "عدد النقله", "التاريخ", "المحجر", 
+    "رقم الماكينة", "رقم البلوك", "الخام", "الطول", 
+    "العرض", "الارتفاع", "م3", "الوزن", 
+    "وزن البلوك", "السعر للطن", "الإجمالي", "سعر الرحلة"
 ]
 
 TABLE2_COLUMNS = [
     "تاريخ النشر", "رقم البلوك", "النوع", "رقم الماكينة", "وقت الدخول",
     "وقت الخروج", "عدد الساعات", "الاكراميه", "السمك", "العدد",
-    "الطول بعد", "الخصم", "الارتفاع", "الكميه م2",
+    "الطول", "الطول بعد", "الخصم", "الارتفاع", "الكميه م2",
     "سعر النشر", "إجمالي سعر النشر", "إجمالي تكلفه البلوك"
 ]
 
@@ -24,9 +26,12 @@ TABLE3_COLUMNS = [
     "سعر المتر", "اجمالى سعر المبيعات", "رصيد المخزون",
     "اجمالى تكلفه النقله", "اجمالى مبيعات النقله","ربح النقله"
 ]
-TABLE3_WIDTH = [
-    15, 12, 15, 12, 12, 10, 10, 15, 15, 18, 15, 18, 18, 15
-]
+
+# Column width definitions for each table
+TABLE1_WIDTH = [12, 8, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]
+TABLE2_WIDTH = [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]
+TABLE3_WIDTH = [15, 12, 15, 12, 12, 10, 10, 15, 15, 18, 15, 18, 18, 15]
+
 
 def export_simple_blocks_excel(rows: List[Dict]) -> str:
     """إنشاء أو تحديث ملف Excel لسجل البلوكات"""
@@ -46,22 +51,78 @@ def export_simple_blocks_excel(rows: List[Dict]) -> str:
 
 
 def append_to_existing_file(filepath: str, new_rows: List[Dict]):
-    """إضافة صفوف جديدة إلى ملف Excel موجود - تم تصحيح ترتيب الأعمدة"""
+    """
+    Append new rows to an existing Excel file.
+    
+    This function adds new block data to an existing Excel file while maintaining
+    the existing structure and formatting. It handles three tables with specific
+    column arrangements and formulas.
+    
+    Args:
+        filepath (str): Path to the existing Excel file
+        new_rows (List[Dict]): List of dictionaries containing block data
+    """
     try:
         workbook = openpyxl.load_workbook(filepath)
         worksheet = workbook["البلوكات"]
         
+        # Starting row for new data (after existing data)
         start_row = worksheet.max_row + 1
         
-        # تعريف الأنماط
+        # Define styles
         thin_border = Border(
             left=Side(style='thin'), right=Side(style='thin'),
             top=Side(style='thin'), bottom=Side(style='thin')
         )
         center_alignment = Alignment(horizontal='center', vertical='center')
-        gap_fill = PatternFill(start_color="5B9BD5", end_color="5B9BD5", fill_type="solid")
+        gap_fill = PatternFill(start_color="A6A6A6", end_color="A6A6A6", fill_type="solid")  # Gray for gaps
+        # Custom style for headers
+        header_fill_table1 = PatternFill(start_color="2F5597", end_color="2F5597", fill_type="solid")  # Dark blue for Table 1 headers
+        header_fill_table2 = PatternFill(start_color="548235", end_color="548235", fill_type="solid")  # Dark green for Table 2 headers
+        header_fill_table3 = PatternFill(start_color="C65911", end_color="C65911", fill_type="solid")  # Dark orange for Table 3 headers
+        header_font = Font(color="FFFFFF", bold=True)  # White bold font for headers
         
-        # إضافة البيانات الجديدة
+        # Define different colors for columns with improved contrast
+        column_colors = [
+            "FFB3BA",  # Light Red-Pink
+            "BAFFC9",  # Light Mint Green
+            "BAE1FF",  # Light Blue
+            "FFFFBA",  # Light Yellow
+            "FFDFBA",  # Light Orange
+            "E4BAFF",  # Light Purple
+            "FFC9DE",  # Light Pink
+            "C9FFE4",  # Light Aqua
+            "C9D6FF",  # Light Indigo
+            "FFE8C9",  # Light Peach
+            "D6FFC9",  # Light Lime
+            "FFC9F3",  # Light Magenta
+            "C9FFF3",  # Light Turquoise
+            "F3C9FF",  # Light Lavender
+            "FFDEC9",  # Light Salmon
+            "C9E7FF",  # Light Sky Blue
+        ]
+        
+        # Additional colors for repetition with better contrast
+        additional_colors = [
+            "FF9AA2",  # Medium Red-Pink
+            "B5FFAD",  # Medium Green
+            "ADD8FF",  # Medium Blue
+            "FFFFAD",  # Medium Yellow
+            "FFD8AD",  # Medium Orange
+            "DBADFF",  # Medium Purple
+            "FFADD8",  # Medium Pink
+            "ADF8D8",  # Medium Aqua
+            "ADBFFF",  # Medium Indigo
+            "FFD6AD",  # Medium Peach
+            "D1FFAD",  # Medium Lime
+            "FFADE8",  # Medium Magenta
+            "ADF8E8",  # Medium Turquoise
+            "E8ADFF",  # Medium Lavender
+            "FFD1AD",  # Medium Salmon
+            "ADE0FF",  # Medium Sky Blue
+        ]
+
+        # Add new data
         for i, block_data in enumerate(new_rows):
             excel_row = start_row + i
             
@@ -91,159 +152,421 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
                 cell = worksheet.cell(row=excel_row, column=col_idx, value=value)
                 cell.border = thin_border
                 cell.alignment = center_alignment
+                # Apply different color to each column
+                color_index = (col_idx - 1) % len(column_colors)
+                cell.fill = PatternFill(start_color=column_colors[color_index], end_color=column_colors[color_index], fill_type="solid")
             
             # Length formula: length from UI + 0.20
-            # We need to put the raw length value in a cell and then reference it in a formula
+            # Store the raw length value in a temporary cell and create a formula referencing it
             length_value = block_data.get("length", "")
             if length_value != "":
-                # Put the raw length value in a temporary cell (we'll use column 50 for this)
-                worksheet.cell(row=excel_row, column=50, value=length_value).border = thin_border
+                # Put the raw length value in a temporary cell within our table structure
+                # Use the last column of Table 1 (column 16, 0-indexed = 15) to store the raw length
+                temp_cell = worksheet.cell(row=excel_row, column=16, value=length_value)
+                temp_cell.border = thin_border
+                temp_cell.fill = PatternFill(start_color=column_colors[15], end_color=column_colors[15], fill_type="solid")
                 # Create formula that references this cell and adds 0.20
-                length_formula = f'={get_column_letter(50)}{excel_row}+0.20'
-                worksheet.cell(row=excel_row, column=8, value=length_formula).border = thin_border
+                length_formula = f'={get_column_letter(16)}{excel_row}+0.20'
+                length_cell = worksheet.cell(row=excel_row, column=8, value=length_formula)
+                length_cell.border = thin_border
+                color_index = 7 % len(column_colors)
+                length_cell.fill = PatternFill(start_color=column_colors[color_index], end_color=column_colors[color_index], fill_type="solid")
             else:
-                worksheet.cell(row=excel_row, column=8, value="").border = thin_border
+                empty_cell = worksheet.cell(row=excel_row, column=8, value="")
+                empty_cell.border = thin_border
+                color_index = 7 % len(column_colors)
+                empty_cell.fill = PatternFill(start_color=column_colors[color_index], end_color=column_colors[color_index], fill_type="solid")
             
             # معادلات الجدول الأول (نفس كودك السابق)
-            thickness_col = get_column_letter(26) # Z
-            count_col = get_column_letter(28)     # AB (لاحظ أن مكان العدد في الجدول الثاني سيتغير مكانه في الكود بالأسفل، لذا يجب التأكد من العمود الصحيح لاحقاً)
-            # تحديث: بناءً على الجدول الثاني الجديد، العدد سيصبح في العمود 27 وليس 28.
-            # لذا سنقوم بتحديث مرجع العمود هنا ليكون صحيحاً مع التصحيح الجديد
-            count_col_fixed = get_column_letter(27) # AA هو موقع العدد الجديد
+            thickness_col = get_column_letter(25) # Y (السمك الآن في العمود 25)
+            count_col = get_column_letter(26)     # Z (العدد الآن في العمود 26)
+            count_col_fixed = get_column_letter(26) # Z هو موقع العدد الجديد
             
             width_formula = f'=((VALUE(SUBSTITUTE({thickness_col}{excel_row},"سم",""))+1)*{count_col_fixed}{excel_row})'
-            cell = worksheet.cell(row=excel_row, column=9, value=width_formula)
-            cell.border = thin_border; cell.alignment = center_alignment
+            width_cell = worksheet.cell(row=excel_row, column=9, value=width_formula)
+            width_cell.border = thin_border
+            width_cell.alignment = center_alignment
+            color_index = 8 % len(column_colors)
+            width_cell.fill = PatternFill(start_color=column_colors[color_index], end_color=column_colors[color_index], fill_type="solid")
             
             # Height formula: height in publishing stage + 0.5
-            # Publishing stage height is in column 31 (AE)
-            publish_height_col = get_column_letter(31)
+            # Publishing stage height is in column 29 (AC)
+            publish_height_col = get_column_letter(29)
             height_formula = f'={publish_height_col}{excel_row}+0.5'
-            worksheet.cell(row=excel_row, column=10, value=height_formula).border = thin_border
+            height_cell = worksheet.cell(row=excel_row, column=10, value=height_formula)
+            height_cell.border = thin_border
+            color_index = 9 % len(column_colors)
+            height_cell.fill = PatternFill(start_color=column_colors[color_index], end_color=column_colors[color_index], fill_type="solid")
             
-            length_col = get_column_letter(8); width_col = get_column_letter(9); height_col = get_column_letter(10)
-            worksheet.cell(row=excel_row, column=11, value=f"={length_col}{excel_row}*{width_col}{excel_row}*{height_col}{excel_row}").border = thin_border
+            length_col = get_column_letter(8)
+            width_col = get_column_letter(9)
+            height_col = get_column_letter(10)
+            volume_formula = f"={length_col}{excel_row}*{width_col}{excel_row}*{height_col}{excel_row}"
+            volume_cell = worksheet.cell(row=excel_row, column=11, value=volume_formula)
+            volume_cell.border = thin_border
+            color_index = 10 % len(column_colors)
+            volume_cell.fill = PatternFill(start_color=column_colors[color_index], end_color=column_colors[color_index], fill_type="solid")
             
-            m3_col = get_column_letter(11); weight_col = get_column_letter(12)
-            worksheet.cell(row=excel_row, column=13, value=f"={m3_col}{excel_row}*{weight_col}{excel_row}").border = thin_border
+            m3_col = get_column_letter(11)
+            weight_col = get_column_letter(12)
+            weight_formula = f"={m3_col}{excel_row}*{weight_col}{excel_row}"
+            weight_cell = worksheet.cell(row=excel_row, column=13, value=weight_formula)
+            weight_cell.border = thin_border
+            color_index = 12 % len(column_colors)
+            weight_cell.fill = PatternFill(start_color=column_colors[color_index], end_color=column_colors[color_index], fill_type="solid")
             
-            price_col = get_column_letter(14); blk_weight_col = get_column_letter(13)
-            worksheet.cell(row=excel_row, column=15, value=f"={price_col}{excel_row}*{blk_weight_col}{excel_row}").border = thin_border
+            price_col = get_column_letter(14)
+            blk_weight_col = get_column_letter(13)
+            total_price_formula = f"={price_col}{excel_row}*{blk_weight_col}{excel_row}"
+            total_price_cell = worksheet.cell(row=excel_row, column=15, value=total_price_formula)
+            total_price_cell.border = thin_border
+            color_index = 14 % len(column_colors)
+            total_price_cell.fill = PatternFill(start_color=column_colors[color_index], end_color=column_colors[color_index], fill_type="solid")
             
-            # الفجوة
-            gap_cell = worksheet.cell(row=excel_row, column=17, value="")
-            gap_cell.border = thin_border; gap_cell.fill = gap_fill
+            # إزالة كتابة الخانة الفارغة بين الجدول الأول والثاني
+            # gap_cell = worksheet.cell(row=excel_row, column=17, value="")
+            # gap_cell.border = thin_border
+            # gap_cell.fill = gap_fill
             
             # --- الجدول الثاني (تم التصحيح هنا) ---
-            # البداية من العمود 18
+            # البداية من العمود 17 (بدلاً من 18 بعد إزالة الخانة الفارغة)
             
-            # 18-26: البيانات الأساسية
-            worksheet.cell(row=excel_row, column=18, value=block_data.get("date", "")).border = thin_border
-            worksheet.cell(row=excel_row, column=19, value=block_data.get("block_number", "")).border = thin_border
-            worksheet.cell(row=excel_row, column=20, value=block_data.get("material", "")).border = thin_border
-            worksheet.cell(row=excel_row, column=21, value=block_data.get("machine_number", "")).border = thin_border
-            worksheet.cell(row=excel_row, column=22, value="").border = thin_border # دخول
-            worksheet.cell(row=excel_row, column=23, value="").border = thin_border # خروج
-            worksheet.cell(row=excel_row, column=24, value="").border = thin_border # ساعات
-            worksheet.cell(row=excel_row, column=25, value=150).border = thin_border # إكرامية
-            worksheet.cell(row=excel_row, column=26, value=thickness_text).border = thin_border # السمك
+            # 17-25: البيانات الأساسية (مع تحديث الأعمود)
+            date_cell = worksheet.cell(row=excel_row, column=17, value=block_data.get("date", ""))
+            date_cell.border = thin_border
+            color_index = 16 % len(additional_colors)
+            date_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
             
-            # 27: العدد (كان سابقاً يوضع مكانه خانة فارغة خطأ)
-            worksheet.cell(row=excel_row, column=27, value=block_data.get("quantity", 1)).border = thin_border
+            block_cell = worksheet.cell(row=excel_row, column=18, value=block_data.get("block_number", ""))
+            block_cell.border = thin_border
+            color_index = 17 % len(additional_colors)
+            block_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
             
-            # 28: الطول (length from UI + 0.20) - إزالة هذا العمود لتتجنب التكرار
-            # تم حذف هذا العمود لإصلاح المشكلة التي كانت تسبب تكرار قيمة الطول
-            # سيتم فقط عرض الطول في الجدول الأول
+            material_cell = worksheet.cell(row=excel_row, column=19, value=block_data.get("material", ""))
+            material_cell.border = thin_border
+            color_index = 18 % len(additional_colors)
+            material_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
             
-            # 29: الخصم (نضعه هنا قبل المعادلة لتكون جاهزة، ترتيب الأعمدة في إكسل حسب القائمة: 10=الطول بعد، 11=الخصم)
-            # حسب القائمة: الطول بعد (10) -> الخصم (11)
-            # بالأرقام: الطول بعد (28) -> الخصم (29)
-            worksheet.cell(row=excel_row, column=29, value=0.20).border = thin_border
+            machine_cell = worksheet.cell(row=excel_row, column=20, value=block_data.get("machine_number", ""))
+            machine_cell.border = thin_border
+            color_index = 19 % len(additional_colors)
+            machine_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
             
-            # 28: الطول بعد = الطول من الجدول الأول - الخصم
-            # بما أننا حذفنا عمود الطول، سنستخدم قيمة ثابتة للطول بعد
-            # أو يمكننا استخدام الطول من الجدول الأول
-            # لنستخدم الطول من الجدول الأول (العمود 8)
-            table1_length_col = get_column_letter(8) # العمود الذي يحتوي على الطول في الجدول الأول
-            disc_col = get_column_letter(29) # AC
-            cell = worksheet.cell(row=excel_row, column=28, value=f"={table1_length_col}{excel_row}-{disc_col}{excel_row}")
-            cell.border = thin_border; cell.alignment = center_alignment
-
-            # 30: الارتفاع
+            entry_cell = worksheet.cell(row=excel_row, column=21, value="")  # دخول
+            entry_cell.border = thin_border
+            color_index = 20 % len(additional_colors)
+            entry_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
+            
+            exit_cell = worksheet.cell(row=excel_row, column=22, value="")  # خروج
+            exit_cell.border = thin_border
+            color_index = 21 % len(additional_colors)
+            exit_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
+            
+            hours_cell = worksheet.cell(row=excel_row, column=23, value="")  # ساعات
+            hours_cell.border = thin_border
+            color_index = 22 % len(additional_colors)
+            hours_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
+            
+            tips_cell = worksheet.cell(row=excel_row, column=24, value=150)  # إكرامية
+            tips_cell.border = thin_border
+            color_index = 23 % len(additional_colors)
+            tips_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
+            
+            thickness_cell = worksheet.cell(row=excel_row, column=25, value=thickness_text)  # السمك
+            thickness_cell.border = thin_border
+            color_index = 24 % len(additional_colors)
+            thickness_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
+            
+            # 26: Quantity (was previously placed in a gap column incorrectly)
+            quantity_cell = worksheet.cell(row=excel_row, column=26, value=block_data.get("quantity", 1))
+            quantity_cell.border = thin_border
+            color_index = 25 % len(additional_colors)
+            quantity_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
+            
+            # 27: Length (copied from Table 1)
+            # Get length value from Table 1 (column 8)
+            table1_length_col = get_column_letter(8)
+            length_value = block_data.get("length", "")
+            length_cell = worksheet.cell(row=excel_row, column=27, value=length_value)
+            length_cell.border = thin_border
+            color_index = 26 % len(additional_colors)
+            length_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
+            
+            # 28: Discount
+            discount_cell = worksheet.cell(row=excel_row, column=28, value=0.20)
+            discount_cell.border = thin_border
+            color_index = 27 % len(additional_colors)
+            discount_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
+            
+            # 29: Length After = Length from Table 2 - Discount
+            # Using length from Table 2 (column 27) instead of Table 1
+            table2_length_col = get_column_letter(27)  # Column containing length in Table 2
+            disc_col = get_column_letter(28)  # AB (Discount in column 28)
+            length_after_formula = f"={table2_length_col}{excel_row}-{disc_col}{excel_row}"
+            length_after_cell = worksheet.cell(row=excel_row, column=29, value=length_after_formula)
+            length_after_cell.border = thin_border
+            length_after_cell.alignment = center_alignment
+            color_index = 28 % len(additional_colors)
+            length_after_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
+            
+            # 30: Height (Publishing stage height)
             publish_height = block_data.get("publish_height", float(block_data.get("height", 0) or 0))
-            worksheet.cell(row=excel_row, column=30, value=publish_height).border = thin_border
+            height_cell = worksheet.cell(row=excel_row, column=30, value=publish_height)
+            height_cell.border = thin_border
+            color_index = 29 % len(additional_colors)
+            height_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
             
-            # 31: الكمية م2 = الطول بعد × الارتفاع × العدد
-            # ملاحظة: عادة الحساب يكون على "الطول بعد" (الصافي). إذا كنت تريد الحساب على الطول الخام، غير العمود 28 إلى 27
-            len_after_col = get_column_letter(28) # AB
-            height_pub_col = get_column_letter(30) # AE
-            qty_col = get_column_letter(27) # AA (العدد)
-            cell = worksheet.cell(row=excel_row, column=31, value=f"={len_after_col}{excel_row}*{height_pub_col}{excel_row}*{qty_col}{excel_row}")
-            cell.border = thin_border; cell.alignment = center_alignment
+            # 31: Quantity m2 (Formula) = Length After × Height × Quantity
+            # Note: Usually calculated based on "Length After" (net). 
+            # If you want to calculate based on raw length, change column 29 to 28
+            len_after_col = get_column_letter(29)  # AC (Length After is now in column 29)
+            height_pub_col = get_column_letter(30)  # AD
+            qty_col = get_column_letter(26)  # Z (Quantity)
+            qty_m2_formula = f"={len_after_col}{excel_row}*{height_pub_col}{excel_row}*{qty_col}{excel_row}"
+            qty_m2_cell = worksheet.cell(row=excel_row, column=31, value=qty_m2_formula)
+            qty_m2_cell.border = thin_border
+            qty_m2_cell.alignment = center_alignment
+            color_index = 30 % len(additional_colors)
+            qty_m2_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
             
-            # 32: سعر النشر
+            # 32: Publish Price (based on thickness)
             thickness_value = thickness_text.replace("سم", "")
-            if thickness_value == "2": publish_price = 125
-            elif thickness_value == "3": publish_price = 145
-            elif thickness_value == "4": publish_price = 155
-            else: publish_price = 125
-            worksheet.cell(row=excel_row, column=32, value=publish_price).border = thin_border
+            if thickness_value == "2":
+                publish_price = 125
+            elif thickness_value == "3":
+                publish_price = 145
+            elif thickness_value == "4":
+                publish_price = 155
+            else:
+                publish_price = 125
+            price_cell = worksheet.cell(row=excel_row, column=32, value=publish_price)
+            price_cell.border = thin_border
+            color_index = 31 % len(additional_colors)
+            price_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
             
-            # 33: إجمالي سعر النشر = سعر النشر × الكمية م2
-            pub_price_col = get_column_letter(32) # AG
-            qty_m2_col = get_column_letter(31) # AF
-            cell = worksheet.cell(row=excel_row, column=33, value=f"={pub_price_col}{excel_row}*{qty_m2_col}{excel_row}")
-            cell.border = thin_border; cell.alignment = center_alignment
+            # 33: Total Publish Price (Formula) = Publish Price × Quantity m2
+            pub_price_col = get_column_letter(32)  # AF
+            qty_m2_col = get_column_letter(31)  # AE
+            total_publish_formula = f"={pub_price_col}{excel_row}*{qty_m2_col}{excel_row}"
+            total_publish_cell = worksheet.cell(row=excel_row, column=33, value=total_publish_formula)
+            total_publish_cell.border = thin_border
+            total_publish_cell.alignment = center_alignment
+            color_index = 32 % len(additional_colors)
+            total_publish_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
             
-            # 34: إجمالي تكلفة البلوك = إجمالي سعر النشر + الإكرامية
-            tot_pub_col = get_column_letter(33) # AH
-            tips_col = get_column_letter(25) # Y
-            cell = worksheet.cell(row=excel_row, column=34, value=f"={tot_pub_col}{excel_row}+{tips_col}{excel_row}")
-            cell.border = thin_border; cell.alignment = center_alignment
+            # 34: Total Block Cost (Formula) = Total Publish Price + Tips
+            tot_pub_col = get_column_letter(33)  # AG
+            tips_col = get_column_letter(24)  # X
+            total_cost_formula = f"={tot_pub_col}{excel_row}+{tips_col}{excel_row}"
+            total_cost_cell = worksheet.cell(row=excel_row, column=34, value=total_cost_formula)
+            total_cost_cell.border = thin_border
+            total_cost_cell.alignment = center_alignment
+            color_index = 33 % len(additional_colors)
+            total_cost_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
+            
+            # --- الجدول الثالث (إضافة بيانات Table 3) ---
+            # Table 3 starts at column 34 (0-indexed) (تم التحديث بعد إضافة عمود الطول)
+            table3_start_col = 34  # العمود الذي يبدأ منه الجدول الثالث (تم التحديث)
+            
+            # إضافة خلايا فارغة مع حدود لجميع أعمدة الجدول الثالث
+            for col_offset in range(len(TABLE3_COLUMNS)):
+                cell = worksheet.cell(row=excel_row, column=table3_start_col + col_offset, value="")
+                cell.border = thin_border
+                # استخدام ألوان مختلفة لجدول 3
+                color_index = col_offset % len(column_colors)
+                cell.fill = PatternFill(start_color=column_colors[color_index], end_color=column_colors[color_index], fill_type="solid")
             
         workbook.save(filepath)
         
     except Exception as e:
-        print(f"خطأ في إضافة البيانات: {e}")
-        # في حالة الخطأ الشديد، يمكن محاولة إعادة الإنشاء، لكن بحذر
+        print(f"Error adding data: {e}")
+        # In case of severe error, can try to recreate, but cautiously
         # create_new_excel_file(filepath, new_rows) 
 
 def create_new_excel_file(filepath: str, rows: List[Dict]):
-    """إنشاء ملف Excel جديد - تم تصحيح ترتيب الأعمدة"""
+    """
+    Create a new Excel file with block data.
+    
+    This function creates a new Excel file with three tables containing block data.
+    It sets up the proper structure, formatting, and formulas for all tables.
+    
+    Args:
+        filepath (str): Path where the new Excel file should be created
+        rows (List[Dict]): List of dictionaries containing block data
+    """
     workbook = xlsxwriter.Workbook(filepath, {'constant_memory': False})
     worksheet = workbook.add_worksheet("البلوكات")
     worksheet.right_to_left()
 
-    title_fmt = workbook.add_format({"bold": True, "font_size": 18, "align": "center", "valign": "vcenter", "bg_color": "#2E75B6", "font_color": "white", "border": 1})
-    table_title_fmt = workbook.add_format({"bold": True, "font_size": 14, "align": "center", "valign": "vcenter", "bg_color": "#5B9BD5", "font_color": "white", "border": 1})
-    gap_fmt = workbook.add_format({"bg_color": "#5B9BD5", "border": 1})
-    header_fmt = workbook.add_format({"bold": True, "border": 1, "align": "center", "valign": "vcenter", "bg_color": "#5B9BD5", "font_color": "white", "font_size": 12})
-    data_fmt = workbook.add_format({"border": 1, "align": "center", "valign": "vcenter", "font_size": 11})
+    # تعريف ألوان مختلفة للأعمدة مع تحسين التباين
+    column_colors = [
+        "#FFB3BA",  # Light Red-Pink
+        "#BAFFC9",  # Light Mint Green
+        "#BAE1FF",  # Light Blue
+        "#FFFFBA",  # Light Yellow
+        "#FFDFBA",  # Light Orange
+        "#E4BAFF",  # Light Purple
+        "#FFC9DE",  # Light Pink
+        "#C9FFE4",  # Light Aqua
+        "#C9D6FF",  # Light Indigo
+        "#FFE8C9",  # Light Peach
+        "#D6FFC9",  # Light Lime
+        "#FFC9F3",  # Light Magenta
+        "#C9FFF3",  # Light Turquoise
+        "#F3C9FF",  # Light Lavender
+        "#FFDEC9",  # Light Salmon
+        "#C9E7FF",  # Light Sky Blue
+    ]
+    
+    # ألوان إضافية للتكرار مع تباين أفضل
+    additional_colors = [
+        "#FF9AA2",  # Medium Red-Pink
+        "#B5FFAD",  # Medium Green
+        "#ADD8FF",  # Medium Blue
+        "#FFFFAD",  # Medium Yellow
+        "#FFD8AD",  # Medium Orange
+        "#DBADFF",  # Medium Purple
+        "#FFADD8",  # Medium Pink
+        "#ADF8D8",  # Medium Aqua
+        "#ADBFFF",  # Medium Indigo
+        "#FFD6AD",  # Medium Peach
+        "#D1FFAD",  # Medium Lime
+        "#FFADE8",  # Medium Magenta
+        "#ADF8E8",  # Medium Turquoise
+        "#E8ADFF",  # Medium Lavender
+        "#FFD1AD",  # Medium Salmon
+        "#ADE0FF",  # Medium Sky Blue
+    ]
+
+    # أنماط محسّنة للعناوين والجداول
+    title_fmt = workbook.add_format({
+        "bold": True, 
+        "font_size": 18, 
+        "align": "center", 
+        "valign": "vcenter", 
+        "bg_color": "#1F4E79",  # أزرق داكن أكثر احترافية
+        "font_color": "white", 
+        "border": 1
+    })
+    
+    table1_title_fmt = workbook.add_format({
+        "bold": True, 
+        "font_size": 14, 
+        "align": "center", 
+        "valign": "vcenter", 
+        "bg_color": "#4472C4",  # أزرق متوسط لجدول 1
+        "font_color": "white", 
+        "border": 1
+    })
+    
+    table2_title_fmt = workbook.add_format({
+        "bold": True, 
+        "font_size": 14, 
+        "align": "center", 
+        "valign": "vcenter", 
+        "bg_color": "#70AD47",  # أخضر لجدول 2
+        "font_color": "white", 
+        "border": 1
+    })
+    
+    table3_title_fmt = workbook.add_format({
+        "bold": True, 
+        "font_size": 14, 
+        "align": "center", 
+        "valign": "vcenter", 
+        "bg_color": "#ED7D31",  # برتقالي لجدول 3
+        "font_color": "white", 
+        "border": 1
+    })
+    
+    gap_fmt = workbook.add_format({
+        "bg_color": "#A6A6A6",  # رمادي للفراغات
+        "border": 1
+    })
+    
+    # تعريف أنماط ملونة للبيانات مع تحسين التباين
+    data_formats = []
+    for i, color in enumerate(column_colors):
+        fmt = workbook.add_format({
+            "border": 1, 
+            "align": "center", 
+            "valign": "vcenter", 
+            "font_size": 11, 
+            "bg_color": color
+        })
+        data_formats.append(fmt)
+    
+    # أنماط إضافية للأعمدة المتكررة مع تباين أفضل
+    additional_formats = []
+    for i, color in enumerate(additional_colors):
+        fmt = workbook.add_format({
+            "border": 1, 
+            "align": "center", 
+            "valign": "vcenter", 
+            "font_size": 11, 
+            "bg_color": color
+        })
+        additional_formats.append(fmt)
 
     total_cols = len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + len(TABLE3_COLUMNS)
-    worksheet.merge_range(0, 0, 0, total_cols, "سجل البلوكات", title_fmt)
-    worksheet.merge_range(1, 0, 1, len(TABLE1_COLUMNS) - 1, "مقاس البلوك في الأرضية", table_title_fmt)
-    worksheet.merge_range(1, len(TABLE1_COLUMNS), 2, len(TABLE1_COLUMNS), "", gap_fmt)
-    worksheet.merge_range(1, len(TABLE1_COLUMNS) + 1, 1, total_cols - len(TABLE3_COLUMNS) - 4 , "مرحلة النشر", table_title_fmt)
-    worksheet.merge_range(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 1, 1, total_cols, "المنصرف والمبيعات", table_title_fmt)
+    worksheet.merge_range(0, 0, 0, total_cols - 1, "سجل البلوكات", title_fmt)
+    worksheet.merge_range(1, 0, 1, len(TABLE1_COLUMNS) - 1, "مقاس البلوك في الأرضية", table1_title_fmt)
+    worksheet.merge_range(1, len(TABLE1_COLUMNS), 1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) - 1, "مرحلة النشر", table2_title_fmt)
+    worksheet.merge_range(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS), 1, total_cols - 1, "المنصرف والمبيعات", table3_title_fmt)
     
     # اجمالي الكميه م2 - Formula to sum all values in the column
-    qty_m2_col = get_column_letter(total_cols - len(TABLE3_COLUMNS) - 3 + 1)  # Convert to Excel column letter (AF)
-    worksheet.write_formula(1, total_cols - len(TABLE3_COLUMNS) - 3, f"=SUM({qty_m2_col}3:{qty_m2_col}1000)", table_title_fmt) # اجمالي الكميه م2
-    worksheet.write(1, total_cols - len(TABLE3_COLUMNS) - 2, "", table_title_fmt)
+    qty_m2_col = get_column_letter(len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 3)  # Column for Qty m2 in Table 3
+    worksheet.write_formula(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 2, f"=SUM({qty_m2_col}3:{qty_m2_col}1000)", table3_title_fmt) # اجمالي الكميه م2
+    worksheet.write(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 3, "", table3_title_fmt)
     # اجمالي اجمالي سعر النشر - Formula to sum all values in the column
-    total_price_col = get_column_letter(total_cols - len(TABLE3_COLUMNS) - 1 + 1)  # Convert to Excel column letter (AH)
-    worksheet.write_formula(1, total_cols - len(TABLE3_COLUMNS) - 1, f"=SUM({total_price_col}3:{total_price_col}1000)", table_title_fmt) # اجمالي اجمالي سعر النشر
-    worksheet.write(1, total_cols - len(TABLE3_COLUMNS), "", table_title_fmt)
+    total_price_col = get_column_letter(len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 5)  # Column for Total Price in Table 3
+    worksheet.write_formula(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 4, f"=SUM({total_price_col}3:{total_price_col}1000)", table3_title_fmt) # اجمالي اجمالي سعر النشر
+    worksheet.write(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 5, "", table3_title_fmt)
 
-    for idx, col in enumerate(TABLE1_COLUMNS): worksheet.write(2, idx, col, header_fmt)
-    worksheet.write(2, len(TABLE1_COLUMNS), "", gap_fmt)
-    for idx, col in enumerate(TABLE2_COLUMNS): worksheet.write(2, len(TABLE1_COLUMNS) + 1 + idx, col, header_fmt)
-    for idx, col in enumerate(TABLE3_COLUMNS): worksheet.write(2, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 1 + idx, col, header_fmt)
-    worksheet.set_row(1, 30); worksheet.set_row(2, 25)
+    # Write column headers with distinct colors
+    header_fmt_table1 = workbook.add_format({
+        "bold": True, 
+        "border": 1, 
+        "align": "center", 
+        "valign": "vcenter", 
+        "bg_color": "#2F5597",  # Dark blue for Table 1 headers
+        "font_color": "white", 
+        "font_size": 12
+    })
+    
+    header_fmt_table2 = workbook.add_format({
+        "bold": True, 
+        "border": 1, 
+        "align": "center", 
+        "valign": "vcenter", 
+        "bg_color": "#548235",  # Dark green for Table 2 headers
+        "font_color": "white", 
+        "font_size": 12
+    })
+    
+    header_fmt_table3 = workbook.add_format({
+        "bold": True, 
+        "border": 1, 
+        "align": "center", 
+        "valign": "vcenter", 
+        "bg_color": "#C65911",  # Dark orange for Table 3 headers
+        "font_color": "white", 
+        "font_size": 12
+    })
+    
+    for idx, col in enumerate(TABLE1_COLUMNS):
+        worksheet.write(2, idx, col, header_fmt_table1)
+    for idx, col in enumerate(TABLE2_COLUMNS):
+        worksheet.write(2, len(TABLE1_COLUMNS) + idx, col, header_fmt_table2)
+    for idx, col in enumerate(TABLE3_COLUMNS):
+        worksheet.write(2, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + idx, col, header_fmt_table3)
+    worksheet.set_row(1, 30)
+    worksheet.set_row(2, 25)
 
     start_row = 3
-    col_offset = len(TABLE1_COLUMNS) + 1 # العمود 17 (0-indexed) أي العمود الـ 18
+    # تحديث مواضع الأعمدة بعد إزالة الخانة الفارغة
+    col_offset = len(TABLE1_COLUMNS)  # بدون إضافة 1 لأننا أزلنا الخانة الفارغة
+    table3_start_col = len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS)  # بداية الجدول الثالث (بدون إضافة 1)
     
     for i, block_data in enumerate(rows):
         excel_row = start_row + i
@@ -258,110 +581,159 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         ]
         
         for col_idx, value in enumerate(table1_values):
-            worksheet.write(excel_row, col_idx, value, data_fmt)
+            # تطبيق لون مختلف لكل عمود
+            color_index = col_idx % len(data_formats)
+            worksheet.write(excel_row, col_idx, value, data_formats[color_index])
         
         # Length formula: length from UI + 0.20
         length_value = block_data.get("length", "")
         if length_value != "":
-            # Put the raw length value in a temporary cell (we'll use column 50 for this)
-            worksheet.write(excel_row, 49, length_value, data_fmt)  # Column 50 (0-indexed = 49)
+            # Put the raw length value in a temporary cell within our table structure
+            # Use the last column of Table 1 (column 16, 0-indexed = 15) to store the raw length
+            color_index = 15 % len(data_formats)
+            worksheet.write(excel_row, 15, length_value, data_formats[color_index])  # Column 16 (0-indexed = 15)
             # Create formula that references this cell and adds 0.20
-            length_formula = f'={get_column_letter(50)}{excel_row + 1}+0.20'
-            worksheet.write_formula(excel_row, 7, length_formula, data_fmt)  # Column 8 (0-indexed = 7)
+            length_formula = f'={get_column_letter(16)}{excel_row + 1}+0.20'
+            color_index = 7 % len(data_formats)
+            worksheet.write_formula(excel_row, 7, length_formula, data_formats[color_index])  # Column 8 (0-indexed = 7)
         
         # معادلات الجدول الأول وتصحيح مرجع العدد
         # العدد موجود الآن في col_offset + 9 (index 9 في TABLE2_COLUMNS)
         thickness_col = get_column_letter(26) # Z
-        count_col_fixed = get_column_letter(col_offset + 9 + 1) # (offset + index + 1 for A1 notation) -> العمود 27 = AA
+        count_col_fixed = get_column_letter(col_offset + 9 + 1) # (offset + index + 1 for A1 notation)
         
         width_formula = f'=((VALUE(SUBSTITUTE({thickness_col}{excel_row + 1},"سم",""))+1)*{count_col_fixed}{excel_row + 1})'
-        worksheet.write_formula(excel_row, 8, width_formula, data_fmt)
+        color_index = 8 % len(data_formats)
+        worksheet.write_formula(excel_row, 8, width_formula, data_formats[color_index])
         
         # Height formula: height in publishing stage + 0.5
         # Publishing stage height is in col_offset + 13
         publish_height_col = get_column_letter(col_offset + 13 + 1)
         height_formula = f'={publish_height_col}{excel_row + 1}+0.5'
-        worksheet.write_formula(excel_row, 9, height_formula, data_fmt)
+        color_index = 9 % len(data_formats)
+        worksheet.write_formula(excel_row, 9, height_formula, data_formats[color_index])
         
         # باقي معادلات الجدول الأول
-        l_col = get_column_letter(8); w_col = get_column_letter(9); h_col = get_column_letter(10)
-        worksheet.write_formula(excel_row, 10, f"={l_col}{excel_row + 1}*{w_col}{excel_row + 1}*{h_col}{excel_row + 1}", data_fmt)
+        l_col = get_column_letter(8)
+        w_col = get_column_letter(9)
+        h_col = get_column_letter(10)
+        volume_formula = f"={l_col}{excel_row + 1}*{w_col}{excel_row + 1}*{h_col}{excel_row + 1}"
+        color_index = 10 % len(data_formats)
+        worksheet.write_formula(excel_row, 10, volume_formula, data_formats[color_index])
         
-        m3_col = get_column_letter(11); wt_col = get_column_letter(12)
-        worksheet.write_formula(excel_row, 12, f"={m3_col}{excel_row + 1}*{wt_col}{excel_row + 1}", data_fmt)
+        m3_col = get_column_letter(11)
+        wt_col = get_column_letter(12)
+        weight_formula = f"={m3_col}{excel_row + 1}*{wt_col}{excel_row + 1}"
+        color_index = 12 % len(data_formats)
+        worksheet.write_formula(excel_row, 12, weight_formula, data_formats[color_index])
         
-        pr_col = get_column_letter(14); bw_col = get_column_letter(13)
-        worksheet.write_formula(excel_row, 14, f"={pr_col}{excel_row + 1}*{bw_col}{excel_row + 1}", data_fmt)
+        pr_col = get_column_letter(14)
+        bw_col = get_column_letter(13)
+        total_price_formula = f"={pr_col}{excel_row + 1}*{bw_col}{excel_row + 1}"
+        color_index = 14 % len(data_formats)
+        worksheet.write_formula(excel_row, 14, total_price_formula, data_formats[color_index])
             
-        worksheet.write(excel_row, len(TABLE1_COLUMNS), "", gap_fmt)
+        # إزالة كتابة الخانة الفارغة بين الجدول الأول والثاني
+        # worksheet.write(excel_row, len(TABLE1_COLUMNS), "", gap_fmt)
         
         # --- الجدول الثاني (تم التصحيح) ---
         # 0: Date, 1: Block, 2: Material, 3: Machine
-        worksheet.write(excel_row, col_offset + 0, block_data.get("date", ""), data_fmt)
-        worksheet.write(excel_row, col_offset + 1, block_data.get("block_number", ""), data_fmt)
-        worksheet.write(excel_row, col_offset + 2, block_data.get("material", ""), data_fmt)
-        worksheet.write(excel_row, col_offset + 3, block_data.get("machine_number", ""), data_fmt)
+        color_index = 0 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 0, block_data.get("date", ""), additional_formats[color_index])
+        color_index = 1 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 1, block_data.get("block_number", ""), additional_formats[color_index])
+        color_index = 2 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 2, block_data.get("material", ""), additional_formats[color_index])
+        color_index = 3 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 3, block_data.get("machine_number", ""), additional_formats[color_index])
         
         # 4,5,6: Time In, Out, Hours
-        worksheet.write(excel_row, col_offset + 4, "", data_fmt)
-        worksheet.write(excel_row, col_offset + 5, "", data_fmt)
-        worksheet.write(excel_row, col_offset + 6, "", data_fmt)
+        color_index = 4 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 4, "", additional_formats[color_index])
+        color_index = 5 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 5, "", additional_formats[color_index])
+        color_index = 6 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 6, "", additional_formats[color_index])
         
         # 7: Tips
-        worksheet.write(excel_row, col_offset + 7, 150, data_fmt)
+        color_index = 7 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 7, 150, additional_formats[color_index])
         
-        # 8: Thickness
-        worksheet.write(excel_row, col_offset + 8, thickness_text, data_fmt)
+        # Column 8: Block thickness
+        color_index = 8 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 8, thickness_text, additional_formats[color_index])
         
-        # 9: Count (تم حذف العمود الفارغ ووضع العدد هنا)
-        worksheet.write(excel_row, col_offset + 9, block_data.get("quantity", 1), data_fmt)
+        # Column 9: Quantity (removed gap column and placed quantity here)
+        color_index = 9 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 9, block_data.get("quantity", 1), additional_formats[color_index])
         
-        # 10: الطول (تم حذف هذا العمود لتتجنب التكرار)
-        # سيتم فقط عرض الطول في الجدول الأول
+        # Column 10: Length (copied from Table 1)
+        length_value = block_data.get("length", "")
+        color_index = 10 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 10, length_value, additional_formats[color_index])
         
-        # 11: Discount
-        worksheet.write(excel_row, col_offset + 11, 0.20, data_fmt)
+        # Column 11: Length After (Formula) = Length from Table 2 - Discount
+        # Using length from Table 2 (column 10) instead of Table 1
+        table2_length_col = get_column_letter(col_offset + 10 + 1)  # Column containing length in Table 2
+        disc_cell = get_column_letter(col_offset + 12 + 1)
+        length_after_formula = f'={table2_length_col}{excel_row + 1}-{disc_cell}{excel_row + 1}'
+        color_index = 11 % len(additional_formats)
+        worksheet.write_formula(excel_row, col_offset + 11, length_after_formula, additional_formats[color_index])
         
-        # 10: Length After (Formula) = Length from Table 1 - Discount
-        # لنستخدم الطول من الجدول الأول (العمود 8)
-        table1_length_col = get_column_letter(8)  # العمود الذي يحتوي على الطول في الجدول الأول
-        disc_cell = get_column_letter(col_offset + 11 + 1)
-        worksheet.write_formula(excel_row, col_offset + 10, f'={table1_length_col}{excel_row + 1}-{disc_cell}{excel_row + 1}', data_fmt)
+        # Column 12: Discount (fixed value)
+        color_index = 12 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 12, 0.20, additional_formats[color_index])
         
-        # 12: Height
+        # Column 13: Height (Publishing stage height)
         publish_height = block_data.get("publish_height", float(block_data.get("height", 0) or 0))
-        worksheet.write(excel_row, col_offset + 12, publish_height, data_fmt)
+        color_index = 13 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 13, publish_height, additional_formats[color_index])
         
-        # 13: Qty m2 (Formula) = Length After (10) * Height (12) * Count (9)
-        len_aft_cell = get_column_letter(col_offset + 10 + 1)
-        h_cell = get_column_letter(col_offset + 12 + 1)
+        # Column 14: Quantity m2 (Formula) = Length After × Height × Quantity
+        len_aft_cell = get_column_letter(col_offset + 11 + 1)
+        h_cell = get_column_letter(col_offset + 13 + 1)
         cnt_cell = get_column_letter(col_offset + 9 + 1)
-        worksheet.write_formula(excel_row, col_offset + 13, f'={len_aft_cell}{excel_row + 1}*{h_cell}{excel_row + 1}*{cnt_cell}{excel_row + 1}', data_fmt)
+        qty_m2_formula = f'={len_aft_cell}{excel_row + 1}*{h_cell}{excel_row + 1}*{cnt_cell}{excel_row + 1}'
+        color_index = 14 % len(additional_formats)
+        worksheet.write_formula(excel_row, col_offset + 14, qty_m2_formula, additional_formats[color_index])
         
-        # 14: Publish Price
+        # Column 15: Publish Price (based on thickness)
         thickness_value = thickness_text.replace("سم", "")
-        if thickness_value == "2": publish_price = 125
-        elif thickness_value == "3": publish_price = 145
-        elif thickness_value == "4": publish_price = 155
-        else: publish_price = 125
-        worksheet.write(excel_row, col_offset + 14, publish_price, data_fmt)
+        if thickness_value == "2":
+            publish_price = 125
+        elif thickness_value == "3":
+            publish_price = 145
+        elif thickness_value == "4":
+            publish_price = 155
+        else:
+            publish_price = 125
+        color_index = 15 % len(additional_formats)
+        worksheet.write(excel_row, col_offset + 15, publish_price, additional_formats[color_index])
         
-        # 15: Total Publish Price (Formula) = Price (14) * Qty m2 (13)
-        pr_cell = get_column_letter(col_offset + 14 + 1)
-        qm2_cell = get_column_letter(col_offset + 13 + 1)
-        worksheet.write_formula(excel_row, col_offset + 15, f'={pr_cell}{excel_row + 1}*{qm2_cell}{excel_row + 1}', data_fmt)
+        # Column 16: Total Publish Price (Formula) = Publish Price × Quantity m2
+        pr_cell = get_column_letter(col_offset + 15 + 1)
+        qm2_cell = get_column_letter(col_offset + 14 + 1)
+        total_publish_formula = f'={pr_cell}{excel_row + 1}*{qm2_cell}{excel_row + 1}'
+        color_index = 16 % len(additional_formats)
+        worksheet.write_formula(excel_row, col_offset + 16, total_publish_formula, additional_formats[color_index])
         
-        # 16: Total Cost (Formula) = Total Publish (15) + Tips (7)
-        tot_pub_cell = get_column_letter(col_offset + 15 + 1)
+        # Column 17: Total Cost (Formula) = Total Publish Price + Tips
+        tot_pub_cell = get_column_letter(col_offset + 16 + 1)
         tips_cell = get_column_letter(col_offset + 7 + 1)
-        worksheet.write_formula(excel_row, col_offset + 16, f'={tot_pub_cell}{excel_row + 1}+{tips_cell}{excel_row + 1}', data_fmt)
-
+        total_cost_formula = f'={tot_pub_cell}{excel_row + 1}+{tips_cell}{excel_row + 1}'
+        color_index = 17 % len(additional_formats)
+        worksheet.write_formula(excel_row, col_offset + 17, total_cost_formula, additional_formats[color_index])
+        
     worksheet.freeze_panes(3, 0)
     
     # تنسيق عرض الأعمدة
-    for i in range(len(TABLE1_COLUMNS)): worksheet.set_column(i, i, 15) # for header of col 1
-    worksheet.set_column(len(TABLE1_COLUMNS), len(TABLE1_COLUMNS), 1) # for space
-    for i in range(len(TABLE2_COLUMNS)): worksheet.set_column(len(TABLE1_COLUMNS) + 1 + i, len(TABLE1_COLUMNS) + 1 + i, 15) # for header of col 2
-    for i in range(len(TABLE3_COLUMNS)):
-        worksheet.set_column(len(TABLE1_COLUMNS) + 1 + len(TABLE2_COLUMNS) + i, len(TABLE1_COLUMNS) + 1 + len(TABLE2_COLUMNS) + i, TABLE3_WIDTH[i]) # for header of col 3
+    for i in range(min(len(TABLE1_COLUMNS), len(TABLE1_WIDTH))): 
+        worksheet.set_column(i, i, TABLE1_WIDTH[i])
+    
+    for i in range(min(len(TABLE2_COLUMNS), len(TABLE2_WIDTH))): 
+        worksheet.set_column(len(TABLE1_COLUMNS) + i, len(TABLE1_COLUMNS) + i, TABLE2_WIDTH[i])
+    
+    for i in range(min(len(TABLE3_COLUMNS), len(TABLE3_WIDTH))):
+        worksheet.set_column(len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + i, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + i, TABLE3_WIDTH[i])
+    
     workbook.close()
