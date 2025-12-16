@@ -114,12 +114,7 @@ class AttendanceView:
         # Load existing data for current date if available
         self.load_existing_data()
         
-        # Floating save button
-        self.floating_save_btn = ft.FloatingActionButton(
-            icon=ft.Icons.SAVE,
-            on_click=self.save_to_excel,
-            bgcolor=ft.Colors.GREEN_700
-        )
+        # Floating buttons will be created in the Stack layout
         
         # Main layout
         main_column = ft.Column(
@@ -135,8 +130,65 @@ class AttendanceView:
             expand=True
         )
         
-        self.page.add(main_column)
-        self.page.floating_action_button = self.floating_save_btn
+        # Create main layout with floating buttons
+        self.page.add(
+            ft.Stack(
+                controls=[
+                    main_column,
+                    # Floating buttons container
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                # Add employee button
+                                ft.Container(
+                                    content=ft.FloatingActionButton(
+                                        icon=ft.Icons.PERSON_ADD,
+                                        on_click=self.add_new_employee,
+                                        bgcolor=ft.Colors.BLUE_600,
+                                        foreground_color=ft.Colors.WHITE,
+                                        tooltip="إضافة موظف جديد",
+                                        shape=ft.RoundedRectangleBorder(radius=20),
+                                        elevation=6
+                                    ),
+                                    margin=ft.margin.only(bottom=15),
+                                    shadow=ft.BoxShadow(
+                                        spread_radius=1,
+                                        blur_radius=8,
+                                        color=ft.Colors.with_opacity(0.3, ft.Colors.BLUE_600),
+                                        offset=ft.Offset(0, 2)
+                                    )
+                                ),
+                                # Save button
+                                ft.Container(
+                                    content=ft.FloatingActionButton(
+                                        icon=ft.Icons.SAVE,
+                                        on_click=self.save_to_excel,
+                                        bgcolor=ft.Colors.GREEN_600,
+                                        foreground_color=ft.Colors.WHITE,
+                                        tooltip="حفظ البيانات",
+                                        shape=ft.RoundedRectangleBorder(radius=20),
+                                        elevation=6
+                                    ),
+                                    shadow=ft.BoxShadow(
+                                        spread_radius=1,
+                                        blur_radius=10,
+                                        color=ft.Colors.with_opacity(0.3, ft.Colors.GREEN_600),
+                                        offset=ft.Offset(0, 3)
+                                    )
+                                ),
+                            ],
+                            spacing=0,
+                            alignment=ft.MainAxisAlignment.END
+                        ),
+                        right=24,
+                        bottom=24,
+                        alignment=ft.alignment.bottom_right
+                    )
+                ],
+                expand=True
+            )
+        )
+        
         self.page.update()
     
     def on_date_change(self, e):
@@ -175,6 +227,25 @@ class AttendanceView:
         # Clear existing controls
         if self.employees_container is not None:
             self.employees_container.controls.clear()
+        
+        # Check if both date and shift are selected
+        if not self.date_field or not self.date_field.value or not self.shift_dropdown or not self.shift_dropdown.value:
+            # Show message to select date and shift first
+            if self.employees_container is not None:
+                self.employees_container.controls.append(
+                    ft.Container(
+                        content=ft.Text(
+                            "الرجاء اختيار التاريخ والوردية أولاً لعرض قائمة الموظفين",
+                            size=18,
+                            text_align=ft.TextAlign.CENTER,
+                            color=ft.Colors.GREY_600
+                        ),
+                        alignment=ft.alignment.center,
+                        padding=50
+                    )
+                )
+            self.page.update()
+            return
         
         # Ensure the directory exists
         documents_path = os.path.join(os.path.expanduser("~"), "Documents")
@@ -217,6 +288,16 @@ class AttendanceView:
                                 emp_price = emp_record['price']
                         
                         self.add_employee_row(emp_name, emp_price, is_present)
+                    
+                    # Load any additional employees from Excel that are not in JSON
+                    for emp_record in filtered_data:
+                        emp_name = emp_record['name']
+                        # Check if this employee is not in the JSON list
+                        if not any(emp['name'] == emp_name for emp in self.employees_list):
+                            price = emp_record.get('price', 0)
+                            shift_key = self.get_shift_key()
+                            is_present = shift_key and emp_record.get(shift_key, 0) > 0
+                            self.add_employee_row(emp_name, price, is_present)
                 else:
                     # Create employee rows without existing data
                     for emp in self.employees_list:
@@ -303,36 +384,62 @@ class AttendanceView:
             disabled=not shift_selected,
         )
         
+        # Check if this employee is from JSON or added manually
+        is_json_employee = any(emp['name'] == name for emp in self.employees_list)
+        
+        # Create delete button for manually added employees
+        delete_button = None
+        if not is_json_employee:
+            delete_button = ft.IconButton(
+                icon=ft.Icons.DELETE,
+                icon_color=ft.Colors.RED_400,
+                tooltip="حذف الموظف",
+                on_click=lambda e, n=name: self.delete_employee(n)
+            )
+        
+        # Create row controls
+        row_controls = [
+            # Checkbox for attendance
+            ft.Checkbox(
+                value=is_present if shift_selected else False,
+                disabled=not shift_selected,
+                on_change=lambda e, n=name: self.on_attendance_change(n, e.control.value)
+            ),
+            # Employee name
+            ft.Text(name, size=18, weight=ft.FontWeight.BOLD),
+            # Spacer
+            ft.Container(expand=True),
+            # Price field
+            price_field
+        ]
+        
+        # Add delete button if not from JSON
+        if delete_button:
+            row_controls.append(delete_button)
+        
         # Create card container for better visual appearance
         card = ft.Card(
             content=ft.Container(
                 content=ft.Row(
-                    controls=[
-                        # Checkbox for attendance
-                        ft.Checkbox(
-                            value=is_present if shift_selected else False,
-                            disabled=not shift_selected,
-                            on_change=lambda e, n=name: self.on_attendance_change(n, e.control.value)
-                        ),
-                        # Employee name
-                        ft.Text(name, size=18, weight=ft.FontWeight.BOLD),
-                        # Spacer
-                        ft.Container(expand=True),
-                        # Price field
-                        price_field
-                    ],
+                    controls=row_controls,
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
-                padding=10,
+                padding=15,
+                border_radius=12,
             ),
-            elevation=2,
+            elevation=3,
+            shadow_color=ft.Colors.with_opacity(0.2, ft.Colors.GREY_400),
+            shape=ft.RoundedRectangleBorder(radius=12),
+            margin=ft.margin.symmetric(vertical=4, horizontal=8),
+            color=ft.Colors.GREY_800
         )
         
         # Store attendance status and field references
         self.attendance_data[name] = {
             'card': card,
             'price_field': price_field,
-            'present': is_present if shift_selected else False
+            'present': is_present if shift_selected else False,
+            'is_json_employee': is_json_employee
         }
         
         if self.employees_container is not None:
@@ -379,9 +486,13 @@ class AttendanceView:
         # Prepare employees data
         employees_data = []
         
-        # Process each employee
+        # Process all employees (from JSON and manually added)
+        all_employee_names = set()
+        
+        # First, process employees from JSON
         for emp in self.employees_list:
             emp_name = emp['name']
+            all_employee_names.add(emp_name)
             
             # Check if employee already has a record for this date
             existing_record = None
@@ -430,6 +541,55 @@ class AttendanceView:
                     emp_record[shift_key] = price if is_present else 0
             
             employees_data.append(emp_record)
+        
+        # Then, process manually added employees
+        for emp_name, attendance_info in self.attendance_data.items():
+            if emp_name not in all_employee_names:  # This is a manually added employee
+                # Check if employee already has a record for this date
+                existing_record = None
+                for record in existing_data:
+                    if record['name'] == emp_name and record.get('date', '') == (self.date_field.value if self.date_field else ""):
+                        existing_record = record.copy()
+                        break
+                
+                # Create or update employee record
+                if existing_record:
+                    emp_record = existing_record
+                else:
+                    emp_record = {
+                        'name': emp_name,
+                        'friday_shift1': 0, 'friday_shift2': 0,
+                        'saturday_shift1': 0, 'saturday_shift2': 0,
+                        'sunday_shift1': 0, 'sunday_shift2': 0,
+                        'monday_shift1': 0, 'monday_shift2': 0,
+                        'tuesday_shift1': 0, 'tuesday_shift2': 0,
+                        'wednesday_shift1': 0, 'wednesday_shift2': 0,
+                        'thursday_shift1': 0, 'thursday_shift2': 0,
+                        'date': self.date_field.value if self.date_field is not None else "",
+                        'advance': 0,
+                        'price': 0
+                    }
+                
+                # Update attendance and price based on UI
+                is_present = attendance_info['present']
+                price_field = attendance_info['price_field']
+                
+                # Get price from field
+                try:
+                    price = float(price_field.value) if price_field.value else 0
+                except:
+                    price = 0
+                
+                # Update price in record
+                emp_record['price'] = price
+                
+                # Update attendance based on checkbox
+                shift_key = self.get_shift_key()
+                if shift_key:
+                    # Set to price value if present, 0 if not
+                    emp_record[shift_key] = price if is_present else 0
+                
+                employees_data.append(emp_record)
         
         # Combine existing data with new/updated data
         # Remove existing records for today's date and employees
@@ -520,6 +680,156 @@ class AttendanceView:
             self.show_message(f"فشل في فتح المسار: {ex}", error=True)
         finally:
             self.close_dialog()
+    
+    def add_new_employee(self, e):
+        """Add a new employee not in the JSON file"""
+        # Check if date and shift are selected
+        if not self.date_field or not self.date_field.value or not self.shift_dropdown or not self.shift_dropdown.value:
+            self.show_message("الرجاء اختيار التاريخ والوردية أولاً", error=True)
+            return
+        
+        # Create dialog for adding new employee
+        self.name_field = ft.TextField(
+            label="اسم الموظف",
+            width=300,
+            autofocus=True,
+            border_radius=8,
+            prefix_icon=ft.Icons.PERSON,
+            border_color=ft.Colors.BLUE_300,
+            focused_border_color=ft.Colors.BLUE_600
+        )
+        
+        self.price_field = ft.TextField(
+            label="السعر",
+            width=300,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            value="400",  # Default price
+            border_radius=8,
+            prefix_icon=ft.Icons.ATTACH_MONEY,
+            border_color=ft.Colors.GREEN_300,
+            focused_border_color=ft.Colors.GREEN_600,
+            suffix_text="جنيه"
+        )
+        
+        self.add_employee_dialog = ft.AlertDialog(
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.PERSON_ADD, color=ft.Colors.BLUE_600, size=28),
+                    ft.Text("إضافة موظف جديد", size=20, weight=ft.FontWeight.BOLD)
+                ],
+                spacing=10
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Container(
+                            content=self.name_field,
+                            padding=ft.padding.symmetric(vertical=5)
+                        ),
+                        ft.Container(
+                            content=self.price_field,
+                            padding=ft.padding.symmetric(vertical=5)
+                        )
+                    ],
+                    spacing=15,
+                    tight=True
+                ),
+                padding=20,
+                width=350
+            ),
+            actions=[
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.TextButton(
+                                "إلغاء", 
+                                on_click=self.close_add_employee_dialog,
+                                style=ft.ButtonStyle(
+                                    color=ft.Colors.GREY_600,
+                                    overlay_color=ft.Colors.GREY_100
+                                )
+                            ),
+                            ft.ElevatedButton(
+                                "إضافة", 
+                                on_click=self.confirm_add_employee,
+                                bgcolor=ft.Colors.BLUE_600,
+                                color=ft.Colors.WHITE,
+                                style=ft.ButtonStyle(
+                                    shape=ft.RoundedRectangleBorder(radius=8)
+                                )
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.END,
+                        spacing=10
+                    ),
+                    padding=ft.padding.only(top=10)
+                )
+            ],
+            shape=ft.RoundedRectangleBorder(radius=16),
+            bgcolor=ft.Colors.WHITE,
+            shadow_color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+        )
+        
+        self.page.overlay.append(self.add_employee_dialog)
+        self.add_employee_dialog.open = True
+        self.page.update()
+    
+    def close_add_employee_dialog(self, e=None):
+        """Close the add employee dialog"""
+        if hasattr(self, 'add_employee_dialog') and self.add_employee_dialog:
+            self.add_employee_dialog.open = False
+            self.page.update()
+    
+    def confirm_add_employee(self, e):
+        """Confirm adding the new employee"""
+        if not self.name_field.value or not self.name_field.value.strip():
+            self.show_message("الرجاء إدخال اسم الموظف", error=True)
+            return
+        
+        employee_name = self.name_field.value.strip()
+        
+        # Check if employee already exists
+        if employee_name in self.attendance_data:
+            self.show_message("الموظف موجود بالفعل", error=True)
+            return
+        
+        try:
+            price = float(self.price_field.value) if self.price_field.value else 400
+        except:
+            price = 400
+        
+        # Add the employee row
+        self.add_employee_row(employee_name, price, False)
+        
+        # Close dialog
+        self.close_add_employee_dialog()
+        
+        # Update the page
+        self.page.update()
+        
+        self.show_message(f"تم إضافة الموظف: {employee_name}")
+    
+    def delete_employee(self, employee_name):
+        """Delete an employee (only for manually added employees)"""
+        if employee_name in self.attendance_data:
+            employee_info = self.attendance_data[employee_name]
+            
+            # Only allow deletion of manually added employees
+            if not employee_info.get('is_json_employee', True):
+                # Remove from UI
+                card = employee_info['card']
+                if self.employees_container and card in self.employees_container.controls:
+                    self.employees_container.controls.remove(card)
+                
+                # Remove from data
+                del self.attendance_data[employee_name]
+                
+                # Update page
+                self.page.update()
+                
+                self.show_message(f"تم حذف الموظف: {employee_name}")
+            else:
+                self.show_message("لا يمكن حذف الموظفين الأساسيين", error=True)
     
     def go_back(self, e):
         """Go back to dashboard"""

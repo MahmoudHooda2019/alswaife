@@ -35,8 +35,8 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
     #  PAGE SETTINGS
     # ================
     worksheet.set_paper(9)         # A4
-    worksheet.set_portrait()
-    worksheet.set_margins(0.3, 0.3, 0.5, 0.5)
+    worksheet.set_landscape()
+    worksheet.set_margins(0.7, 0.7, 0.75, 0.75)
     worksheet.fit_to_pages(1, 1)   # صفحة واحدة عرض + صفحة واحدة طول
 
     # ==========================

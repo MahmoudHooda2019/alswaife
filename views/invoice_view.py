@@ -57,10 +57,16 @@ class InvoiceRow:
         # المتغيرات
         # Default widths (minimum widths)
         self.default_widths = {
-            'block': 125, 'thick': 125, 'mat': 100, 'count': 90, 
-            'len_before': 100, 'discount': 90, 'len': 90, 'height': 90, 'area': 100, 
-            'price': 90, 'total': 100, 'product': 160
+            'block': 55, 'thick': 55, 'mat': 55, 'count': 55, 
+            'len_before': 55, 'discount': 55, 'len': 55, 'height': 55, 'area': 55, 
+            'price': 55, 'total': 55, 'product': 55
         }
+
+        # self.default_widths = {
+        #     'block': 125, 'thick': 125, 'mat': 100, 'count': 90, 
+        #     'len_before': 100, 'discount': 90, 'len': 90, 'height': 90, 'area': 100, 
+        #     'price': 90, 'total': 100, 'product': 160
+        # }
 
         # المتغيرات
         self.block_var = ft.TextField(
@@ -286,6 +292,9 @@ class InvoiceRow:
     def update_scale(self, scale_factor, update_page=True):
         self.scale_factor = scale_factor
         
+        width_step = 20
+        font_size_step = 2
+
         # Calculate new font size (default is usually around 14-16)
         new_text_size = 14 * scale_factor
         
@@ -302,12 +311,15 @@ class InvoiceRow:
             # Scale the width based on the scale factor but maintain a minimum width
             # Ensure the width doesn't go below the default width
             scaled_width = self.default_widths[key] * scale_factor
-            control.width = max(scaled_width, self.default_widths[key] * 0.8)  # Minimum 80% of default width
+            #control.width = max(scaled_width, self.default_widths[key] * 0.8)  # Minimum 80% of default width
             control.text_size = new_text_size
             
             # Update label styles
             if isinstance(control, ft.TextField):
                 control.label_style = ft.TextStyle(size=new_text_size * 0.9)
+                control.width = scaled_width * 1.2
+                print(scaled_width * 1.2)
+                print("--------------")
             elif isinstance(control, ft.Dropdown):
                 control.label_style = ft.TextStyle(size=new_text_size * 0.9)
                 
