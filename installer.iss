@@ -11,7 +11,8 @@ OutputBaseFilename=AlSawifeFactorySetup
 Compression=lzma
 SolidCompression=yes
 DisableProgramGroupPage=yes
-UninstallDisplayIcon={app}\AlSawifeFactory.exe
+SetupIconFile=res\icon.ico
+UninstallDisplayIcon={app}\res\icon.ico
 
 [Languages]
 Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
@@ -23,12 +24,12 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 ; Copy everything from PyInstaller output folder
 Source: "dist\AlSawifeFactory\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Copy the icon file
+Source: "res\icon.ico"; DestDir: "{app}\res"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Al Sawife Factory"; Filename: "{app}\AlSawifeFactory.exe"
-Name: "{commondesktop}\Al Sawife Factory"; Filename: "{app}\AlSawifeFactory.exe"; Tasks: desktopicon
+Name: "{group}\Al Sawife Factory"; Filename: "{app}\AlSawifeFactory.exe"; IconFilename: "{app}\res\icon.ico"
+Name: "{commondesktop}\Al Sawife Factory"; Filename: "{app}\AlSawifeFactory.exe"; Tasks: desktopicon; IconFilename: "{app}\res\icon.ico"
 
 [Run]
 Filename: "{app}\AlSawifeFactory.exe"; Description: "تشغيل البرنامج الآن"; Flags: nowait postinstall skipifsilent
-
-
