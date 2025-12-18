@@ -466,7 +466,7 @@ class BlocksView:
         self.__class__._instance = self
         self.page = page
         self.on_back = on_back
-        self.page.title = "مصنع السويفي - سجل البلوكات"
+        self.page.title = "مصنع السويفي - حساب تكلفة البلوكات مصنع محب"
         self.page.rtl = True
         self.page.theme_mode = ft.ThemeMode.DARK
 
@@ -516,7 +516,7 @@ class BlocksView:
                     ft.Icon(ft.Icons.INVENTORY_2_ROUNDED, size=36, color=ft.Colors.BLUE_300),
                     ft.Container(width=10),
                     ft.Text(
-                        "سجل البلوكات",
+                        "حساب تكلفة البلوكات مصنع محب",
                         size=32,
                         weight=ft.FontWeight.BOLD,
                         color=ft.Colors.BLUE_100

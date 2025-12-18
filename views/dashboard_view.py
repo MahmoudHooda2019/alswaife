@@ -3,6 +3,7 @@ import os
 from views.invoice_view import InvoiceView
 from views.attendance_view import AttendanceView
 from views.blocks_view import BlocksView
+from views.purchases_view import PurchasesView
 from utils.path_utils import resource_path
 
 class DashboardView:
@@ -38,6 +39,7 @@ class DashboardView:
                         self.create_menu_card("إدارة الفواتير", ft.Icons.RECEIPT_LONG, self.open_invoices, ft.Colors.BLUE_700),
                         self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.GREEN_700),
                         self.create_menu_card("البلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
+                        self.create_menu_card("المشتريات", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
                         self.create_menu_card("المخازن", ft.Icons.INVENTORY_2, None, ft.Colors.ORANGE_700),
                         self.create_menu_card("العملاء", ft.Icons.PEOPLE, None, ft.Colors.PURPLE_700),
                         self.create_menu_card("الإعدادات", ft.Icons.SETTINGS, None, ft.Colors.RED_700),
@@ -157,6 +159,21 @@ class DashboardView:
         
         # Schedule the loading asynchronously
         self.page.run_thread(load_blocks_view)
+
+    def open_purchases(self, e):
+        self.main_container.opacity = 0
+        self.page.update()
+        
+        # Use async approach instead of blocking sleep
+        def load_purchases_view():
+            self.page.clean()
+            purchases_view = PurchasesView(self.page, on_back=self.go_back)
+            content = purchases_view.build_ui()
+            self.page.add(content)
+            self.page.update()
+        
+        # Schedule the loading asynchronously
+        self.page.run_thread(load_purchases_view)
 
     def reset_ui(self):
         self.page.clean()

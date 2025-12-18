@@ -34,13 +34,13 @@ TABLE3_WIDTH = [15, 12, 15, 12, 12, 10, 10, 15, 15, 18, 15, 18, 18, 15]
 
 
 def export_simple_blocks_excel(rows: List[Dict]) -> str:
-    """إنشاء أو تحديث ملف Excel لسجل البلوكات"""
+    """إنشاء أو تحديث ملف Excel لحساب تكلفه البلوكات مصنع محب"""
     documents_folder = os.path.join(
         os.path.expanduser("~"), "Documents", "alswaife", "البلوكات"
     )
     os.makedirs(documents_folder, exist_ok=True)
     
-    filepath = os.path.join(documents_folder, "سجل البلوكات.xlsx")
+    filepath = os.path.join(documents_folder, "حساب تكلفه البلوكات مصنع محب.xlsx")
     
     if os.path.exists(filepath):
         append_to_existing_file(filepath, rows)
@@ -508,8 +508,9 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         })
         additional_formats.append(fmt)
 
+    # Write title
     total_cols = len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + len(TABLE3_COLUMNS)
-    worksheet.merge_range(0, 0, 0, total_cols - 1, "سجل البلوكات", title_fmt)
+    worksheet.merge_range(0, 0, 0, total_cols - 1, "حساب تكلفه البلوكات مصنع محب", title_fmt)
     worksheet.merge_range(1, 0, 1, len(TABLE1_COLUMNS) - 1, "مقاس البلوك في الأرضية", table1_title_fmt)
     worksheet.merge_range(1, len(TABLE1_COLUMNS), 1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) - 1, "مرحلة النشر", table2_title_fmt)
     worksheet.merge_range(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS), 1, total_cols - 1, "المنصرف والمبيعات", table3_title_fmt)
