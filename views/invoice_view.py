@@ -15,16 +15,6 @@ import urllib.error
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import flet as ft
-import json
-import re
-import sqlite3
-from datetime import datetime
-from tkinter import filedialog, messagebox
-import traceback
-import subprocess
-import platform
-
 # Import database utilities
 try:
     from utils.db_utils import init_db as init_db_real, get_counter as get_counter_real, increment_counter as increment_counter_real, get_zoom_level, set_zoom_level
@@ -54,19 +44,24 @@ class InvoiceRow:
         # For length calculation
         self.original_length = 0  # لحفظ الطول الأصلي
         
+        # Internal material value (not displayed in UI)
+        self.material_value = ""
+        
         # المتغيرات
         # Default widths (minimum widths)
         self.default_widths = {
-            'block': 55, 'thick': 55, 'mat': 55, 'count': 55, 
-            'len_before': 55, 'discount': 55, 'len': 55, 'height': 55, 'area': 55, 
-            'price': 55, 'total': 55, 'product': 55
+            'block': 60, # رقم البلوك 
+            'thick': 105, # السمك 
+            'count': 55, # العدد 
+            'len_before': 60, # الطول قبل 
+            'discount': 55, # الخصم
+            'len': 60, # الطول 
+            'height': 65, # الارتفاع
+            'area': 68, # المسطح
+            'price': 60, #السعر
+            'total': 70, #الاجمالي
+            'product': 135 # البيان
         }
-
-        # self.default_widths = {
-        #     'block': 125, 'thick': 125, 'mat': 100, 'count': 90, 
-        #     'len_before': 100, 'discount': 90, 'len': 90, 'height': 90, 'area': 100, 
-        #     'price': 90, 'total': 100, 'product': 160
-        # }
 
         # المتغيرات
         self.block_var = ft.TextField(
@@ -79,7 +74,6 @@ class InvoiceRow:
             options=[ft.dropdown.Option("2سم"), ft.dropdown.Option("3سم"), ft.dropdown.Option("4سم")],
             width=self.default_widths['thick']
         )
-        self.mat_var = ft.TextField(label="الخامة", width=self.default_widths['mat'])
         self.count_var = ft.TextField(
             label="العدد", 
             width=self.default_widths['count'],
@@ -117,7 +111,7 @@ class InvoiceRow:
             label="الارتفاع", 
             width=self.default_widths['height'],
             keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),
             on_change=self.calculate
         )
         
@@ -221,7 +215,7 @@ class InvoiceRow:
                 clean_product_name = selected_product
             
             # Update the material field
-            self.mat_var.value = material_name
+            self.material_value = material_name
             
             # Update the price based on product and thickness
             self.update_price(clean_product_name)
@@ -292,15 +286,12 @@ class InvoiceRow:
     def update_scale(self, scale_factor, update_page=True):
         self.scale_factor = scale_factor
         
-        width_step = 20
-        font_size_step = 2
-
         # Calculate new font size (default is usually around 14-16)
         new_text_size = 14 * scale_factor
         
         # Update all text fields with scaling
         controls_map = {
-            'block': self.block_var, 'thick': self.thick_var, 'mat': self.mat_var,
+            'block': self.block_var, 'thick': self.thick_var,
             'count': self.count_var, 'len_before': self.len_before_var, 'discount': self.discount_var,
             'len': self.len_var, 'height': self.height_var,
             'area': self.area_var, 'price': self.price_var,
@@ -309,19 +300,16 @@ class InvoiceRow:
         
         for key, control in controls_map.items():
             # Scale the width based on the scale factor but maintain a minimum width
-            # Ensure the width doesn't go below the default width
             scaled_width = self.default_widths[key] * scale_factor
-            #control.width = max(scaled_width, self.default_widths[key] * 0.8)  # Minimum 80% of default width
             control.text_size = new_text_size
             
-            # Update label styles
+            # Update label styles and width
             if isinstance(control, ft.TextField):
                 control.label_style = ft.TextStyle(size=new_text_size * 0.9)
-                control.width = scaled_width * 1.2
-                print(scaled_width * 1.2)
-                print("--------------")
+                control.width = max(scaled_width, self.default_widths[key] * 0.8)
             elif isinstance(control, ft.Dropdown):
                 control.label_style = ft.TextStyle(size=new_text_size * 0.9)
+                control.width = max(scaled_width, self.default_widths[key] * 0.8)
                 
         if update_page:
             self.page.update()
@@ -365,6 +353,9 @@ class InvoiceRow:
     def calculate(self, e=None, update_page=True):
         """Calculate area and total based on current values"""
         try:
+            # Handle Arabic decimal input for height
+            self.handle_arabic_decimal_input(self.height_var)
+            
             # Get values from input fields
             count = float(self.count_var.value or 0)
             length = float(self.len_var.value or 0)
@@ -402,7 +393,6 @@ class InvoiceRow:
             self.product_dropdown,
             self.block_var,
             self.thick_var,
-            self.mat_var,
             self.count_var,
             self.discount_var,    # New field (moved before len_before_var)
             self.len_before_var,  # New field (moved after discount_var)
@@ -759,7 +749,7 @@ class InvoiceView:
                 row.product_dropdown.value or "",  # description
                 row.block_var.value or "",         # block
                 row.thick_var.value or "",         # thickness
-                row.mat_var.value or "",           # material
+                row.material_value or "",          # material
                 row.count_var.value or "0",        # count
                 row.len_var.value or "0",          # length (final calculated value only)
                 row.height_var.value or "0",       # height
@@ -919,7 +909,7 @@ class InvoiceView:
                 row.product_dropdown.value or "",  # description
                 row.block_var.value or "",         # block
                 row.thick_var.value or "",         # thickness
-                row.mat_var.value or "",           # material
+                row.material_value or "",          # material
                 row.count_var.value or "0",        # count
                 row.len_var.value or "0",          # length (already net)
                 row.height_var.value or "0",       # height
@@ -1052,30 +1042,9 @@ class InvoiceView:
         self.page.update()
 
     def update_rows_scale(self):
-        # Update header fields as well
-        self.update_header_scale()
-        
-        # Update row fields
+        # Update row fields only
         for row in self.rows:
             row.update_scale(self.scale_factor)
-        self.page.update()
-        
-    def update_header_scale(self):
-        """Update the scale of header fields"""
-        # Calculate new font size (default is usually around 14-16)
-        new_text_size = 14 * self.scale_factor
-        
-        # Update header fields
-        header_fields = [self.ent_op, self.date_var, self.ent_client, self.ent_driver, self.ent_phone]
-        for field in header_fields:
-            if hasattr(field, 'text_size'):
-                field.text_size = new_text_size
-            if hasattr(field, 'label_style') and field.label_style:
-                field.label_style = ft.TextStyle(size=new_text_size * 0.9)
-
-    # Add a method to batch update the UI for better performance
-    def batch_update(self):
-        """Batch update the UI to improve performance"""
         self.page.update()
 
     def minimize_window(self, e):
@@ -1122,12 +1091,13 @@ class InvoiceView:
             self.add_row()
             
     def zoom_in(self, e):
-        self.scale_factor += 0.15  # Increased zoom increment for better visibility
-        self.update_rows_scale()
-        set_zoom_level(self.db_path, self.scale_factor)
+        if self.scale_factor < 2.0:  # Upper limit for zoom
+            self.scale_factor += 0.1  # Smaller zoom increment for smoother scaling
+            self.update_rows_scale()
+            set_zoom_level(self.db_path, self.scale_factor)
     def zoom_out(self, e):
         if self.scale_factor > 0.4:  # Lower minimum zoom level
-            self.scale_factor -= 0.15  # Match the zoom in increment
+            self.scale_factor -= 0.1  # Match the zoom in increment
             self.update_rows_scale()
             set_zoom_level(self.db_path, self.scale_factor)
 
