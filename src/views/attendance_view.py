@@ -47,9 +47,6 @@ class AttendanceView:
     def build_ui(self):
         """Build the attendance tracking UI"""
         
-        # Clear any existing appbar settings
-        self.page.appbar = None
-        
         # Create AppBar with title and actions
         app_bar = ft.AppBar(
             leading=ft.IconButton(
@@ -75,41 +72,48 @@ class AttendanceView:
                         on_click=self.save_to_excel,
                         tooltip="حفظ البيانات"
                     ),
-                    margin=ft.margin.only(left=10, right=20)  # Add space after the save button
+                    margin=ft.margin.only(left=40, right=15)  # Add space after the save button
                 )
             ],
             bgcolor=ft.Colors.GREY_900,
         )
         
-        # Date selection with improved styling
+        # Date selection with enhanced styling
         self.date_field = ft.TextField(
             label="التاريخ",
             value=datetime.now().strftime('%d/%m/%Y'),
-            width=180,
+            width=200,
             text_align=ft.TextAlign.CENTER,
             on_change=self.on_date_change,
-            border_radius=8,
-            border_color=ft.Colors.GREY_600,
-            focused_border_color=ft.Colors.BLUE_400,
-            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
-            text_style=ft.TextStyle(weight=ft.FontWeight.W_500),
+            border_radius=12,
+            border_color=ft.Colors.GREEN_700,
+            focused_border_color=ft.Colors.GREEN_400,
+            label_style=ft.TextStyle(color=ft.Colors.GREEN_300, size=14, weight=ft.FontWeight.BOLD),
+            text_style=ft.TextStyle(weight=ft.FontWeight.W_600, size=16, color=ft.Colors.WHITE),
             filled=True,
-            fill_color=ft.Colors.GREY_800
+            fill_color=ft.Colors.GREY_900,
+            prefix_icon=ft.Icons.CALENDAR_TODAY,
+            content_padding=ft.padding.symmetric(horizontal=15, vertical=15),
+            cursor_color=ft.Colors.GREEN_400,
+            border_width=2
         )
         
-        # Day field (automatically populated based on date) with improved styling
+        # Day field (automatically populated based on date) with enhanced styling
         self.day_field = ft.TextField(
             label="اليوم",
-            width=180,
+            width=200,
             text_align=ft.TextAlign.CENTER,
             disabled=True,
-            border_radius=8,
-            border_color=ft.Colors.GREY_600,
-            focused_border_color=ft.Colors.BLUE_400,
-            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
-            text_style=ft.TextStyle(weight=ft.FontWeight.W_500),
+            border_radius=12,
+            border_color=ft.Colors.GREEN_700,
+            focused_border_color=ft.Colors.GREEN_400,
+            label_style=ft.TextStyle(color=ft.Colors.GREEN_300, size=14, weight=ft.FontWeight.BOLD),
+            text_style=ft.TextStyle(weight=ft.FontWeight.W_600, size=16, color=ft.Colors.WHITE),
             filled=True,
-            fill_color=ft.Colors.GREY_800
+            fill_color=ft.Colors.GREY_900,
+            prefix_icon=ft.Icons.TODAY,
+            content_padding=ft.padding.symmetric(horizontal=15, vertical=15),
+            border_width=2
         )
         
         # Populate day field based on current date
@@ -121,37 +125,71 @@ class AttendanceView:
                 ft.dropdown.Option("الاولي", "الاولي"),
                 ft.dropdown.Option("الثانية", "الثانية")
             ],
-            width=180,
+            width=200,
             on_change=self.on_shift_change,
-            border_radius=8,
-            border_color=ft.Colors.GREY_600,
-            focused_border_color=ft.Colors.BLUE_400,
-            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            border_radius=12,
+            border_color=ft.Colors.GREEN_700,
+            focused_border_color=ft.Colors.GREEN_400,
+            label_style=ft.TextStyle(color=ft.Colors.GREEN_300, size=14, weight=ft.FontWeight.BOLD),
+            text_style=ft.TextStyle(weight=ft.FontWeight.W_600, size=16, color=ft.Colors.WHITE),
             filled=True,
-            bgcolor=ft.Colors.GREY_800
+            bgcolor=ft.Colors.GREY_900,
+            icon=ft.Icons.WORK,
+            content_padding=ft.padding.symmetric(horizontal=15, vertical=15),
+            border_width=2
         )
         
-        # Create a prominent header section for date info that appears directly below AppBar
+        # Create a prominent header section for date info with gradient-like effect
         date_info_header = ft.Container(
             content=ft.Column(
                 controls=[
                     ft.Row(
                         controls=[
-                            self.date_field,
-                            self.day_field,
-                            self.shift_dropdown
+                            ft.Container(
+                                content=self.date_field,
+                                shadow=ft.BoxShadow(
+                                    spread_radius=1,
+                                    blur_radius=10,
+                                    color=ft.Colors.with_opacity(0.3, ft.Colors.GREEN_400),
+                                    offset=ft.Offset(0, 2)
+                                )
+                            ),
+                            ft.Container(
+                                content=self.day_field,
+                                shadow=ft.BoxShadow(
+                                    spread_radius=1,
+                                    blur_radius=10,
+                                    color=ft.Colors.with_opacity(0.3, ft.Colors.GREEN_400),
+                                    offset=ft.Offset(0, 2)
+                                )
+                            ),
+                            ft.Container(
+                                content=self.shift_dropdown,
+                                shadow=ft.BoxShadow(
+                                    spread_radius=1,
+                                    blur_radius=10,
+                                    color=ft.Colors.with_opacity(0.3, ft.Colors.GREEN_400),
+                                    offset=ft.Offset(0, 2)
+                                )
+                            )
                         ],
-                        alignment=ft.MainAxisAlignment.START,
-                        spacing=20
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=30
                     )
                 ],
                 spacing=10
             ),
-            padding=ft.padding.symmetric(horizontal=20, vertical=15),
-            bgcolor=ft.Colors.GREY_800,
-            border=ft.border.all(1, ft.Colors.GREY_700),
-            border_radius=ft.border_radius.all(12),
-            margin=ft.margin.only(bottom=15, left=10, right=10)
+            padding=ft.padding.symmetric(horizontal=30, vertical=25),
+            bgcolor=ft.Colors.GREY_900,
+            border=ft.border.all(2, ft.Colors.GREY_700),
+            border_radius=ft.border_radius.all(16),
+            margin=ft.margin.only(bottom=20, left=15, right=15, top=10),
+            shadow=ft.BoxShadow(
+                spread_radius=2,
+                blur_radius=15,
+                color=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+                offset=ft.Offset(0, 4)
+            )
         )
         
         # Employees container
@@ -163,7 +201,10 @@ class AttendanceView:
         # Load existing data for current date if available
         self.load_existing_data()
         
-        # Main layout - put date info container directly after app bar
+        # Set the AppBar (page.clean() was already called by dashboard)
+        self.page.appbar = app_bar
+        
+        # Main layout - Column with scroll for content below AppBar
         main_content = ft.Column(
             controls=[
                 date_info_header,  # Date info now directly below AppBar with better styling
@@ -174,18 +215,8 @@ class AttendanceView:
             expand=True
         )
         
-        # Wrap main column in a container with padding to avoid scrollbar overlap
-        main_container = ft.Container(
-            content=main_content,
-            padding=ft.padding.only(right=25)  # Increase padding on the right side to avoid scrollbar overlap
-        )
-        
-        # Set the AppBar
-        self.page.appbar = app_bar
-        
-        # Add the main container to the page
-        self.page.clean()  # Clean the page first
-        self.page.add(main_container)
+        # Add the main content to the page
+        self.page.add(main_content)
         self.page.update()
     
     def on_date_change(self, e):
@@ -370,20 +401,27 @@ class AttendanceView:
         # Determine if controls should be enabled (only when a shift is selected)
         shift_selected = bool(self.shift_dropdown and self.shift_dropdown.value)
         
-        # Create price field with improved styling
+        # Create price field with enhanced styling
         price_field = ft.TextField(
             value=str(price),
-            width=140,
+            width=150,
             text_align=ft.TextAlign.CENTER,
             keyboard_type=ft.KeyboardType.NUMBER,
             label="السعر",
             dense=True,
             disabled=not shift_selected,
-            border_radius=8,
-            border_color=ft.Colors.GREY_600,
-            focused_border_color=ft.Colors.BLUE_400,
-            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
-            text_style=ft.TextStyle(weight=ft.FontWeight.W_500)
+            border_radius=10,
+            border_color=ft.Colors.GREEN_700,
+            focused_border_color=ft.Colors.GREEN_400,
+            label_style=ft.TextStyle(color=ft.Colors.GREEN_300, size=13, weight=ft.FontWeight.BOLD),
+            text_style=ft.TextStyle(weight=ft.FontWeight.W_600, size=15, color=ft.Colors.WHITE),
+            filled=True,
+            fill_color=ft.Colors.GREY_900,
+            suffix_text="جنيه",
+            suffix_style=ft.TextStyle(color=ft.Colors.GREEN_300, size=12),
+            content_padding=ft.padding.symmetric(horizontal=12, vertical=12),
+            cursor_color=ft.Colors.GREEN_400,
+            border_width=2
         )
         
         # Check if this employee is from JSON or added manually
@@ -420,21 +458,29 @@ class AttendanceView:
         if delete_button:
             row_controls.append(delete_button)
         
-        # Create card container for better visual appearance
+        # Create card container with enhanced visual appearance
         card = ft.Card(
             content=ft.Container(
                 content=ft.Row(
                     controls=row_controls,
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
-                padding=ft.padding.symmetric(horizontal=20, vertical=15),
-                border_radius=12,
+                padding=ft.padding.symmetric(horizontal=25, vertical=18),
+                border_radius=14,
+                gradient=ft.LinearGradient(
+                    begin=ft.alignment.center_left,
+                    end=ft.alignment.center_right,
+                    colors=[
+                        ft.Colors.GREY_900,
+                        ft.Colors.GREY_800,
+                    ]
+                )
             ),
-            elevation=4,
-            shadow_color=ft.Colors.with_opacity(0.3, ft.Colors.GREY_400),
-            shape=ft.RoundedRectangleBorder(radius=12),
-            margin=ft.margin.symmetric(vertical=5, horizontal=10),
-            color=ft.Colors.GREY_800
+            elevation=6,
+            shadow_color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK),
+            shape=ft.RoundedRectangleBorder(radius=14),
+            margin=ft.margin.symmetric(vertical=6, horizontal=15),
+            surface_tint_color=ft.Colors.BLUE_700
         )
         
         # Store attendance status and field references

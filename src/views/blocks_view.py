@@ -497,64 +497,49 @@ class BlocksView:
     def build_ui(self):
         """Build the main UI with enhanced styling"""
         
-        # Enhanced header with add button
-        title_row = ft.Container(
-            content=ft.Row(
+        # Create AppBar with title and actions
+        app_bar = ft.AppBar(
+            leading=ft.IconButton(
+                icon=ft.Icons.ARROW_BACK,
+                on_click=self.go_back,
+                tooltip="العودة"
+            ),
+            title=ft.Row(
                 controls=[
-                    ft.IconButton(
-                        icon=ft.Icons.ARROW_BACK_ROUNDED,
-                        on_click=self.go_back,
-                        tooltip="العودة",
-                        icon_size=28,
-                        bgcolor=ft.Colors.GREY_800,
-                        icon_color=ft.Colors.WHITE,
-                        style=ft.ButtonStyle(
-                            shape=ft.RoundedRectangleBorder(radius=12)
-                        )
-                    ),
-                    ft.Container(width=15),
-                    ft.Icon(ft.Icons.INVENTORY_2_ROUNDED, size=36, color=ft.Colors.BLUE_300),
-                    ft.Container(width=10),
+                    ft.Icon(ft.Icons.INVENTORY_2_ROUNDED, size=24, color=ft.Colors.BLUE_200),
                     ft.Text(
                         "حساب تكلفة البلوكات مصنع محب",
-                        size=32,
+                        size=20,
                         weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.BLUE_100
-                    ),
-                    ft.Container(expand=True),
-                    ft.FilledButton(
-                        "إضافة بلوك",
-                        icon=ft.Icons.ADD_ROUNDED,
-                        on_click=self.add_row,
-                        style=ft.ButtonStyle(
-                            bgcolor=ft.Colors.GREY_700,
-                            color=ft.Colors.WHITE,
-                            shape=ft.RoundedRectangleBorder(radius=12),
-                            padding=15
-                        )
+                        color=ft.Colors.BLUE_200
                     ),
                 ],
-                alignment=ft.MainAxisAlignment.START
+                spacing=10
             ),
-            padding=20,
+            actions=[
+                ft.IconButton(
+                    icon=ft.Icons.ADD,
+                    on_click=self.add_row,
+                    tooltip="إضافة بلوك جديد"
+                ),
+                ft.Container(
+                    content=ft.IconButton(
+                        icon=ft.Icons.SAVE,
+                        on_click=self.save_to_excel,
+                        tooltip="حفظ البيانات"
+                    ),
+                    margin=ft.margin.only(left=40, right=15)
+                )
+            ],
             bgcolor=ft.Colors.GREY_900,
-            border_radius=15,
-            margin=ft.margin.only(bottom=10)
         )
         
-        # Enhanced save button
-        self.save_button = ft.FloatingActionButton(
-            icon=ft.Icons.SAVE_ROUNDED,
-            on_click=self.save_to_excel,
-            bgcolor=ft.Colors.GREEN_700,
-            tooltip="حفظ البيانات",
-            elevation=8
-        )
+        # Set the AppBar (page.clean() was already called by dashboard)
+        self.page.appbar = app_bar
         
-        # Main layout
+        # Main layout - Column with scroll for content below AppBar
         main_column = ft.Column(
             controls=[
-                title_row,
                 self.rows_container
             ],
             spacing=15,
@@ -562,20 +547,11 @@ class BlocksView:
             expand=True
         )
         
-        self.page.add(
-            ft.Container(
-                content=main_column,
-                expand=True,
-                padding=15,
-                bgcolor=ft.Colors.GREY_900
-            )
-        )
+        # Add the main content to the page
+        self.page.add(main_column)
         
         # Add initial row after the page is set up
         self.add_row()
-        
-        # Set floating action button (only the save button)
-        self.page.floating_action_button = self.save_button
         
         self.page.update()
         return main_column
