@@ -60,7 +60,7 @@ class InvoiceRow:
             'area': 68, # المسطح
             'price': 60, #السعر
             'total': 70, #الاجمالي
-            'product': 135 # البيان
+            'product': 137 # البيان
         }
 
         # المتغيرات
@@ -425,7 +425,7 @@ class InvoiceView:
         # Add keyboard event handler
         self.page.on_keyboard_event = self.on_keyboard_event
         
-        self.products_path = resource_path(os.path.join('res', 'products.json'))
+        self.products_path = resource_path(os.path.join('data', 'products.json'))
         # Use Documents folder for database instead of resources (which is read-only)
         documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
         if not os.path.exists(documents_path):
@@ -454,20 +454,21 @@ class InvoiceView:
         self.scale_factor = get_zoom_level(self.db_path)
         
         # Form fields
-        self.ent_op = ft.TextField(label="رقم العملية", value=str(self.op_counter))
+        self.ent_op = ft.TextField(label="رقم العملية", value=str(self.op_counter), width=100)
         
         # Get date - try internet first, fallback to local time
         date_value = self.get_internet_date()
         if not date_value:
             date_value = datetime.now().strftime('%d/%m/%Y')
             
-        self.date_var = ft.TextField(label="التاريخ", value=date_value)
+        self.date_var = ft.TextField(label="التاريخ", value=date_value, width=120)
         
         # Client selection with autocomplete suggestions
         self.client_suggestions = self.load_clients()
         self.ent_client = ft.TextField(
             label="اسم العميل",
-            on_change=self.on_client_text_change
+            on_change=self.on_client_text_change,
+            width=200
         )
         
         # Suggestions list container (hidden by default)
@@ -476,8 +477,8 @@ class InvoiceView:
             spacing=0
         )
 
-        self.ent_driver = ft.TextField(label="اسم السائق")
-        self.ent_phone = ft.TextField(label="رقم التليفون")
+        self.ent_driver = ft.TextField(label="اسم السائق", width=150)
+        self.ent_phone = ft.TextField(label="رقم التليفون", width=150)
         
         # Main container - using ListView for better performance with many rows
         self.rows_container = ft.ListView(
@@ -1101,9 +1102,25 @@ class InvoiceView:
             self.update_rows_scale()
             set_zoom_level(self.db_path, self.scale_factor)
 
-    def build_ui(self):
+def go_back(self, e):
+    """Go back to dashboard"""
+    # Import here to avoid circular dependency
+    from views.dashboard_view import DashboardView
+    
+    self.page.clean()
+    dashboard = DashboardView(self.page)
+    
+    # Get save_callback from main
+    try:
+        from main import save_callback
+        dashboard.show(save_callback)
+    except:
+        dashboard.show(None)
+
+def build_ui(self):
         # Create AppBar with menu
         self.page.appbar = ft.AppBar(
+            leading=ft.IconButton(ft.Icons.ARROW_BACK, on_click=self.go_back, tooltip="العودة"),
             title=ft.Text("مصنع السويفي - ادارة الفواتير"),
             bgcolor=ft.Colors.SURFACE,
             actions=[
@@ -1120,25 +1137,31 @@ class InvoiceView:
             ]
         )
         
-        # Header section - changed to horizontal layout
-        header = ft.Row([
-            ft.Column([
-                ft.Text("بيانات الفاتورة", size=18, weight=ft.FontWeight.BOLD),
-                self.ent_op,
-            ]),
-            ft.Column([
-                self.date_var,
-                ft.Column([
-                    self.ent_client,
-                    self.suggestions_list,
-                ], spacing=0),
-            ]),
-
-            ft.Column([
-                self.ent_driver,
-                self.ent_phone,
-            ]),
-        ], spacing=20)
+        # Header section - improved layout with container
+        header_content = ft.Column([
+            ft.Row([
+                ft.Column([ft.Icon(ft.Icons.NUMBERS, color=ft.Colors.BLUE_300, size=20), self.ent_op], 
+                         spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Column([ft.Icon(ft.Icons.CALENDAR_TODAY, color=ft.Colors.BLUE_300, size=20), self.date_var], 
+                         spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Column([ft.Icon(ft.Icons.PERSON, color=ft.Colors.BLUE_300, size=20), 
+                          ft.Column([self.ent_client, self.suggestions_list], spacing=0)], 
+                         spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Column([ft.Icon(ft.Icons.DRIVE_ETA, color=ft.Colors.BLUE_300, size=20), self.ent_driver], 
+                         spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Column([ft.Icon(ft.Icons.PHONE, color=ft.Colors.BLUE_300, size=20), self.ent_phone], 
+                         spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            ], spacing=10, alignment=ft.MainAxisAlignment.SPACE_EVENLY),
+        ], spacing=5)
+        
+        header = ft.Container(
+            content=header_content,
+            padding=20,
+            bgcolor=ft.Colors.GREY_800,
+            border_radius=10,
+            border=ft.border.all(1, ft.Colors.GREY_600),
+            margin=ft.margin.only(bottom=10)
+        )
         
         # Main layout with ListView for rows
         main_layout = ft.Column([

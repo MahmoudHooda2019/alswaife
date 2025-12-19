@@ -45,13 +45,13 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
 
     header_fmt = workbook.add_format({
         'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter',
-        'font_name': 'Arial', 'font_size': 14, 'bg_color': '#4472C4', 'font_color': '#FFFFFF'
+        'font_name': 'Arial', 'font_size': 14, 'bg_color': '#2E75B6', 'font_color': '#FFFFFF'
     })
 
     label_fmt = workbook.add_format({
         'bold': True, 'border': 1,
         'align': 'center', 'valign': 'vcenter',
-        'font_name': 'Arial', 'font_size': 12, 'bg_color': '#D9E1F2', 'font_color': '#000000'
+        'font_name': 'Arial', 'font_size': 12, 'bg_color': '#B4C6E7', 'font_color': '#000000'
     })
 
     border_fmt = workbook.add_format({
@@ -64,6 +64,13 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
         'border': 1, 'align': 'center', 'valign': 'vcenter',
         'font_name': 'Arial', 'font_size': 10,
         'num_format': '0'  # أعداد صحيحة فقط
+    })
+
+    # Format for decimal numbers (length, height - 2 decimal places)
+    decimal_fmt = workbook.add_format({
+        'border': 1, 'align': 'center', 'valign': 'vcenter',
+        'font_name': 'Arial', 'font_size': 10,
+        'num_format': '0.00'  # أعداد عشرية بمنزلتين
     })
 
     # Format for phone numbers (text format to prevent scientific notation)
@@ -80,7 +87,7 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
         'num_format': '0.00'  # يظهر دائمًا منزلتين عشريتين
     })
 
-    # Format for money (always 2 decimal places, يحافظ على الصفر الأخير)
+    # Format for money (integers without decimal places)
     money_fmt = workbook.add_format({
         'border': 1, 'align': 'center',
         'font_name': 'Arial', 'font_size': 10,
@@ -182,8 +189,8 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
         worksheet.write(r, 4, material, border_fmt)
         # القيم توضع مباشرة في الأعمدة الثلاثة
         worksheet.write_number(r, 5, count, integer_fmt)      # العدد
-        worksheet.write_number(r, 6, length, border_fmt)     # الطول
-        worksheet.write_number(r, 7, height, border_fmt)     # الارتفاع
+        worksheet.write_number(r, 6, length, decimal_fmt)     # الطول
+        worksheet.write_number(r, 7, height, decimal_fmt)     # الارتفاع
         
         # الصيغ يحسبها Excel تلقائياً
         excel_row = r + 1
@@ -315,9 +322,33 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
         worksheet.write_formula(summary_total_row, 4, price_sum_formula, money_fmt)
 
         # ==========================
+        #   جدول المدفوعات
+        # ==========================
+        payments_start_row = summary_total_row - 3
+        worksheet.merge_range(payments_start_row, 8, payments_start_row, 10, "المدفوعات", header_fmt)
+
+        # Write payments table headers
+        payments_header_row = payments_start_row + 1
+        worksheet.write(payments_header_row, 8, "المبلغ", header_fmt)
+        worksheet.write(payments_header_row, 9, "المدفوع", header_fmt)
+        worksheet.write(payments_header_row, 10, "المتبقي", header_fmt)
+
+        # Payments data row
+        payments_data_row = payments_header_row + 1
+
+        # Total amount (from invoice total)
+        worksheet.write_formula(payments_data_row, 8, f"=E{summary_total_row+1}", money_fmt)
+
+        # Paid amount (leave empty for user to fill)
+        worksheet.write(payments_data_row, 9, "", money_fmt)
+
+        # Remaining amount (Amount - Paid)
+        worksheet.write_formula(payments_data_row, 10, f"=J{payments_data_row+1}-I{payments_data_row+1}", money_fmt)
+
+        # ==========================
         #   Signature Section
         # ==========================
-        signature_row = summary_total_row + 1  # Position directly after the summary table
+        signature_row = payments_data_row + 4  # Position after the payments table
         
         # Create a format for centered text (both vertically and horizontally)
         center_fmt = workbook.add_format({
@@ -348,10 +379,10 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
     worksheet.set_column(4, 4, 12)  # الخامة
     worksheet.set_column(5, 5, 8)   # العدد
     worksheet.set_column(6, 6, 8)   # الطول
-    worksheet.set_column(7, 7, 8)   # # الارتفاع
-    worksheet.set_column(8, 8, 10)  # الإجمالي م٢
-    worksheet.set_column(9, 9, 10)  # السعر
-    worksheet.set_column(10, 10, 14)  # إجمالي السعر
+    worksheet.set_column(7, 7, 8)   # الارتفاع
+    worksheet.set_column(8, 8, 10)  # المسطح م٢ / المبلغ (جدول المدفوعات)
+    worksheet.set_column(9, 9, 10)  # السعر / المدفوع (جدول المدفوعات)
+    worksheet.set_column(10, 10, 14)  # إجمالي السعر / المتبقي (جدول المدفوعات)
 
     workbook.close()
 

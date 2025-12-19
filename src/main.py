@@ -16,7 +16,7 @@ except ImportError:
     __version__ = "1.0.0"
 
 # Add the project root to the Python path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Set locale for Arabic support
 import locale
@@ -56,7 +56,7 @@ def main(page: ft.Page):
         page.window.maximized = True
         
         # Set app icon
-        icon_path = resource_path(os.path.join("res", "icon.ico"))
+        icon_path = resource_path(os.path.join("assets", "icon.ico"))
         page.window.icon = icon_path
         
         # Create and show the Dashboard
@@ -86,4 +86,4 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     # Run as desktop app with assets [directory]
-    ft.app(target=main, view=ft.AppView.FLET_APP, assets_dir='res')
+    ft.app(target=main, view=ft.AppView.FLET_APP, assets_dir='assets')

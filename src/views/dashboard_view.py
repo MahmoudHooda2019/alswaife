@@ -111,13 +111,6 @@ class DashboardView:
             
             if hasattr(self, 'save_callback'):
                  app = InvoiceView(self.page, self.save_callback)
-                 # Add a back button to the app
-                 back_btn = ft.IconButton(
-                     icon=ft.Icons.ARROW_BACK, 
-                     on_click=lambda _: self.go_back(),
-                     tooltip="العودة للقائمة الرئيسية"
-                 )
-                 self.page.add(ft.Row([back_btn]))
                  app.build_ui()
             else:
                  self.page.add(ft.Text("Error: Save callback not found"))

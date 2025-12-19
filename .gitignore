@@ -45,3 +45,18 @@ htmlcov/
 
 # Local configuration
 config.ini
+
+# Project specific
+data/invoice.db
+data/*.db
+*.db
+*.db-journal
+
+# Build artifacts
+build/
+dist/
+*.exe
+*.msi
+
+# User data (keep templates)
+!data/*.json.template

@@ -35,7 +35,7 @@ class AttendanceView:
     def load_employees(self):
         """Load employees from JSON file"""
         try:
-            employees_path = resource_path(os.path.join('res', 'employees.json'))
+            employees_path = resource_path(os.path.join('data', 'employees.json'))
             if os.path.exists(employees_path):
                 with open(employees_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
@@ -43,43 +43,73 @@ class AttendanceView:
         except:
             pass
         return []
-        
+
     def build_ui(self):
         """Build the attendance tracking UI"""
         
-        # Title and back button
-        title_row = ft.Row(
-            controls=[
+        # Clear any existing appbar settings
+        self.page.appbar = None
+        
+        # Create AppBar with title and actions
+        app_bar = ft.AppBar(
+            leading=ft.IconButton(
+                icon=ft.Icons.ARROW_BACK,
+                on_click=self.go_back,
+                tooltip="العودة"
+            ),
+            title=ft.Text(
+                "الحضور والانصراف",
+                size=20,
+                weight=ft.FontWeight.BOLD,
+                color=ft.Colors.BLUE_200
+            ),
+            actions=[
                 ft.IconButton(
-                    icon=ft.Icons.ARROW_BACK,
-                    on_click=self.go_back,
-                    tooltip="العودة"
+                    icon=ft.Icons.ADD,
+                    on_click=self.add_new_employee,
+                    tooltip="إضافة موظف جديد"
                 ),
-                ft.Text(
-                    "الحضور والانصراف",
-                    size=30,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.BLUE_200
-                ),
+                ft.Container(
+                    content=ft.IconButton(
+                        icon=ft.Icons.SAVE,
+                        on_click=self.save_to_excel,
+                        tooltip="حفظ البيانات"
+                    ),
+                    margin=ft.margin.only(left=10, right=20)  # Add space after the save button
+                )
             ],
-            alignment=ft.MainAxisAlignment.START
+            bgcolor=ft.Colors.GREY_900,
         )
         
-        # Date selection
+        # Date selection with improved styling
         self.date_field = ft.TextField(
             label="التاريخ",
             value=datetime.now().strftime('%d/%m/%Y'),
-            width=150,
+            width=180,
             text_align=ft.TextAlign.CENTER,
-            on_change=self.on_date_change
+            on_change=self.on_date_change,
+            border_radius=8,
+            border_color=ft.Colors.GREY_600,
+            focused_border_color=ft.Colors.BLUE_400,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            text_style=ft.TextStyle(weight=ft.FontWeight.W_500),
+            filled=True,
+            fill_color=ft.Colors.GREY_800
         )
         
-        # Day field (automatically populated based on date)
+        # Day field (automatically populated based on date) with improved styling
         self.day_field = ft.TextField(
             label="اليوم",
-            width=150,
+            width=180,
             text_align=ft.TextAlign.CENTER,
-            disabled=True
+            disabled=True,
+            border_radius=8,
+            border_color=ft.Colors.GREY_600,
+            focused_border_color=ft.Colors.BLUE_400,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            text_style=ft.TextStyle(weight=ft.FontWeight.W_500),
+            filled=True,
+            fill_color=ft.Colors.GREY_800
         )
         
         # Populate day field based on current date
@@ -91,18 +121,37 @@ class AttendanceView:
                 ft.dropdown.Option("الاولي", "الاولي"),
                 ft.dropdown.Option("الثانية", "الثانية")
             ],
-            width=150,
-            on_change=self.on_shift_change
+            width=180,
+            on_change=self.on_shift_change,
+            border_radius=8,
+            border_color=ft.Colors.GREY_600,
+            focused_border_color=ft.Colors.BLUE_400,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            filled=True,
+            bgcolor=ft.Colors.GREY_800
         )
         
-        date_info_row = ft.Row(
-            controls=[
-                self.date_field,
-                self.day_field,
-                self.shift_dropdown
-            ],
-            alignment=ft.MainAxisAlignment.CENTER,
-            spacing=20
+        # Create a prominent header section for date info that appears directly below AppBar
+        date_info_header = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            self.date_field,
+                            self.day_field,
+                            self.shift_dropdown
+                        ],
+                        alignment=ft.MainAxisAlignment.START,
+                        spacing=20
+                    )
+                ],
+                spacing=10
+            ),
+            padding=ft.padding.symmetric(horizontal=20, vertical=15),
+            bgcolor=ft.Colors.GREY_800,
+            border=ft.border.all(1, ft.Colors.GREY_700),
+            border_radius=ft.border_radius.all(12),
+            margin=ft.margin.only(bottom=15, left=10, right=10)
         )
         
         # Employees container
@@ -114,15 +163,10 @@ class AttendanceView:
         # Load existing data for current date if available
         self.load_existing_data()
         
-        # Floating buttons will be created in the Stack layout
-        
-        # Main layout
-        main_column = ft.Column(
+        # Main layout - put date info container directly after app bar
+        main_content = ft.Column(
             controls=[
-                title_row,
-                ft.Divider(),
-                date_info_row,
-                ft.Container(height=20),
+                date_info_header,  # Date info now directly below AppBar with better styling
                 self.employees_container
             ],
             spacing=10,
@@ -130,65 +174,18 @@ class AttendanceView:
             expand=True
         )
         
-        # Create main layout with floating buttons
-        self.page.add(
-            ft.Stack(
-                controls=[
-                    main_column,
-                    # Floating buttons container
-                    ft.Container(
-                        content=ft.Column(
-                            controls=[
-                                # Add employee button
-                                ft.Container(
-                                    content=ft.FloatingActionButton(
-                                        icon=ft.Icons.PERSON_ADD,
-                                        on_click=self.add_new_employee,
-                                        bgcolor=ft.Colors.BLUE_600,
-                                        foreground_color=ft.Colors.WHITE,
-                                        tooltip="إضافة موظف جديد",
-                                        shape=ft.RoundedRectangleBorder(radius=20),
-                                        elevation=6
-                                    ),
-                                    margin=ft.margin.only(bottom=15),
-                                    shadow=ft.BoxShadow(
-                                        spread_radius=1,
-                                        blur_radius=8,
-                                        color=ft.Colors.with_opacity(0.3, ft.Colors.BLUE_600),
-                                        offset=ft.Offset(0, 2)
-                                    )
-                                ),
-                                # Save button
-                                ft.Container(
-                                    content=ft.FloatingActionButton(
-                                        icon=ft.Icons.SAVE,
-                                        on_click=self.save_to_excel,
-                                        bgcolor=ft.Colors.GREEN_600,
-                                        foreground_color=ft.Colors.WHITE,
-                                        tooltip="حفظ البيانات",
-                                        shape=ft.RoundedRectangleBorder(radius=20),
-                                        elevation=6
-                                    ),
-                                    shadow=ft.BoxShadow(
-                                        spread_radius=1,
-                                        blur_radius=10,
-                                        color=ft.Colors.with_opacity(0.3, ft.Colors.GREEN_600),
-                                        offset=ft.Offset(0, 3)
-                                    )
-                                ),
-                            ],
-                            spacing=0,
-                            alignment=ft.MainAxisAlignment.END
-                        ),
-                        right=24,
-                        bottom=24,
-                        alignment=ft.alignment.bottom_right
-                    )
-                ],
-                expand=True
-            )
+        # Wrap main column in a container with padding to avoid scrollbar overlap
+        main_container = ft.Container(
+            content=main_content,
+            padding=ft.padding.only(right=25)  # Increase padding on the right side to avoid scrollbar overlap
         )
         
+        # Set the AppBar
+        self.page.appbar = app_bar
+        
+        # Add the main container to the page
+        self.page.clean()  # Clean the page first
+        self.page.add(main_container)
         self.page.update()
     
     def on_date_change(self, e):
@@ -373,15 +370,20 @@ class AttendanceView:
         # Determine if controls should be enabled (only when a shift is selected)
         shift_selected = bool(self.shift_dropdown and self.shift_dropdown.value)
         
-        # Create price field first
+        # Create price field with improved styling
         price_field = ft.TextField(
             value=str(price),
-            width=120,
+            width=140,
             text_align=ft.TextAlign.CENTER,
             keyboard_type=ft.KeyboardType.NUMBER,
             label="السعر",
             dense=True,
             disabled=not shift_selected,
+            border_radius=8,
+            border_color=ft.Colors.GREY_600,
+            focused_border_color=ft.Colors.BLUE_400,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            text_style=ft.TextStyle(weight=ft.FontWeight.W_500)
         )
         
         # Check if this employee is from JSON or added manually
@@ -399,14 +401,15 @@ class AttendanceView:
         
         # Create row controls
         row_controls = [
-            # Checkbox for attendance
+            # Checkbox for attendance with improved styling
             ft.Checkbox(
                 value=is_present if shift_selected else False,
                 disabled=not shift_selected,
-                on_change=lambda e, n=name: self.on_attendance_change(n, e.control.value)
+                on_change=lambda e, n=name: self.on_attendance_change(n, e.control.value),
+                scale=1.2
             ),
-            # Employee name
-            ft.Text(name, size=18, weight=ft.FontWeight.BOLD),
+            # Employee name with improved styling
+            ft.Text(name, size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
             # Spacer
             ft.Container(expand=True),
             # Price field
@@ -424,13 +427,13 @@ class AttendanceView:
                     controls=row_controls,
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
-                padding=15,
+                padding=ft.padding.symmetric(horizontal=20, vertical=15),
                 border_radius=12,
             ),
-            elevation=3,
-            shadow_color=ft.Colors.with_opacity(0.2, ft.Colors.GREY_400),
+            elevation=4,
+            shadow_color=ft.Colors.with_opacity(0.3, ft.Colors.GREY_400),
             shape=ft.RoundedRectangleBorder(radius=12),
-            margin=ft.margin.symmetric(vertical=4, horizontal=8),
+            margin=ft.margin.symmetric(vertical=5, horizontal=10),
             color=ft.Colors.GREY_800
         )
         
@@ -623,8 +626,8 @@ class AttendanceView:
         if not error and filepath:
             # Success message with action buttons
             self.dialog = ft.AlertDialog(
-                title=ft.Text("الحضور والانصراف"),
-                content=ft.Text(message),
+                title=ft.Text("الحضور والانصراف", text_align=ft.TextAlign.RIGHT),
+                content=ft.Text(message, text_align=ft.TextAlign.RIGHT),
                 actions=[
                     ft.TextButton("فتح الملف", on_click=lambda e: self.open_file(filepath)),
                     ft.TextButton("فتح المسار", on_click=lambda e: self.open_folder(filepath)),
@@ -634,8 +637,8 @@ class AttendanceView:
         else:
             # Error message or no filepath
             self.dialog = ft.AlertDialog(
-                title=ft.Text("الحضور والانصراف"),
-                content=ft.Text(message),
+                title=ft.Text("الحضور والانصراف", text_align=ft.TextAlign.RIGHT),
+                content=ft.Text(message, text_align=ft.TextAlign.RIGHT),
                 actions=[
                     ft.TextButton("إغلاق", on_click=lambda e: self.close_dialog()),
                 ],
@@ -688,15 +691,19 @@ class AttendanceView:
             self.show_message("الرجاء اختيار التاريخ والوردية أولاً", error=True)
             return
         
-        # Create dialog for adding new employee
+        # Create dialog for adding new employee with dark mode colors
         self.name_field = ft.TextField(
             label="اسم الموظف",
             width=300,
             autofocus=True,
             border_radius=8,
             prefix_icon=ft.Icons.PERSON,
-            border_color=ft.Colors.BLUE_300,
-            focused_border_color=ft.Colors.BLUE_600
+            border_color=ft.Colors.GREY_600,
+            focused_border_color=ft.Colors.GREY_400,
+            color=ft.Colors.WHITE,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            text_align=ft.TextAlign.RIGHT,
+            rtl= True
         )
         
         self.price_field = ft.TextField(
@@ -706,19 +713,17 @@ class AttendanceView:
             value="400",  # Default price
             border_radius=8,
             prefix_icon=ft.Icons.ATTACH_MONEY,
-            border_color=ft.Colors.GREEN_300,
-            focused_border_color=ft.Colors.GREEN_600,
-            suffix_text="جنيه"
+            border_color=ft.Colors.GREY_600,
+            focused_border_color=ft.Colors.GREY_400,
+            color=ft.Colors.WHITE,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            suffix_text="جنيه",
+            text_align=ft.TextAlign.RIGHT,
+            rtl= True
         )
         
         self.add_employee_dialog = ft.AlertDialog(
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.PERSON_ADD, color=ft.Colors.BLUE_600, size=28),
-                    ft.Text("إضافة موظف جديد", size=20, weight=ft.FontWeight.BOLD)
-                ],
-                spacing=10
-            ),
+            title=ft.Text("إضافة موظف جديد", text_align=ft.TextAlign.CENTER),
             content=ft.Container(
                 content=ft.Column(
                     controls=[
@@ -739,34 +744,35 @@ class AttendanceView:
             ),
             actions=[
                 ft.Container(
+                    rtl=True,
                     content=ft.Row(
                         controls=[
-                            ft.TextButton(
-                                "إلغاء", 
-                                on_click=self.close_add_employee_dialog,
-                                style=ft.ButtonStyle(
-                                    color=ft.Colors.GREY_600,
-                                    overlay_color=ft.Colors.GREY_100
-                                )
-                            ),
                             ft.ElevatedButton(
                                 "إضافة", 
                                 on_click=self.confirm_add_employee,
-                                bgcolor=ft.Colors.BLUE_600,
+                                bgcolor=ft.Colors.GREY_700,
                                 color=ft.Colors.WHITE,
                                 style=ft.ButtonStyle(
                                     shape=ft.RoundedRectangleBorder(radius=8)
                                 )
                             ),
+                            ft.TextButton(
+                                "إلغاء", 
+                                on_click=self.close_add_employee_dialog,
+                                style=ft.ButtonStyle(
+                                    color=ft.Colors.GREY_400,
+                                    overlay_color=ft.Colors.GREY_700
+                                )
+                            ),
                         ],
-                        alignment=ft.MainAxisAlignment.END,
+                        alignment=ft.MainAxisAlignment.START,  # Align to start for RTL
                         spacing=10
                     ),
                     padding=ft.padding.only(top=10)
                 )
             ],
             shape=ft.RoundedRectangleBorder(radius=16),
-            bgcolor=ft.Colors.WHITE,
+            bgcolor=ft.Colors.GREY_800,
             shadow_color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
         )
         
