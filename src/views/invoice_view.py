@@ -1102,22 +1102,22 @@ class InvoiceView:
             self.update_rows_scale()
             set_zoom_level(self.db_path, self.scale_factor)
 
-def go_back(self, e):
-    """Go back to dashboard"""
-    # Import here to avoid circular dependency
-    from views.dashboard_view import DashboardView
-    
-    self.page.clean()
-    dashboard = DashboardView(self.page)
-    
-    # Get save_callback from main
-    try:
-        from main import save_callback
-        dashboard.show(save_callback)
-    except:
-        dashboard.show(None)
+    def go_back(self, e):
+        """Go back to dashboard"""
+        # Import here to avoid circular dependency
+        from views.dashboard_view import DashboardView
+        
+        self.page.clean()
+        dashboard = DashboardView(self.page)
+        
+        # Get save_callback from main
+        try:
+            from main import save_callback
+            dashboard.show(save_callback)
+        except:
+            dashboard.show(None)
 
-def build_ui(self):
+    def build_ui(self):
         # Create AppBar with menu
         self.page.appbar = ft.AppBar(
             leading=ft.IconButton(ft.Icons.ARROW_BACK, on_click=self.go_back, tooltip="العودة"),

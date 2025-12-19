@@ -100,73 +100,39 @@ class DashboardView:
         self.page.update()
 
     def open_invoices(self, e):
-        # Animate out
-        self.main_container.opacity = 0
-        self.page.update()
+        # Clear page and load InvoiceView directly without animation
+        self.page.clean()
         
-        # Use async approach instead of blocking sleep
-        def load_invoice_view():
-            # Clear page and load InvoiceView
-            self.page.clean()
-            
-            if hasattr(self, 'save_callback'):
-                 app = InvoiceView(self.page, self.save_callback)
-                 app.build_ui()
-            else:
-                 self.page.add(ft.Text("Error: Save callback not found"))
-        
-        # Schedule the loading asynchronously
-        self.page.run_thread(load_invoice_view)
+        if hasattr(self, 'save_callback'):
+            app = InvoiceView(self.page, self.save_callback)
+            app.build_ui()
+        else:
+            self.page.add(ft.Text("Error: Save callback not found"))
 
     def open_attendance(self, e):
-        # Animate out
-        self.main_container.opacity = 0
-        self.page.update()
+        # Clear page and load AttendanceView directly without animation
+        self.page.clean()
         
-        # Use async approach instead of blocking sleep
-        def load_attendance_view():
-            # Clear page and load AttendanceView
-            self.page.clean()
-            
-            # Store save_callback for later use
-            if hasattr(self, 'save_callback'):
-                setattr(self.page, '_save_callback', self.save_callback)
-            
-            app = AttendanceView(self.page)
-            app.build_ui()
+        # Store save_callback for later use
+        if hasattr(self, 'save_callback'):
+            setattr(self.page, '_save_callback', self.save_callback)
         
-        # Schedule the loading asynchronously
-        self.page.run_thread(load_attendance_view)
+        app = AttendanceView(self.page)
+        app.build_ui()
 
     def open_blocks(self, e):
-        self.main_container.opacity = 0
+        # Clear page and load BlocksView directly without animation
+        self.page.clean()
+        blocks_view = BlocksView(self.page, on_back=self.go_back)
+        blocks_view.build_ui()
         self.page.update()
-        
-        # Use async approach instead of blocking sleep
-        def load_blocks_view():
-            self.page.clean()
-            blocks_view = BlocksView(self.page, on_back=self.go_back)
-            content = blocks_view.build_ui()
-            self.page.add(content)
-            self.page.update()
-        
-        # Schedule the loading asynchronously
-        self.page.run_thread(load_blocks_view)
 
     def open_purchases(self, e):
-        self.main_container.opacity = 0
+        # Clear page and load PurchasesView directly without animation
+        self.page.clean()
+        purchases_view = PurchasesView(self.page, on_back=self.go_back)
+        purchases_view.build_ui()
         self.page.update()
-        
-        # Use async approach instead of blocking sleep
-        def load_purchases_view():
-            self.page.clean()
-            purchases_view = PurchasesView(self.page, on_back=self.go_back)
-            content = purchases_view.build_ui()
-            self.page.add(content)
-            self.page.update()
-        
-        # Schedule the loading asynchronously
-        self.page.run_thread(load_purchases_view)
 
     def reset_ui(self):
         self.page.clean()

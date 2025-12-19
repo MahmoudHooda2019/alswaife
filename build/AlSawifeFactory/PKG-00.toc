@@ -51,7 +51,7 @@
   ('pyi_rth_setuptools',
    'C:\\Users\\Admin\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_setuptools.py',
    'PYSOURCE'),
-  ('main', 'C:\\Users\\Admin\\Desktop\\al swaife\\main.py', 'PYSOURCE')],
+  ('main', 'C:\\Users\\Admin\\Desktop\\al swaife\\src\\main.py', 'PYSOURCE')],
  'python313.dll',
  True,
  False,
