@@ -710,7 +710,7 @@ class InvoiceView:
                 
                 confirm_dlg = ft.AlertDialog(
                     title=ft.Text("تنبيه"),
-                    content=ft.Text("العميل فارغ أو يحتوي على كلمة 'ايراد'. سيتم حفظ الفاتورة في مجلد الإيرادات دون إنشاء كشف حساب. هل توافق؟"),
+                    content=ft.Text("العميل فارغ أو يحتوي على كلمة 'ايراد'. سيتم حفظ الفاتورة في مجلد الإيرادات دون إنشاء كشف حساب. هل توافق؟", rtl=True),
                     actions=[
                         ft.TextButton("نعم", on_click=on_confirm_revenue),
                         ft.TextButton("لا", on_click=on_cancel_revenue)
@@ -725,7 +725,7 @@ class InvoiceView:
             if not op_num:
                 dlg = ft.AlertDialog(
                     title=ft.Text("خطأ"),
-                    content=ft.Text("يرجى إدخال رقم العملية")
+                    content=ft.Text("يرجى إدخال رقم العملية", rtl=True)
                 )
                 self.page.overlay.append(dlg)
                 dlg.open = True
@@ -735,7 +735,7 @@ class InvoiceView:
         except Exception as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
+                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}", rtl=True)
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -761,7 +761,7 @@ class InvoiceView:
         if not items_data:
             dlg = ft.AlertDialog(
                 title=ft.Text("تنبيه"),
-                content=ft.Text("لا توجد بنود للحفظ")
+                content=ft.Text("لا توجد بنود للحفظ", rtl=True)
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -785,7 +785,7 @@ class InvoiceView:
         try:
             os.makedirs(my_invoices_dir, exist_ok=True)
         except OSError as ex:
-             dlg = ft.AlertDialog(title=ft.Text("خطأ"), content=ft.Text(f"فشل إنشاء المجلد: {ex}"))
+             dlg = ft.AlertDialog(title=ft.Text("خطأ"), content=ft.Text(f"فشل إنشاء المجلد: {ex}", rtl=True))
              self.page.overlay.append(dlg)
              dlg.open = True
              self.page.update()
@@ -868,7 +868,7 @@ class InvoiceView:
 
             dlg = ft.AlertDialog(
                 title=ft.Text("نجاح"),
-                content=ft.Text(f"تم حفظ الفاتورة وتحديث كشف الحساب بنجاح.\المسار: {full_path}"),
+                content=ft.Text(f"تم حفظ الفاتورة وتحديث كشف الحساب بنجاح.\المسار: {full_path}", rtl=True),
                 actions=[
                     ft.TextButton("فتح الفاتورة", on_click=open_file),
                     ft.TextButton("فتح كشف الحساب", on_click=open_ledger),
@@ -882,10 +882,18 @@ class InvoiceView:
             self.page.update()
             self.increment_op()
             
+        except PermissionError as ex:
+            dlg = ft.AlertDialog(
+                title=ft.Text("خطأ"),
+                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", rtl=True)
+            )
+            self.page.overlay.append(dlg)
+            dlg.open = True
+            self.page.update()
         except Exception as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
+                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}", rtl=True)
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -921,7 +929,7 @@ class InvoiceView:
         if not items_data:
             dlg = ft.AlertDialog(
                 title=ft.Text("تنبيه"),
-                content=ft.Text("لا توجد بنود للحفظ")
+                content=ft.Text("لا توجد بنود للحفظ", rtl=True)
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -941,7 +949,7 @@ class InvoiceView:
         try:
             os.makedirs(my_invoices_dir, exist_ok=True)
         except OSError as ex:
-             dlg = ft.AlertDialog(title=ft.Text("خطأ"), content=ft.Text(f"فشل إنشاء المجلد: {ex}"))
+             dlg = ft.AlertDialog(title=ft.Text("خطأ"), content=ft.Text(f"فشل إنشاء المجلد: {ex}", rtl=True))
              self.page.overlay.append(dlg)
              dlg.open = True
              self.page.update()
@@ -996,7 +1004,7 @@ class InvoiceView:
 
             dlg = ft.AlertDialog(
                 title=ft.Text("نجاح"),
-                content=ft.Text(f"تم حفظ فاتورة الإيراد بنجاح.\نالمسار: {full_path}"),
+                content=ft.Text(f"تم حفظ فاتورة الإيراد بنجاح.\نالمسار: {full_path}", rtl=True),
                 actions=[
                     ft.TextButton("فتح الفاتورة", on_click=open_file),
                     ft.TextButton("فتح المجلد", on_click=open_folder),
@@ -1009,10 +1017,18 @@ class InvoiceView:
             self.page.update()
             self.increment_op()
             
+        except PermissionError as ex:
+            dlg = ft.AlertDialog(
+                title=ft.Text("خطأ"),
+                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", rtl=True)
+            )
+            self.page.overlay.append(dlg)
+            dlg.open = True
+            self.page.update()
         except Exception as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
+                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}", rtl=True)
             )
             self.page.overlay.append(dlg)
             dlg.open = True

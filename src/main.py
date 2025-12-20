@@ -75,7 +75,7 @@ def main(page: ft.Page):
         
         dlg = ft.AlertDialog(
             title=ft.Text("خطأ في التطبيق"),
-            content=ft.Text(error_msg),
+            content=ft.Text(error_msg, rtl=True),
             actions=[ft.TextButton("موافق", on_click=close_dlg)]
         )
         page.overlay.append(dlg)

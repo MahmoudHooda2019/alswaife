@@ -672,8 +672,8 @@ class AttendanceView:
         if not error and filepath:
             # Success message with action buttons
             self.dialog = ft.AlertDialog(
-                title=ft.Text("الحضور والانصراف", text_align=ft.TextAlign.RIGHT),
-                content=ft.Text(message, text_align=ft.TextAlign.RIGHT),
+                title=ft.Text("الحضور والانصراف", text_align=ft.TextAlign.RIGHT, rtl=True),
+                content=ft.Text(message, text_align=ft.TextAlign.RIGHT, rtl=True),
                 actions=[
                     ft.TextButton("فتح الملف", on_click=lambda e: self.open_file(filepath)),
                     ft.TextButton("فتح المسار", on_click=lambda e: self.open_folder(filepath)),
@@ -683,8 +683,8 @@ class AttendanceView:
         else:
             # Error message or no filepath
             self.dialog = ft.AlertDialog(
-                title=ft.Text("الحضور والانصراف", text_align=ft.TextAlign.RIGHT),
-                content=ft.Text(message, text_align=ft.TextAlign.RIGHT),
+                title=ft.Text("الحضور والانصراف", text_align=ft.TextAlign.RIGHT, rtl=True),
+                content=ft.Text(message, text_align=ft.TextAlign.RIGHT, rtl=True),
                 actions=[
                     ft.TextButton("إغلاق", on_click=lambda e: self.close_dialog()),
                 ],
@@ -769,7 +769,7 @@ class AttendanceView:
         )
         
         self.add_employee_dialog = ft.AlertDialog(
-            title=ft.Text("إضافة موظف جديد", text_align=ft.TextAlign.CENTER),
+            title=ft.Text("إضافة موظف جديد", text_align=ft.TextAlign.CENTER, rtl=True),
             content=ft.Container(
                 content=ft.Column(
                     controls=[

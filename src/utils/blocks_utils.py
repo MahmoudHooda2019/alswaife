@@ -20,17 +20,12 @@ TABLE2_COLUMNS = [
     "سعر النشر", "إجمالي سعر النشر", "إجمالي تكلفه البلوك"
 ]
 
-TABLE3_COLUMNS = [
-    "تاريخ التحميل", "رقم الفاتوره", "اسم العميل",
-    "رقم لبلوك", "عدد الطاولات", "ط", "ع", "اجمالى م2",
-    "سعر المتر", "اجمالى سعر المبيعات", "رصيد المخزون",
-    "اجمالى تكلفه النقله", "اجمالى مبيعات النقله","ربح النقله"
-]
+
 
 # Column width definitions for each table
 TABLE1_WIDTH = [12, 8, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]
 TABLE2_WIDTH = [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]
-TABLE3_WIDTH = [15, 12, 15, 12, 12, 10, 10, 15, 15, 18, 15, 18, 18, 15]
+
 
 
 def export_simple_blocks_excel(rows: List[Dict]) -> str:
@@ -43,9 +38,13 @@ def export_simple_blocks_excel(rows: List[Dict]) -> str:
     filepath = os.path.join(documents_folder, "حساب تكلفه البلوكات مصنع محب.xlsx")
     
     if os.path.exists(filepath):
-        append_to_existing_file(filepath, rows)
+        result = append_to_existing_file(filepath, rows)
+        if result is False:  # File is locked
+            raise PermissionError("File is currently open in Excel. Please close the file and try again.")
     else:
-        create_new_excel_file(filepath, rows)
+        result = create_new_excel_file(filepath, rows)
+        if result is False:  # File is locked
+            raise PermissionError("File is currently open in Excel. Please close the file and try again.")
     
     return filepath
 
@@ -61,6 +60,9 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
     Args:
         filepath (str): Path to the existing Excel file
         new_rows (List[Dict]): List of dictionaries containing block data
+    
+    Returns:
+        bool: True if successful, False if file is locked
     """
     try:
         workbook = openpyxl.load_workbook(filepath)
@@ -79,7 +81,7 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
         # Custom style for headers
         header_fill_table1 = PatternFill(start_color="2F5597", end_color="2F5597", fill_type="solid")  # Dark blue for Table 1 headers
         header_fill_table2 = PatternFill(start_color="548235", end_color="548235", fill_type="solid")  # Dark green for Table 2 headers
-        header_fill_table3 = PatternFill(start_color="C65911", end_color="C65911", fill_type="solid")  # Dark orange for Table 3 headers
+        # Table 3 has been removed as per user request
         header_font = Font(color="FFFFFF", bold=True)  # White bold font for headers
         
         # Define different colors for columns with improved contrast
@@ -364,24 +366,18 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
             color_index = 33 % len(additional_colors)
             total_cost_cell.fill = PatternFill(start_color=additional_colors[color_index], end_color=additional_colors[color_index], fill_type="solid")
             
-            # --- الجدول الثالث (إضافة بيانات Table 3) ---
-            # Table 3 starts at column 34 (0-indexed) (تم التحديث بعد إضافة عمود الطول)
-            table3_start_col = 34  # العمود الذي يبدأ منه الجدول الثالث (تم التحديث)
-            
-            # إضافة خلايا فارغة مع حدود لجميع أعمدة الجدول الثالث
-            for col_offset in range(len(TABLE3_COLUMNS)):
-                cell = worksheet.cell(row=excel_row, column=table3_start_col + col_offset, value="")
-                cell.border = thin_border
-                # استخدام ألوان مختلفة لجدول 3
-                color_index = col_offset % len(column_colors)
-                cell.fill = PatternFill(start_color=column_colors[color_index], end_color=column_colors[color_index], fill_type="solid")
+            # Table 3 has been removed as per user request
             
         workbook.save(filepath)
         
+    except PermissionError as e:
+        print(f"File is locked: {e}")
+        return False  # File is locked
     except Exception as e:
         print(f"Error adding data: {e}")
         # In case of severe error, can try to recreate, but cautiously
-        # create_new_excel_file(filepath, new_rows) 
+        # create_new_excel_file(filepath, new_rows)
+    return True 
 
 def create_new_excel_file(filepath: str, rows: List[Dict]):
     """
@@ -393,6 +389,9 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
     Args:
         filepath (str): Path where the new Excel file should be created
         rows (List[Dict]): List of dictionaries containing block data
+    
+    Returns:
+        bool: True if successful, False if file is locked
     """
     workbook = xlsxwriter.Workbook(filepath, {'constant_memory': False})
     worksheet = workbook.add_worksheet("البلوكات")
@@ -469,15 +468,7 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         "border": 1
     })
     
-    table3_title_fmt = workbook.add_format({
-        "bold": True, 
-        "font_size": 14, 
-        "align": "center", 
-        "valign": "vcenter", 
-        "bg_color": "#ED7D31",  # برتقالي لجدول 3
-        "font_color": "white", 
-        "border": 1
-    })
+    # Table 3 has been removed as per user request
     
     gap_fmt = workbook.add_format({
         "bg_color": "#A6A6A6",  # رمادي للفراغات
@@ -509,20 +500,13 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         additional_formats.append(fmt)
 
     # Write title
-    total_cols = len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + len(TABLE3_COLUMNS)
+    total_cols = len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS)
     worksheet.merge_range(0, 0, 0, total_cols - 1, "حساب تكلفه البلوكات مصنع محب", title_fmt)
     worksheet.merge_range(1, 0, 1, len(TABLE1_COLUMNS) - 1, "مقاس البلوك في الأرضية", table1_title_fmt)
     worksheet.merge_range(1, len(TABLE1_COLUMNS), 1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) - 1, "مرحلة النشر", table2_title_fmt)
-    worksheet.merge_range(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS), 1, total_cols - 1, "المنصرف والمبيعات", table3_title_fmt)
+    # Table 3 has been removed as per user request
     
-    # اجمالي الكميه م2 - Formula to sum all values in the column
-    qty_m2_col = get_column_letter(len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 3)  # Column for Qty m2 in Table 3
-    worksheet.write_formula(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 2, f"=SUM({qty_m2_col}3:{qty_m2_col}1000)", table3_title_fmt) # اجمالي الكميه م2
-    worksheet.write(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 3, "", table3_title_fmt)
-    # اجمالي اجمالي سعر النشر - Formula to sum all values in the column
-    total_price_col = get_column_letter(len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 5)  # Column for Total Price in Table 3
-    worksheet.write_formula(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 4, f"=SUM({total_price_col}3:{total_price_col}1000)", table3_title_fmt) # اجمالي اجمالي سعر النشر
-    worksheet.write(1, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + 5, "", table3_title_fmt)
+    # Table 3 has been removed as per user request
 
     # Write column headers with distinct colors
     header_fmt_table1 = workbook.add_format({
@@ -545,29 +529,20 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         "font_size": 12
     })
     
-    header_fmt_table3 = workbook.add_format({
-        "bold": True, 
-        "border": 1, 
-        "align": "center", 
-        "valign": "vcenter", 
-        "bg_color": "#C65911",  # Dark orange for Table 3 headers
-        "font_color": "white", 
-        "font_size": 12
-    })
+    # Table 3 has been removed as per user request
     
     for idx, col in enumerate(TABLE1_COLUMNS):
         worksheet.write(2, idx, col, header_fmt_table1)
     for idx, col in enumerate(TABLE2_COLUMNS):
         worksheet.write(2, len(TABLE1_COLUMNS) + idx, col, header_fmt_table2)
-    for idx, col in enumerate(TABLE3_COLUMNS):
-        worksheet.write(2, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + idx, col, header_fmt_table3)
+    # Table 3 has been removed as per user request
     worksheet.set_row(1, 30)
     worksheet.set_row(2, 25)
 
     start_row = 3
     # تحديث مواضع الأعمدة بعد إزالة الخانة الفارغة
     col_offset = len(TABLE1_COLUMNS)  # بدون إضافة 1 لأننا أزلنا الخانة الفارغة
-    table3_start_col = len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS)  # بداية الجدول الثالث (بدون إضافة 1)
+    # Table 3 has been removed as per user request
     
     for i, block_data in enumerate(rows):
         excel_row = start_row + i
@@ -734,7 +709,11 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
     for i in range(min(len(TABLE2_COLUMNS), len(TABLE2_WIDTH))): 
         worksheet.set_column(len(TABLE1_COLUMNS) + i, len(TABLE1_COLUMNS) + i, TABLE2_WIDTH[i])
     
-    for i in range(min(len(TABLE3_COLUMNS), len(TABLE3_WIDTH))):
-        worksheet.set_column(len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + i, len(TABLE1_COLUMNS) + len(TABLE2_COLUMNS) + i, TABLE3_WIDTH[i])
+    # Table 3 has been removed as per user request
     
-    workbook.close()
+    try:
+        workbook.close()
+        return True
+    except PermissionError as e:
+        print(f"File is locked: {e}")
+        return False  # File is locked

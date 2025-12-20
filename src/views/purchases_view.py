@@ -259,6 +259,8 @@ class PurchasesView:
             self.page.update()
             self.show_success_dialog(excel_file)
             
+        except PermissionError as e:
+            self.show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
         except Exception as e:
             self.show_dialog("خطأ", f"حدث خطأ أثناء الحفظ: {str(e)}", ft.Colors.RED_400)
 
@@ -270,7 +272,7 @@ class PurchasesView:
             
         dlg = ft.AlertDialog(
             title=ft.Text(title, color=color),
-            content=ft.Text(message),
+            content=ft.Text(message, rtl=True),
             actions=[
                 ft.TextButton("حسناً", on_click=close_dlg)
             ]
@@ -309,8 +311,9 @@ class PurchasesView:
                 spacing=10
             ),
             content=ft.Column(
+                rtl=True,
                 controls=[
-                    ft.Text("تم إنشاء الملف بنجاح:", size=14),
+                    ft.Text("تم إنشاء الملف بنجاح:", size=14, rtl=True),
                     ft.Container(
                         content=ft.Text(
                             os.path.basename(filepath),

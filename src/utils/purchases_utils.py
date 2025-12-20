@@ -155,7 +155,10 @@ def create_purchases_excel_file(filepath: str, records: List[Dict]):
     # Freeze panes (freeze title and header rows)
     worksheet.freeze_panes(2, 0)
     
-    workbook.close()
+    try:
+        workbook.close()
+    except PermissionError as e:
+        raise PermissionError("File is currently open in Excel. Please close the file and try again.") from e
 
 
 def append_purchases_to_excel(filepath: str, new_records: List[Dict]):
@@ -235,6 +238,8 @@ def append_purchases_to_excel(filepath: str, new_records: List[Dict]):
                 worksheet.cell(row=row_idx, column=col).alignment = center_alignment
         
         workbook.save(filepath)
+    except PermissionError as e:
+        raise PermissionError("File is currently open in Excel. Please close the file and try again.") from e
     except Exception as e:
         raise Exception(f"Error appending to Excel file: {str(e)}")
 
@@ -304,6 +309,9 @@ def load_item_names_from_excel(filepath: str) -> List[str]:
                 items.add(str(item_name))
                 
         workbook.close()
+    except PermissionError as e:
+        print(f"File is locked: {e}")
+        return []
     except Exception as e:
         print(f"Error loading items from Excel: {e}")
     

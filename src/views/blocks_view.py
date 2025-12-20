@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from pickle import TRUE
 import flet as ft
 from openpyxl import load_workbook
 import xlsxwriter
@@ -604,6 +605,8 @@ class BlocksView:
             
             self._show_success_dialog(file_path)
             
+        except PermissionError as e:
+            self._show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
         except Exception as e:
             self._show_dialog("خطأ", f"حدث خطأ أثناء حفظ الملف:\n{str(e)}", ft.Colors.RED_400)
             traceback.print_exc()
@@ -616,7 +619,7 @@ class BlocksView:
 
         dlg = ft.AlertDialog(
             title=ft.Text(title, color=title_color, weight=ft.FontWeight.BOLD),
-            content=ft.Text(message, size=16),
+            content=ft.Text(message, size=16, rtl=True),
             actions=[
                 ft.TextButton(
                     "إغلاق",
@@ -659,12 +662,14 @@ class BlocksView:
                 controls=[
                     ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=30),
                     ft.Text("تم الحفظ بنجاح", color=ft.Colors.GREEN_300, weight=ft.FontWeight.BOLD),
-                ],
+                ], 
+                rtl=True,
                 spacing=10
             ),
             content=ft.Column(
+                rtl=True,
                 controls=[
-                    ft.Text("تم إنشاء الملف بنجاح:", size=14),
+                    ft.Text("تم إنشاء الملف بنجاح:", size=14, rtl=True),
                     ft.Container(
                         content=ft.Text(
                             os.path.basename(filepath),
@@ -675,7 +680,8 @@ class BlocksView:
                         bgcolor=ft.Colors.BLUE_GREY_800,
                         padding=10,
                         border_radius=8,
-                        margin=ft.margin.only(top=10)
+                        margin=ft.margin.only(top=10),
+                        rtl=True
                     )
                 ],
                 tight=True

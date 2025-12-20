@@ -384,7 +384,11 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
     worksheet.set_column(9, 9, 10)  # السعر / المدفوع (جدول المدفوعات)
     worksheet.set_column(10, 10, 14)  # إجمالي السعر / المتبقي (جدول المدفوعات)
 
-    workbook.close()
+    try:
+        workbook.close()
+    except PermissionError as e:
+        # Re-raise as a PermissionError so the calling code can handle it
+        raise PermissionError("File is currently open in Excel. Please close the file and try again.") from e
 
 def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_num: str, 
                          total_amount: float, driver: str = "", invoice_items = None):

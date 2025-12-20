@@ -89,7 +89,7 @@ class DashboardView:
         
         dlg = ft.AlertDialog(
             title=ft.Text("تنبيه"),
-            content=ft.Text(message),
+            content=ft.Text(message, rtl=True),
             actions=[
                 ft.TextButton("حسناً", on_click=close_dlg)
             ],
