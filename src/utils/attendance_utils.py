@@ -507,24 +507,30 @@ def load_attendance_data(filepath: str) -> Tuple[bool, Optional[List[Dict]], Opt
         tuple: (success: bool, data: List[Dict] or None, error_message: str or None)
     """
     if not os.path.exists(filepath):
+        print(f"⚠️ LOAD_LOG: File does not exist: {filepath}")
         return (False, None, "file_not_found")
     
     try:
         import openpyxl
         
+        print(f"📖 LOAD_LOG: Opening workbook: {filepath}")
         workbook = openpyxl.load_workbook(filepath, data_only=True)
         sheet = workbook.active
         
         if sheet is None:
+            print("❌ LOAD_LOG: Sheet is None")
             return (False, None, "invalid_sheet")
         
         employees_data = []
         
         max_row = sheet.max_row
+        print(f"📊 LOAD_LOG: Max row in sheet: {max_row}")
         row_idx = 1  # Excel rows are 1-based
         
         while row_idx <= max_row:
             cell_value = sheet.cell(row=row_idx, column=1).value
+            
+            # Skip empty rows
             if cell_value is None:
                 row_idx += 1
                 continue
@@ -535,48 +541,70 @@ def load_attendance_data(filepath: str) -> Tuple[bool, Optional[List[Dict]], Opt
                 row_idx += 1
                 continue
             
-            # Skip section headers and table headers
+            # Skip section headers - look for date headers like "التاريخ:"
             if text_value.startswith('التاريخ:'):
+                print(f"⏭️ LOAD_LOG: Row {row_idx} - Skipping date header: {text_value}")
                 row_idx += 1
                 continue
             
+            # Skip table headers - "اسم الموظف" indicates start of table headers
             if text_value == 'اسم الموظف':
+                print(f"⏭️ LOAD_LOG: Row {row_idx} - Found table header, skipping 2 rows")
                 # Skip the merged header row and the shift labels row
                 row_idx += 2
                 continue
             
+            # Skip total rows and separators
             if text_value in ('الإجمالي الأسبوعي', '----', 'لا توجد بيانات حضور'):
+                print(f"⏭️ LOAD_LOG: Row {row_idx} - Skipping: {text_value}")
                 row_idx += 1
                 continue
             
-            name = cell_value
-            emp_data = {
-                'name': str(name),
-                'friday_shift1': sheet.cell(row=row_idx, column=2).value or 0,
-                'friday_shift2': sheet.cell(row=row_idx, column=3).value or 0,
-                'saturday_shift1': sheet.cell(row=row_idx, column=4).value or 0,
-                'saturday_shift2': sheet.cell(row=row_idx, column=5).value or 0,
-                'sunday_shift1': sheet.cell(row=row_idx, column=6).value or 0,
-                'sunday_shift2': sheet.cell(row=row_idx, column=7).value or 0,
-                'monday_shift1': sheet.cell(row=row_idx, column=8).value or 0,
-                'monday_shift2': sheet.cell(row=row_idx, column=9).value or 0,
-                'tuesday_shift1': sheet.cell(row=row_idx, column=10).value or 0,
-                'tuesday_shift2': sheet.cell(row=row_idx, column=11).value or 0,
-                'wednesday_shift1': sheet.cell(row=row_idx, column=12).value or 0,
-                'wednesday_shift2': sheet.cell(row=row_idx, column=13).value or 0,
-                'thursday_shift1': sheet.cell(row=row_idx, column=14).value or 0,
-                'thursday_shift2': sheet.cell(row=row_idx, column=15).value or 0,
-                'date': sheet.cell(row=row_idx, column=17).value or '',
-                'advance': sheet.cell(row=row_idx, column=18).value or 0,
-                'price': sheet.cell(row=row_idx, column=19).value or 0
-            }
+            # This should be an employee data row
+            name = text_value
             
-            employees_data.append(emp_data)
+            # Read all the data from this row
+            try:
+                date_value = sheet.cell(row=row_idx, column=17).value
+                
+                emp_data = {
+                    'name': str(name),
+                    'friday_shift1': sheet.cell(row=row_idx, column=2).value or 0,
+                    'friday_shift2': sheet.cell(row=row_idx, column=3).value or 0,
+                    'saturday_shift1': sheet.cell(row=row_idx, column=4).value or 0,
+                    'saturday_shift2': sheet.cell(row=row_idx, column=5).value or 0,
+                    'sunday_shift1': sheet.cell(row=row_idx, column=6).value or 0,
+                    'sunday_shift2': sheet.cell(row=row_idx, column=7).value or 0,
+                    'monday_shift1': sheet.cell(row=row_idx, column=8).value or 0,
+                    'monday_shift2': sheet.cell(row=row_idx, column=9).value or 0,
+                    'tuesday_shift1': sheet.cell(row=row_idx, column=10).value or 0,
+                    'tuesday_shift2': sheet.cell(row=row_idx, column=11).value or 0,
+                    'wednesday_shift1': sheet.cell(row=row_idx, column=12).value or 0,
+                    'wednesday_shift2': sheet.cell(row=row_idx, column=13).value or 0,
+                    'thursday_shift1': sheet.cell(row=row_idx, column=14).value or 0,
+                    'thursday_shift2': sheet.cell(row=row_idx, column=15).value or 0,
+                    'date': str(date_value) if date_value else '',
+                    'advance': sheet.cell(row=row_idx, column=18).value or 0,
+                    'price': sheet.cell(row=row_idx, column=19).value or 0
+                }
+                
+                employees_data.append(emp_data)
+                print(f"✅ LOAD_LOG: Row {row_idx} - Loaded: {name}, Date: {emp_data['date']}")
+                
+            except Exception as e:
+                print(f"⚠️ LOAD_LOG: Row {row_idx} - Error reading data: {e}")
+            
             row_idx += 1
         
+        print(f"📊 LOAD_LOG: Total records loaded: {len(employees_data)}")
         return (True, employees_data, None)
         
     except ImportError:
+        print("❌ LOAD_LOG: openpyxl not installed")
         return (False, None, "openpyxl_missing")
     except Exception as e:
+        print(f"❌ LOAD_LOG: Exception: {e}")
+        import traceback
+        traceback.print_exc()
         return (False, None, f"error: {str(e)}")
+        
