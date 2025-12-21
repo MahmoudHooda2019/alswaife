@@ -218,20 +218,20 @@ class PurchasesView:
 
     def save_purchase(self, e):
         """Save purchase record to Excel file"""
-        # Validate required fields
-        if not self.code_field.value or not self.item_name_field.value or not self.quantity_field.value or not self.total_price_field.value:
-            self.show_dialog("خطأ", "يرجى ملء جميع الحقول المطلوبة", ft.Colors.RED_400)
+        # Validate only the item name field is required
+        if not self.item_name_field.value or not self.item_name_field.value.strip():
+            self.show_dialog("خطأ", "يرجى إدخال اسم الصنف", ft.Colors.RED_400)
             return
             
-        # Create record
+        # Create record (use empty strings or default values for missing fields)
         record = {
             'date': self.date_field.value,
-            'code': self.code_field.value,
+            'code': self.code_field.value if self.code_field.value else "",
             'item_name': self.item_name_field.value,
-            'quantity': self.quantity_field.value,
-            'total_price': self.total_price_field.value,
-            'supplier': self.supplier_field.value,
-            'notes': self.notes_field.value
+            'quantity': self.quantity_field.value if self.quantity_field.value else "",
+            'total_price': self.total_price_field.value if self.total_price_field.value else "",
+            'supplier': self.supplier_field.value if self.supplier_field.value else "",
+            'notes': self.notes_field.value if self.notes_field.value else ""
         }
         
         # Save to Excel file using the utility
@@ -248,13 +248,8 @@ class PurchasesView:
             if record['item_name'] not in self.items_list:
                 self.items_list.append(record['item_name'])
             
-            # Clear form
-            self.code_field.value = ""
+            # Clear form (only clear the item name field)
             self.item_name_field.value = ""
-            self.quantity_field.value = ""
-            self.total_price_field.value = ""
-            self.supplier_field.value = ""
-            self.notes_field.value = ""
             
             self.page.update()
             self.show_success_dialog(excel_file)
@@ -262,7 +257,7 @@ class PurchasesView:
         except PermissionError as e:
             self.show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
         except Exception as e:
-            self.show_dialog("خطأ", f"حدث خطأ أثناء الحفظ: {str(e)}", ft.Colors.RED_400)
+            self.show_dialog("خطأ", f"حدث خطأ أثناء حفظ البيانات: {str(e)}", ft.Colors.RED_400)
 
     def show_dialog(self, title, message, color):
         """Show a dialog with a message"""
@@ -352,38 +347,52 @@ class PurchasesView:
 
     def build_ui(self):
         """Build the purchases UI"""
-        # Header
-        header = ft.Row(
-            controls=[
-                ft.Icon(ft.Icons.SHOPPING_CART, size=36, color=ft.Colors.BLUE_300),
-                ft.Container(width=10),
-                ft.Text(
-                    "سجل المشتريات",
-                    size=32,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.BLUE_100
+        # Create AppBar with title and save button
+        self.page.appbar = ft.AppBar(
+            leading=ft.IconButton(
+                icon=ft.Icons.ARROW_BACK,
+                on_click=self.go_back,
+                tooltip="العودة للقائمة الرئيسية"
+            ),
+            title=ft.Text(
+                "المشتريات", 
+                size=20, 
+                weight=ft.FontWeight.BOLD,
+                color=ft.Colors.BLUE_100
+            ),
+            bgcolor=ft.Colors.BLUE_GREY_900,
+            actions=[
+                ft.Container(
+                    content=ft.IconButton(
+                        icon=ft.Icons.FOLDER_OPEN,
+                        icon_color=ft.Colors.BLUE_300,
+                        on_click=self.open_purchases_file,
+                        tooltip="فتح ملف المشتريات",
+                        icon_size=24,
+                    ),
+                    margin=ft.margin.only(right=5, left=5),
+                    bgcolor=ft.Colors.GREY_800,
+                    border_radius=20,
                 ),
-                ft.Container(expand=True),
-                ft.FilledButton(
-                    "حفظ البيانات",
-                    icon=ft.Icons.SAVE,
-                    on_click=self.save_purchase,
-                    style=ft.ButtonStyle(
-                        bgcolor=ft.Colors.GREEN_700,
-                        color=ft.Colors.WHITE,
-                        shape=ft.RoundedRectangleBorder(radius=12),
-                        padding=15
-                    )
+                ft.Container(
+                    content=ft.IconButton(
+                        icon=ft.Icons.SAVE,
+                        icon_color=ft.Colors.GREEN_300,
+                        on_click=self.save_purchase,
+                        tooltip="حفظ البيانات",
+                        icon_size=24,
+                    ),
+                    margin=ft.margin.only(right=15, left=5),
+                    bgcolor=ft.Colors.GREY_800,
+                    border_radius=20,
                 ),
-            ],
-            alignment=ft.MainAxisAlignment.START
+            ]
         )
         
-        # Form section
+        # Form section (removed the "إدخال بيانات المشتريات" text)
         form_section = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text("إدخال بيانات المشتريات", size=20, weight=ft.FontWeight.BOLD),
                     ft.Row(
                         controls=[
                             self.date_field,
@@ -455,7 +464,6 @@ class PurchasesView:
         # Main layout
         main_layout = ft.Column(
             controls=[
-                header,
                 form_section,
                 table_section
             ],
@@ -465,33 +473,24 @@ class PurchasesView:
             horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
         
-        # Back button
-        back_btn = ft.IconButton(
-            icon=ft.Icons.ARROW_BACK,
-            on_click=self.go_back,
-            tooltip="العودة للقائمة الرئيسية"
-        )
-        
         self.page.clean()
-        self.page.add(
-            ft.Column(
-                controls=[
-                    ft.Row([back_btn]),
-                    ft.Container(
-                        content=main_layout,
-                        expand=True,
-                        padding=15,
-                        bgcolor=ft.Colors.GREY_900
-                    )
-                ],
-                expand=True
-            )
-        )
-        
+        self.page.add(main_layout)
         self.page.update()
-        return main_layout
 
     def go_back(self, e):
         """Navigate back to dashboard"""
         if self.on_back:
             self.on_back()
+
+    def open_purchases_file(self, e):
+        """Open the purchases Excel file if it exists"""
+        filepath = os.path.join(self.purchases_path, "سجل المشتريات.xlsx")
+        if os.path.exists(filepath):
+            try:
+                os.startfile(filepath)
+            except Exception:
+                # Show error message if file can't be opened
+                self.show_dialog("خطأ", "لا يمكن فتح الملف حالياً", ft.Colors.RED_400)
+        else:
+            # Show message if file doesn't exist
+            self.show_dialog("معلومات", "ملف المشتريات لم يتم إنشاؤه بعد", ft.Colors.BLUE_400)

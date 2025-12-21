@@ -507,24 +507,20 @@ def load_attendance_data(filepath: str) -> Tuple[bool, Optional[List[Dict]], Opt
         tuple: (success: bool, data: List[Dict] or None, error_message: str or None)
     """
     if not os.path.exists(filepath):
-        print(f"⚠️ LOAD_LOG: File does not exist: {filepath}")
         return (False, None, "file_not_found")
     
     try:
         import openpyxl
         
-        print(f"📖 LOAD_LOG: Opening workbook: {filepath}")
         workbook = openpyxl.load_workbook(filepath, data_only=True)
         sheet = workbook.active
         
         if sheet is None:
-            print("❌ LOAD_LOG: Sheet is None")
             return (False, None, "invalid_sheet")
         
         employees_data = []
         
         max_row = sheet.max_row
-        print(f"📊 LOAD_LOG: Max row in sheet: {max_row}")
         row_idx = 1  # Excel rows are 1-based
         
         while row_idx <= max_row:
@@ -543,20 +539,17 @@ def load_attendance_data(filepath: str) -> Tuple[bool, Optional[List[Dict]], Opt
             
             # Skip section headers - look for date headers like "التاريخ:"
             if text_value.startswith('التاريخ:'):
-                print(f"⏭️ LOAD_LOG: Row {row_idx} - Skipping date header: {text_value}")
                 row_idx += 1
                 continue
             
             # Skip table headers - "اسم الموظف" indicates start of table headers
             if text_value == 'اسم الموظف':
-                print(f"⏭️ LOAD_LOG: Row {row_idx} - Found table header, skipping 2 rows")
                 # Skip the merged header row and the shift labels row
                 row_idx += 2
                 continue
             
             # Skip total rows and separators
             if text_value in ('الإجمالي الأسبوعي', '----', 'لا توجد بيانات حضور'):
-                print(f"⏭️ LOAD_LOG: Row {row_idx} - Skipping: {text_value}")
                 row_idx += 1
                 continue
             
@@ -589,22 +582,16 @@ def load_attendance_data(filepath: str) -> Tuple[bool, Optional[List[Dict]], Opt
                 }
                 
                 employees_data.append(emp_data)
-                print(f"✅ LOAD_LOG: Row {row_idx} - Loaded: {name}, Date: {emp_data['date']}")
                 
             except Exception as e:
-                print(f"⚠️ LOAD_LOG: Row {row_idx} - Error reading data: {e}")
+                pass
             
             row_idx += 1
         
-        print(f"📊 LOAD_LOG: Total records loaded: {len(employees_data)}")
         return (True, employees_data, None)
         
     except ImportError:
-        print("❌ LOAD_LOG: openpyxl not installed")
         return (False, None, "openpyxl_missing")
     except Exception as e:
-        print(f"❌ LOAD_LOG: Exception: {e}")
-        import traceback
-        traceback.print_exc()
         return (False, None, f"error: {str(e)}")
         

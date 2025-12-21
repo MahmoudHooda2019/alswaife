@@ -13,7 +13,7 @@ from utils.path_utils import resource_path
 try:
     from version import __version__
 except ImportError:
-    __version__ = "1.0.0"
+    __version__ = "1.0"
 
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

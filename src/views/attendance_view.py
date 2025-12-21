@@ -274,46 +274,36 @@ class AttendanceView:
     def normalize_date(self, date_str):
         """Normalize date string to dd/mm/yyyy format for comparison"""
         if not date_str:
-            print("⚠️ LOG: normalize_date - Empty date string")
             return ""
         
         try:
             # Try to parse different date formats
             date_str = str(date_str).strip()
-            print(f"📅 LOG: normalize_date - Input: '{date_str}'")
             
             # Remove Arabic digits
             arabic_to_english = str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789')
             date_str = date_str.translate(arabic_to_english)
-            print(f"📅 LOG: normalize_date - After Arabic conversion: '{date_str}'")
             
             # Try different formats
             for fmt in ['%d/%m/%Y', '%Y/%m/%d', '%d-%m-%Y', '%Y-%m-%d']:
                 try:
                     dt = datetime.strptime(date_str, fmt)
                     normalized = dt.strftime('%d/%m/%Y')
-                    print(f"✅ LOG: normalize_date - Success with format '{fmt}': '{normalized}'")
                     return normalized
                 except:
                     continue
             
-            print(f"⚠️ LOG: normalize_date - No format matched, returning original: '{date_str}'")
             return date_str
         except Exception as e:
-            print(f"❌ LOG: normalize_date - Exception: {e}")
             return str(date_str)
     
     def load_existing_data(self):
         """Load existing attendance data for current date and shift"""
-        print("\n" + "="*60)
-        print("🔄 LOG: load_existing_data - START")
-        print("="*60)
         
         if self.employees_container is not None:
             self.employees_container.controls.clear()
         
         if not self.date_field or not self.date_field.value or not self.shift_dropdown or not self.shift_dropdown.value:
-            print("⚠️ LOG: Missing date or shift")
             if self.employees_container is not None:
                 self.employees_container.controls.append(
                     ft.Container(
@@ -330,9 +320,6 @@ class AttendanceView:
             self.page.update()
             return
         
-        print(f"📅 LOG: Current Date Field Value: '{self.date_field.value}'")
-        print(f"🔧 LOG: Current Shift: '{self.shift_dropdown.value}'")
-        
         documents_path = os.path.join(os.path.expanduser("~"), "Documents")
         alswaife_path = os.path.join(documents_path, "alswaife")
         attendance_path = os.path.join(alswaife_path, "حضور وانصراف")
@@ -340,50 +327,30 @@ class AttendanceView:
         try:
             filename = "attendance.xlsx"
             filepath = os.path.join(attendance_path, filename)
-            print(f"📂 LOG: File path: '{filepath}'")
-            print(f"📂 LOG: File exists: {os.path.exists(filepath)}")
             
             # Normalize current date for comparison
             current_date_normalized = self.normalize_date(self.date_field.value)
-            print(f"📅 LOG: Normalized current date: '{current_date_normalized}'")
             
             if os.path.exists(filepath):
-                print("📖 LOG: Loading data from Excel...")
                 success, data, error = load_attendance_data(filepath)
-                print(f"📖 LOG: Load result - Success: {success}, Error: {error}")
                 
                 if success and data:
-                    print(f"📊 LOG: Total records loaded: {len(data)}")
                     self.current_file = filepath
-                    
-                    # Log all dates in the file
-                    print("\n📋 LOG: All dates in file:")
-                    for i, emp_record in enumerate(data):
-                        record_date_raw = emp_record.get('date', '')
-                        print(f"  Record {i}: Name='{emp_record.get('name', '')}', Date='{record_date_raw}'")
                     
                     # Filter data for the current date
                     filtered_data = []
-                    print(f"\n🔍 LOG: Filtering for date: '{current_date_normalized}'")
                     for emp_record in data:
                         record_date = self.normalize_date(emp_record.get('date', ''))
-                        print(f"  Comparing: '{record_date}' == '{current_date_normalized}' ? {record_date == current_date_normalized}")
                         if record_date == current_date_normalized:
                             filtered_data.append(emp_record)
-                            print(f"    ✅ Matched: {emp_record.get('name', '')}")
-                    
-                    print(f"\n✅ LOG: Filtered records count: {len(filtered_data)}")
                     
                     # Create a dictionary for quick lookup
                     employee_data = {emp['name']: emp for emp in filtered_data}
-                    print(f"📋 LOG: Employee data dictionary keys: {list(employee_data.keys())}")
                     
                     # Get shift key
                     shift_key = self.get_shift_key()
-                    print(f"🔧 LOG: Shift key: '{shift_key}'")
                     
                     # Create employee rows with existing data
-                    print("\n👥 LOG: Processing employees from JSON:")
                     for emp in self.employees_list:
                         emp_name = emp['name'].strip() if isinstance(emp['name'], str) else emp['name']
                         price = emp.get('price', 0)
@@ -399,58 +366,40 @@ class AttendanceView:
                                 break
                         
                         if matched_record:
-                            print(f"  ✅ Found '{emp_name}' in filtered data")
                             shift_value = matched_record.get(shift_key, 0)
-                            print(f"    Shift value for '{shift_key}': {shift_value}")
                             if shift_key and shift_value > 0:
                                 is_present = True
-                                print(f"    ✅ Marked as PRESENT")
-                            else:
-                                print(f"    ❌ Marked as ABSENT")
                             if 'price' in matched_record and matched_record['price'] != 0:
                                 emp_price = matched_record['price']
-                                print(f"    Price updated to: {emp_price}")
-                        else:
-                            print(f"  ❌ '{emp_name}' NOT found in filtered data")
                         
                         self.add_employee_row(emp_name, emp_price, is_present)
                     
                     # Load additional employees from Excel not in JSON
-                    print("\n👥 LOG: Processing additional employees from Excel:")
                     for emp_record in filtered_data:
                         emp_name = emp_record['name'].strip() if isinstance(emp_record['name'], str) else emp_record['name']
                         if not any(emp['name'].strip() == emp_name for emp in self.employees_list):
-                            print(f"  ➕ Adding additional employee: '{emp_name}'")
                             price = emp_record.get('price', 0)
                             is_present = shift_key and emp_record.get(shift_key, 0) > 0
                             self.add_employee_row(emp_name, price, is_present)
                 else:
-                    print("⚠️ LOG: No data loaded, creating default employee rows")
                     # Create employee rows without existing data
                     for emp in self.employees_list:
                         emp_name = emp['name'].strip() if isinstance(emp['name'], str) else emp['name']
                         price = emp.get('price', 0)
                         self.add_employee_row(emp_name, price, False)
             else:
-                print("⚠️ LOG: File does not exist, creating default employee rows")
                 # Create employee rows without existing data
                 for emp in self.employees_list:
                     emp_name = emp['name'].strip() if isinstance(emp['name'], str) else emp['name']
                     price = emp.get('price', 0)
                     self.add_employee_row(emp_name, price, False)
         except Exception as e:
-            print(f"❌ LOG: Exception in load_existing_data: {e}")
-            import traceback
-            traceback.print_exc()
             # Create employee rows without existing data
             for emp in self.employees_list:
                 emp_name = emp['name'].strip() if isinstance(emp['name'], str) else emp['name']
                 price = emp.get('price', 0)
                 self.add_employee_row(emp_name, price, False)
         
-        print("="*60)
-        print("🔄 LOG: load_existing_data - END")
-        print("="*60 + "\n")
         self.page.update()
     
     def get_shift_key(self):
@@ -576,9 +525,6 @@ class AttendanceView:
     
     def save_to_excel(self, e):
         """Save attendance data to Excel file"""
-        print("\n" + "="*60)
-        print("💾 LOG: save_to_excel - START")
-        print("="*60)
         
         documents_path = os.path.join(os.path.expanduser("~"), "Documents")
         alswaife_path = os.path.join(documents_path, "alswaife")
@@ -587,45 +533,35 @@ class AttendanceView:
         try:
             os.makedirs(attendance_path, exist_ok=True)
         except OSError as ex:
-            print(f"❌ LOG: Failed to create directory: {ex}")
             self.show_message(f"فشل إنشاء المجلد: {ex}", error=True)
             return
         
         if self.shift_dropdown is None or not self.shift_dropdown.value:
-            print("⚠️ LOG: No shift selected")
             self.show_message("الرجاء اختيار الوردية", error=True)
             return
         
         try:
             filename = "attendance.xlsx"
             filepath = os.path.join(attendance_path, filename)
-            print(f"📂 LOG: Save filepath: '{filepath}'")
         except Exception as ex:
-            print(f"❌ LOG: Error creating filename: {ex}")
             self.show_message(f"خطأ في إنشاء اسم الملف: {ex}", error=True)
             return
         
         existing_data = []
         if os.path.exists(filepath):
-            print("📖 LOG: Loading existing data...")
             success, data, error = load_attendance_data(filepath)
             if success and data:
                 existing_data = data
-                print(f"📊 LOG: Loaded {len(existing_data)} existing records")
         
         employees_data = []
         all_employee_names = set()
         
         # Normalize current date
         current_date = self.normalize_date(self.date_field.value if self.date_field else "")
-        print(f"📅 LOG: Saving for date: '{current_date}'")
-        print(f"🔧 LOG: Shift: '{self.shift_dropdown.value}'")
         
         shift_key = self.get_shift_key()
-        print(f"🔧 LOG: Shift key: '{shift_key}'")
         
         # Process employees from JSON
-        print("\n👥 LOG: Processing JSON employees:")
         for emp in self.employees_list:
             emp_name = emp['name']
             all_employee_names.add(emp_name)
@@ -635,12 +571,10 @@ class AttendanceView:
                 record_date = self.normalize_date(record.get('date', ''))
                 if record['name'] == emp_name and record_date == current_date:
                     existing_record = record.copy()
-                    print(f"  ✅ Found existing record for '{emp_name}'")
                     break
             
             if existing_record:
                 emp_record = existing_record
-                print(f"  📝 Using existing record for '{emp_name}'")
             else:
                 emp_record = {
                     'name': emp_name,
@@ -655,7 +589,6 @@ class AttendanceView:
                     'advance': 0,
                     'price': emp.get('price', 0)
                 }
-                print(f"  ➕ Creating new record for '{emp_name}'")
             
             if emp_name in self.attendance_data:
                 attendance_info = self.attendance_data[emp_name]
@@ -671,15 +604,12 @@ class AttendanceView:
                 
                 if shift_key:
                     emp_record[shift_key] = price if is_present else 0
-                    print(f"  📊 '{emp_name}': Present={is_present}, {shift_key}={emp_record[shift_key]}")
             
             employees_data.append(emp_record)
         
         # Process manually added employees
-        print("\n👥 LOG: Processing manually added employees:")
         for emp_name, attendance_info in self.attendance_data.items():
             if emp_name not in all_employee_names:
-                print(f"  ➕ Processing manually added: '{emp_name}'")
                 existing_record = None
                 for record in existing_data:
                     record_date = self.normalize_date(record.get('date', ''))
@@ -716,41 +646,30 @@ class AttendanceView:
                 
                 if shift_key:
                     emp_record[shift_key] = price if is_present else 0
-                    print(f"  📊 '{emp_name}': Present={is_present}, {shift_key}={emp_record[shift_key]}")
                 
                 employees_data.append(emp_record)
         
         # Combine with existing data
-        print(f"\n🔄 LOG: Combining data...")
         final_data = []
         employee_names = [emp['name'] for emp in employees_data]
         
-        print(f"📋 LOG: Filtering out old records for date '{current_date}' and employees: {employee_names[:5]}...")
         for record in existing_data:
             record_date = self.normalize_date(record.get('date', ''))
             if record_date != current_date or record['name'] not in employee_names:
                 final_data.append(record)
         
         final_data.extend(employees_data)
-        print(f"📊 LOG: Final data count: {len(final_data)}")
         
-        print("💾 LOG: Calling create_or_update_attendance...")
         success, error = create_or_update_attendance(filepath, final_data)
         
         if success:
-            print("✅ LOG: Save successful!")
             self.current_file = filepath
             self.show_message(f"تم الحفظ بنجاح: {os.path.basename(filepath)}", filepath=filepath)
         else:
-            print(f"❌ LOG: Save failed: {error}")
             if error == "file_locked":
                 self.show_message("الملف مفتوح في برنامج آخر، الرجاء إغلاقه", error=True)
             else:
                 self.show_message(f"خطأ في الحفظ: {error}", error=True)
-        
-        print("="*60)
-        print("💾 LOG: save_to_excel - END")
-        print("="*60 + "\n")
     
     def show_message(self, message, error=False, filepath=None):
         """Show status message with dialog notification"""
@@ -807,6 +726,28 @@ class AttendanceView:
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
                 bgcolor=ft.Colors.BLUE_GREY_900,
+                shape=ft.RoundedRectangleBorder(radius=16)
+            )
+        elif not error:  # Success message without filepath
+            self.dialog = ft.AlertDialog(
+                title=ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=30),
+                        ft.Text("تمت العملية بنجاح", color=ft.Colors.GREEN_300, weight=ft.FontWeight.BOLD, rtl=True),
+                    ],
+                    rtl=True,
+                    spacing=10
+                ),
+                content=ft.Text(message, size=16, rtl=True),
+                actions=[
+                    ft.TextButton(
+                        "إغلاق", 
+                        on_click=lambda e: self.close_dialog(),
+                        style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                    ),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+                bgcolor=ft.Colors.GREEN_900,
                 shape=ft.RoundedRectangleBorder(radius=16)
             )
         else:
