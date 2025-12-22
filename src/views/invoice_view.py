@@ -417,7 +417,7 @@ class InvoiceView:
         self.save_callback = save_callback
         
         # Configure the page
-        self.page.title = "مصنع السويفي - ادارة الفواتير"
+        self.page.title = "ادارة الفواتير"
         self.page.rtl = True  # Right-to-left support for Arabic
         self.page.theme_mode = ft.ThemeMode.DARK  # Dark theme
         

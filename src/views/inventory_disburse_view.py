@@ -96,8 +96,9 @@ class InventoryDisburseView:
                     inventory_data = get_inventory_summary(excel_file)
                     print(f"[DEBUG] Inventory data retrieved, count: {len(inventory_data)}")
                     print(f"[DEBUG] Inventory data: {inventory_data}")
-                    # Filter items that have positive balance
-                    available_items = [item['item_name'] for item in inventory_data if float(item['current_balance']) > 0]
+                    # Show all items, not just those with positive balance
+                    # This allows users to see all items and we'll validate quantities during save
+                    available_items = [item['item_name'] for item in inventory_data if item['item_name']]
                     print(f"[DEBUG] Filtered available items: {available_items}")
                 except Exception as e:
                     print(f"[ERROR] Failed to get inventory summary: {e}")
@@ -333,8 +334,12 @@ class InventoryDisburseView:
         print(f"[DEBUG] Refresh - Available items: {available_items}")
         
         # Update dropdown options
-        self.item_dropdown.options = [ft.dropdown.Option(item) for item in available_items] if available_items else [ft.dropdown.Option("لا توجد أصناف متوفرة")]
-        self.item_dropdown.value = None  # Clear selection
+        if available_items:
+            self.item_dropdown.options = [ft.dropdown.Option(item) for item in available_items]
+            self.item_dropdown.value = None  # Clear selection
+        else:
+            self.item_dropdown.options = [ft.dropdown.Option("لا توجد أصناف في المخزون")]
+            self.item_dropdown.value = "لا توجد أصناف في المخزون"
         print(f"[DEBUG] Dropdown options updated")
         self.page.update()
 
@@ -342,7 +347,7 @@ class InventoryDisburseView:
         """Save inventory disbursement record to Excel file"""
         print(f"[DEBUG] Saving inventory")
         # Validate required fields
-        if not self.item_dropdown.value or self.item_dropdown.value == "لا توجد أصناف متوفرة":
+        if not self.item_dropdown.value or self.item_dropdown.value in ["لا توجد أصناف متوفرة", "لا توجد أصناف في المخزون"]:
             print(f"[DEBUG] No item selected")
             self.show_dialog("خطأ", "يرجى اختيار صنف من القائمة", ft.Colors.RED_400)
             return
@@ -358,15 +363,31 @@ class InventoryDisburseView:
             try:
                 inventory_data = get_inventory_summary(excel_file)
                 print(f"[DEBUG] Inventory data for validation: {inventory_data}")
+                item_found = False
                 for item in inventory_data:
                     if item['item_name'] == self.item_dropdown.value:
+                        item_found = True
                         available_balance = float(item['current_balance'])
                         requested_quantity = float(self.quantity_field.value)
+                        
+                        # Check if item has any balance
+                        if available_balance <= 0:
+                            print(f"[DEBUG] Item has no available balance: {available_balance}")
+                            self.show_dialog("خطأ", f"الصنف المحدد ({self.item_dropdown.value}) ليس له رصيد متوفر", ft.Colors.RED_400)
+                            return
+                        
+                        # Check if requested quantity exceeds available balance
                         if requested_quantity > available_balance:
                             print(f"[DEBUG] Insufficient balance - Requested: {requested_quantity}, Available: {available_balance}")
                             self.show_dialog("خطأ", f"الكمية المطلوبة ({requested_quantity}) تتجاوز الرصيد المتاح ({available_balance})", ft.Colors.RED_400)
                             return
                         break
+                
+                # If item not found in inventory data
+                if not item_found:
+                    print(f"[DEBUG] Item not found in inventory data")
+                    self.show_dialog("خطأ", f"الصنف المحدد ({self.item_dropdown.value}) غير موجود في المخزون", ft.Colors.RED_400)
+                    return
             except Exception as e:
                 print(f"[ERROR] Error validating inventory: {e}")
                 traceback.print_exc()
