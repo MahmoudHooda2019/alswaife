@@ -390,227 +390,196 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
         # Re-raise as a PermissionError so the calling code can handle it
         raise PermissionError("File is currently open in Excel. Please close the file and try again.") from e
 
-def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_num: str, 
-                         total_amount: float, driver: str = "", invoice_items = None):
-    """
-    Update or create the client's cumulative ledger Excel file with detailed information.
-    
-    Args:
-        folder_path (str): The directory where the ledger should be saved.
-        client_name (str): The name of the client.
-        date_str (str): The date of the invoice.
-        op_num (str): The invoice number.
-        total_amount (float): The total amount of the invoice.
-        driver (str): Driver name.
-        invoice_items (list): List of aggregated invoice items (desc, material, thickness, area, price)
-    
-    Returns:
-        tuple: (success: bool, error_message: str or None)
-    """
+def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_num: str,
+                          total_amount: float, driver: str = "", invoice_items=None):
     import os
     from datetime import datetime
-    
-    filename = f"{client_name}.xlsx"
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    filename = f"كشف حساب.xlsx"
     filepath = os.path.join(folder_path, filename)
-    
-    # Check if file exists to determine if we need to create headers
+
     file_exists = os.path.exists(filepath)
-    
+
+    # تجهيز حدود الخلايا (Border)
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+
     try:
         if file_exists:
-            import openpyxl
-            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-            
             workbook = openpyxl.load_workbook(filepath)
             sheet = workbook.active
+            if sheet is None: return (False, "invalid_sheet")
+
+            next_row = sheet.max_row
             
-                    # Check if sheet is valid
-            if sheet is None:
-                return (False, "invalid_sheet")
-            
-            # Find next empty row (skip header and total debt rows)
-            next_row = sheet.max_row + 1
-            
-            # Add invoice items to the ledger
-            if invoice_items:
-                for item_data in invoice_items:
-                    desc, material, thickness, area, price = item_data
-                    
-                    sheet.cell(row=next_row, column=1, value=op_num)
-                    sheet.cell(row=next_row, column=2, value=driver)
-                    sheet.cell(row=next_row, column=3, value=date_str)
-                    sheet.cell(row=next_row, column=4, value=f"{material} - {thickness}")
-                    sheet.cell(row=next_row, column=5, value=area)
-                    sheet.cell(row=next_row, column=6, value=price)
-                    sheet.cell(row=next_row, column=7, value=area * price)  # المبلغ
-                    sheet.cell(row=next_row, column=8, value="")  # تاريخ الدفع
-                    sheet.cell(row=next_row, column=9, value=0)  # الدفعات
-                    
-                    # الرصيد = المبلغ - الدفعات (معادلة)
-                    sheet.cell(row=next_row, column=10, value=f"=G{next_row}-I{next_row}")
-                    
-                    sheet.cell(row=next_row, column=11, value="")  # ملاحظات
-                    
-                    # Apply borders
-                    thin_border = Border(
-                        left=Side(style='thin'),
-                        right=Side(style='thin'),
-                        top=Side(style='thin'),
-                        bottom=Side(style='thin')
-                    )
-                    for col in range(1, 12):
-                        cell = sheet.cell(row=next_row, column=col)
-                        cell.border = thin_border
-                        cell.alignment = Alignment(horizontal='center', vertical='center')
-                    
-                    next_row += 1
-            
-            # Update total debt formula in cell I1 (merged cells I1:K1)
-            # إجمالي الديون = مجموع عمود الرصيد (J)
-            # The debt formula should be consistent with initial creation
-            try:
-                debt_value = sheet['I1']  # This represents the merged range I1:K1
-                debt_value.value = f"=SUM(J4:J{next_row-1})"
-            except:
-                # Fallback: try to update just cell I1
-                sheet.cell(row=1, column=9, value=f"=SUM(J4:J{next_row-1})")
-            
-            workbook.save(filepath)
-            return (True, None)
-            
+            # --- إصلاح 1: فك دمج صف المجموع القديم للكتابة مكانه ---
+            if sheet.cell(row=next_row, column=1).value == "المجموع":
+                try:
+                    sheet.unmerge_cells(start_row=next_row, start_column=1, end_row=next_row, end_column=4)
+                except:
+                    pass # لم يكن مدمجاً أو حدث خطأ بسيط، نتابع
+                # نبقى في نفس الصف للكتابة فوقه
+            else:
+                next_row = next_row + 1
+            # -------------------------------------------------------
+
         else:
-            # Create new file with detailed structure
-            import openpyxl
-            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-            from openpyxl.styles.numbers import FORMAT_NUMBER_COMMA_SEPARATED1
-            
+            # إنشاء ملف جديد وتنسيقه (نفس الكود السابق للإنشاء)
             workbook = openpyxl.Workbook()
             sheet = workbook.active
-            
-            # Check if sheet is valid before using it
-            if sheet is None:
-                return (False, "invalid_sheet")
-                
             sheet.title = "كشف حساب"
-            
-            # RTL
             sheet.sheet_view.rightToLeft = True
-            
-            # Title: كشف الحساب - [Client Name]
-            sheet.merge_cells('A1:F1')  # Reduce merge range to make space for debt info
+
+            # ترويسة الصفحة
+            sheet.merge_cells('A1:H1')
             title_cell = sheet['A1']
             title_cell.value = f"كشف حساب العميل / {client_name}"
-            title_cell.font = Font(name='Arial', size=16, bold=True, color="FFFFFF")
-            title_cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            title_cell.font = Font(name='Arial', size=18, bold=True, color="FFFFFF")
+            title_cell.fill = PatternFill(start_color="2F5597", end_color="2F5597", fill_type="solid")
             title_cell.alignment = Alignment(horizontal='center', vertical='center')
-            sheet.row_dimensions[1].height = 30
+
+            # ترويسة الديون
+            sheet['I1'].value = "إجمالي الديون"
+            sheet['I1'].font = Font(name='Arial', size=12, bold=True, color="FFFFFF")
+            sheet['I1'].fill = PatternFill(start_color="70AD47", end_color="70AD47", fill_type="solid")
+            sheet['I1'].alignment = Alignment(horizontal='center', vertical='center')
+            sheet['J1'].font = Font(name='Arial', size=12, bold=True, color="FFFFFF")
+            sheet['J1'].fill = PatternFill(start_color="70AD47", end_color="70AD47", fill_type="solid")
+            sheet['J1'].alignment = Alignment(horizontal='center', vertical='center')
+            sheet.row_dimensions[1].height = 35
+
+            # رؤوس الجدول
+            headers = ["رقم الفاتورة", "اسم السائق", "تاريخ التحميل", "النوع", "الكمية م٢", "إجمالي السعر", "المبلغ", "تاريخ الدفعات", "الدفعات", "ملاحظات"]
+            header_fill = PatternFill(start_color="8FAADC", end_color="8FAADC", fill_type="solid")
             
-            # Merge empty row 2 for better visual separation
-            sheet.merge_cells('A2:K2')
-            empty_row = sheet['A2']
-            empty_row.fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
-            
-            # Total debt - placing it next to client name instead of below
-            sheet.merge_cells('G1:H1')  # Merge cells G1 and H1 for debt label
-            debt_label = sheet['G1']
-            debt_label.value = "إجمالي الديون:"
-            debt_label.font = Font(name='Arial', size=12, bold=True)
-            # Improved color scheme to match sheet design
-            debt_label.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-            debt_label.font = Font(name='Arial', size=12, bold=True, color="FFFFFF")
-            debt_label.alignment = Alignment(horizontal='center', vertical='center')
-            
-            # Formula for total debt
-            sheet.merge_cells('I1:K1')  # Merge cells I1, J1, K1 for debt value
-            debt_value = sheet['I1']
-            # Calculate the last row for the SUM formula
-            # Data starts at row 4, and we add len(invoice_items) rows
-            last_row = 4 + len(invoice_items) - 1 if invoice_items else 4
-            debt_value.value = f"=SUM(J4:J{last_row})"
-            debt_value.font = Font(name='Arial', size=12, bold=True, color="4472C4")
-            # Improved color scheme to match sheet design
-            debt_value.fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-            debt_value.alignment = Alignment(horizontal='center', vertical='center')
-            debt_value.number_format = '#,##0'
-            
-            # Headers
-            headers = [
-                "رقم الفاتورة",
-                "اسم السائق", 
-                "تاريخ التحميل",
-                "النوع (الخامة)",
-                "المسطح م٢",
-                "إجمالي السعر",
-                "المبلغ",
-                "تاريخ الدفع",
-                "الدفعات",
-                "الرصيد",
-                "ملاحظات"
-            ]
-            
-            header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-            header_font = Font(name='Arial', size=11, bold=True)
-            border = Border(
-                left=Side(style='thin'),
-                right=Side(style='thin'),
-                top=Side(style='thin'),
-                bottom=Side(style='thin')
-            )
-            
-            # Set headers for row 3
-            # Note: We avoid setting values for cells that might be part of merged ranges
-            # In this case, row 3 has no merged cells, so we can safely set all values
             for col, header in enumerate(headers, start=1):
-                cell = sheet.cell(row=3, column=col)
-                # Using setattr to avoid static analysis issues with merged cells
-                setattr(cell, 'value', header)
-                cell.font = header_font
+                cell = sheet.cell(row=2, column=col)
+                cell.value = header
+                cell.font = Font(name='Arial', size=12, bold=True, color="1F4E78")
                 cell.fill = header_fill
-                cell.border = border
+                cell.border = thin_border
                 cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             
-            sheet.row_dimensions[3].height = 30
-            
-            # Set column widths
-            column_widths = [12, 12, 12, 15, 10, 12, 12, 12, 10, 10, 15]
-            for col, width in enumerate(column_widths, start=1):
-                from openpyxl.utils import get_column_letter
-                sheet.column_dimensions[get_column_letter(col)].width = width
-            
-            # Add first invoice data
-            row = 4
-            if invoice_items:
-                for item_data in invoice_items:
-                    desc, material, thickness, area, price = item_data
-                    
-                    sheet.cell(row=row, column=1, value=op_num)
-                    sheet.cell(row=row, column=2, value=driver)
-                    sheet.cell(row=row, column=3, value=date_str)
-                    sheet.cell(row=row, column=4, value=f"{material} - {thickness}")
-                    sheet.cell(row=row, column=5, value=area)
-                    sheet.cell(row=row, column=6, value=price)
-                    sheet.cell(row=row, column=7, value=area * price)
-                    sheet.cell(row=row, column=8, value="")
-                    sheet.cell(row=row, column=9, value=0)
-                    
-                    # الرصيد = المبلغ - الدفعات (معادلة)
-                    sheet.cell(row=row, column=10, value=f"=G{row}-I{row}")
-                    
-                    sheet.cell(row=row, column=11, value="")
-                    
-                    # Apply borders and alignment
-                    for col in range(1, 12):
-                        cell = sheet.cell(row=row, column=col)
-                        cell.border = border
-                        cell.alignment = Alignment(horizontal='center', vertical='center')
-                    
-                    row += 1
-            
-            workbook.save(filepath)
-            return (True, None)
-            
-    except PermissionError as e:
-        # File is open in Excel
+            sheet.row_dimensions[2].height = 35
+            next_row = 3 # أول صف بيانات في الملف الجديد
+
+        # --- بداية كتابة بيانات الفاتورة ---
+        num_items = len(invoice_items) if invoice_items else 1
+        start_row = next_row
+        end_row = next_row + num_items - 1
+
+        # كتابة الصفوف
+        for idx, item in enumerate(invoice_items if invoice_items else [None]):
+            current_row = start_row + idx
+
+            # تنظيف تنسيق الصف الحالي (لإزالة ألوان صف المجموع القديم إن وجد)
+            for col in range(1, 11):
+                cell = sheet.cell(row=current_row, column=col)
+                cell.fill = PatternFill(fill_type=None) # إزالة اللون الخلفي
+                cell.font = Font(name='Arial', size=11) # إعادة الخط للوضع الطبيعي
+                cell.border = thin_border
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                if col in [5, 6, 7, 9]:
+                     cell.number_format = '0.00'
+
+            # البيانات المدمجة (تكتب في أول صف فقط)
+            if idx == 0:
+                # 1. رقم الفاتورة
+                if num_items > 1: sheet.merge_cells(start_row=start_row, start_column=1, end_row=end_row, end_column=1)
+                sheet.cell(row=start_row, column=1, value=op_num)
+
+                # 2. اسم السائق
+                if num_items > 1: sheet.merge_cells(start_row=start_row, start_column=2, end_row=end_row, end_column=2)
+                sheet.cell(row=start_row, column=2, value=driver)
+
+                # 3. التاريخ
+                if num_items > 1: sheet.merge_cells(start_row=start_row, start_column=3, end_row=end_row, end_column=3)
+                sheet.cell(row=start_row, column=3, value=date_str)
+
+                # 7. المبلغ (تعديل حسب الطلب: معادلة جمع + دمج)
+                if num_items > 1: sheet.merge_cells(start_row=start_row, start_column=7, end_row=end_row, end_column=7)
+                # وضع معادلة الجمع لإجمالي السعر (Column F)
+                sheet.cell(row=start_row, column=7, value=f"=SUM(F{start_row}:F{end_row})")
+                # تنسيق خفيف للمبلغ لتمييزه
+                sheet.cell(row=start_row, column=7).font = Font(name='Arial', size=11, bold=True)
+                sheet.cell(row=start_row, column=7).fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+
+                # 8, 9, 10 الأعمدة الفارغة أو الدفعات (مدمجة)
+                if num_items > 1: sheet.merge_cells(start_row=start_row, start_column=8, end_row=end_row, end_column=8)
+                sheet.cell(row=start_row, column=8, value="")
+
+                if num_items > 1: sheet.merge_cells(start_row=start_row, start_column=9, end_row=end_row, end_column=9)
+                sheet.cell(row=start_row, column=9, value=0)
+
+                if num_items > 1: sheet.merge_cells(start_row=start_row, start_column=10, end_row=end_row, end_column=10)
+                sheet.cell(row=start_row, column=10, value="")
+
+            # البيانات المتغيرة (غير المدمجة) - تفاصيل الأصناف
+            if item:
+                material = item[1] if len(item) > 1 else ""
+                thickness = item[2] if len(item) > 2 else ""
+                area = item[3] if len(item) > 3 else 0
+                price = item[4] if len(item) > 4 else 0
+
+                sheet.cell(row=current_row, column=4, value=f"{material} - {thickness}")
+                sheet.cell(row=current_row, column=5, value=area)
+                sheet.cell(row=current_row, column=6, value=price)
+            else:
+                sheet.cell(row=current_row, column=4, value="")
+                sheet.cell(row=current_row, column=5, value=0)
+                sheet.cell(row=current_row, column=6, value=total_amount) # في حال عدم وجود تفاصيل
+
+            sheet.row_dimensions[current_row].height = 22
+
+        # --- إنشاء صف المجموع الجديد في الأسفل ---
+        total_row = end_row + 1
+        
+        # دمج وتنسيق عنوان "المجموع"
+        sheet.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=4)
+        total_label = sheet.cell(row=total_row, column=1)
+        total_label.value = "المجموع"
+        total_label.font = Font(name='Arial', size=12, bold=True, color="1F4E78")
+        total_label.fill = PatternFill(start_color="B4C7E7", end_color="B4C7E7", fill_type="solid")
+        total_label.alignment = Alignment(horizontal='center', vertical='center')
+        total_label.border = thin_border
+
+        # تنسيق باقي خلايا صف المجموع
+        for col in range(5, 11):
+            cell = sheet.cell(row=total_row, column=col)
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.font = Font(name='Arial', size=12, bold=True, color="1F4E78")
+            cell.fill = PatternFill(start_color="B4C7E7", end_color="B4C7E7", fill_type="solid") # توحيد لون صف المجموع
+            if col in [5, 6, 7, 9]:
+                cell.number_format = '0.00'
+
+        # معادلات صف المجموع (يجمع العمود بأكمله من البداية حتى ما قبل صف المجموع)
+        # ملاحظة: الجمع يبدأ من الصف 3 (أول صف بيانات) وحتى end_row
+        sheet.cell(row=total_row, column=5).value = f"=SUM(E3:E{end_row})"
+        sheet.cell(row=total_row, column=6).value = f"=SUM(F3:F{end_row})"
+        sheet.cell(row=total_row, column=7).value = f"=SUM(G3:G{end_row})"
+        sheet.cell(row=total_row, column=9).value = f"=SUM(I3:I{end_row})"
+
+        sheet.row_dimensions[total_row].height = 25
+
+        # --- تحديث خانة إجمالي الديون في الأعلى ---
+        # إجمالي الديون = مجموع المبالغ (G) - مجموع المدفوعات (I)
+        sheet['J1'].value = f"=I{total_row}-G{total_row}"
+
+        # ضبط عرض الأعمدة (إذا كان ملف جديد أو للتأكيد)
+        column_widths = [15, 15, 15, 25, 13, 16, 16, 16, 13, 22]
+        for col, width in enumerate(column_widths, start=1):
+            sheet.column_dimensions[get_column_letter(col)].width = width
+
+        workbook.save(filepath)
+        return (True, None)
+
+    except PermissionError:
         return (False, "file_locked")
     except ImportError:
         return (False, "openpyxl_missing")

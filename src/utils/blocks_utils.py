@@ -20,12 +20,9 @@ TABLE2_COLUMNS = [
     "سعر النشر", "إجمالي سعر النشر", "إجمالي تكلفه البلوك"
 ]
 
-
-
 # Column width definitions for each table
 TABLE1_WIDTH = [12, 8, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]
 TABLE2_WIDTH = [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 16, 18]
-
 
 
 def export_simple_blocks_excel(rows: List[Dict]) -> str:

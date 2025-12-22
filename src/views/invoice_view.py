@@ -5,12 +5,11 @@ import json
 import re
 import sqlite3
 from datetime import datetime
-from tkinter import filedialog, messagebox
 import traceback
 import subprocess
 import platform
 import urllib.request
-import urllib.error
+from pathlib import Path
 
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -725,7 +724,8 @@ class InvoiceView:
             if not op_num:
                 dlg = ft.AlertDialog(
                     title=ft.Text("خطأ"),
-                    content=ft.Text("يرجى إدخال رقم العملية", rtl=True)
+                    content=ft.Text("يرجى إدخال رقم العملية", rtl=True),
+                    rtl=True
                 )
                 self.page.overlay.append(dlg)
                 dlg.open = True
@@ -735,7 +735,8 @@ class InvoiceView:
         except Exception as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}", rtl=True)
+                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}", rtl=True),
+                rtl=True
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -800,67 +801,17 @@ class InvoiceView:
             self.save_callback(full_path, op_num, client, driver, date_str, phone, items_data)
                 
             def open_file(e):
-                try:
-                    if platform.system() == 'Windows':
-                        # Use subprocess with Excel-specific parameters to ensure normal window state
-                        import winreg
-                        try:
-                            # Get Excel path from registry
-                            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"Excel.Application\CLSID") as key:
-                                clsid = winreg.QueryValue(key, "")
-                            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, f"CLSID\\{clsid}\\LocalServer32") as key:
-                                excel_path = winreg.QueryValue(key, "")
-                            # Open with Excel in normal window state
-                            subprocess.Popen([excel_path, '/e', full_path], shell=False)
-                        except:
-                            # Fallback to default method if registry lookup fails
-                            os.startfile(full_path)
-                    elif platform.system() == 'Darwin':
-                        subprocess.call(('open', full_path))
-                    else:
-                        subprocess.call(('xdg-open', full_path))
-                except Exception as ex:
-                    print(f"Error opening file: {ex}")
-
+                # Use our universal function to open the file
+                open_path(full_path)
             def open_folder(e):
-                try:
-                    folder_path = os.path.dirname(full_path)
-                    if platform.system() == 'Windows':
-                        # Use explorer to open folder in normal window state
-                        subprocess.Popen(['explorer', folder_path], shell=False)
-                    elif platform.system() == 'Darwin':
-                        subprocess.call(('open', folder_path))
-                    else:
-                        subprocess.call(('xdg-open', folder_path))
-                except Exception as ex:
-                    print(f"Error opening folder: {ex}")
+                # Use our universal function to open the folder
+                open_path(client_dir)
 
             def open_ledger(e):
-                try:
-                    ledger_path = os.path.join(client_dir, f"{client}.xlsx")
-                    if os.path.exists(ledger_path):
-                        if platform.system() == 'Windows':
-                            # Use subprocess with Excel-specific parameters to ensure normal window state
-                            import winreg
-                            try:
-                                # Get Excel path from registry
-                                with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"Excel.Application\CLSID") as key:
-                                    clsid = winreg.QueryValue(key, "")
-                                with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, f"CLSID\\{clsid}\\LocalServer32") as key:
-                                    excel_path = winreg.QueryValue(key, "")
-                                # Open with Excel in normal window state
-                                subprocess.Popen([excel_path, '/e', ledger_path], shell=False)
-                            except:
-                                # Fallback to default method if registry lookup fails
-                                os.startfile(ledger_path)
-                        elif platform.system() == 'Darwin':
-                            subprocess.call(('open', ledger_path))
-                        else:
-                            subprocess.call(('xdg-open', ledger_path))
-                    else:
-                        print(f"Ledger file not found: {ledger_path}")
-                except Exception as ex:
-                    print(f"Error opening ledger: {ex}")
+                # Use the correct ledger file name
+                ledger_path = os.path.join(client_dir, "كشف حساب.xlsx")
+                # Use our universal function to open the ledger file
+                open_path(ledger_path)
 
             def close_dlg(e):
                 dlg.open = False
@@ -885,7 +836,8 @@ class InvoiceView:
         except PermissionError as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", rtl=True)
+                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", rtl=True),
+                rtl=True
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -986,24 +938,15 @@ class InvoiceView:
                     print(f"Error opening file: {ex}")
 
             def open_folder(e):
-                try:
-                    folder_path = os.path.dirname(full_path)
-                    if platform.system() == 'Windows':
-                        # Use explorer to open folder in normal window state
-                        subprocess.Popen(['explorer', folder_path], shell=False)
-                    elif platform.system() == 'Darwin':
-                        subprocess.call(('open', folder_path))
-                    else:
-                        subprocess.call(('xdg-open', folder_path))
-                except Exception as ex:
-                    print(f"Error opening folder: {ex}")
+                # Use our universal function to open the folder
+                open_path(revenue_dir)
 
             def close_dlg(e):
                 dlg.open = False
                 self.page.update()
 
             dlg = ft.AlertDialog(
-                title=ft.Text("نجاح"),
+                title=ft.Text("نجاح", rtl=True),
                 content=ft.Text(f"تم حفظ فاتورة الإيراد بنجاح.\نالمسار: {full_path}", rtl=True),
                 actions=[
                     ft.TextButton("فتح الفاتورة", on_click=open_file),
@@ -1020,7 +963,8 @@ class InvoiceView:
         except PermissionError as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", rtl=True)
+                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", rtl=True),
+                rtl=True
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -1028,7 +972,8 @@ class InvoiceView:
         except Exception as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}", rtl=True)
+                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}", rtl=True),
+                rtl=True
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -1198,3 +1143,67 @@ class InvoiceView:
         
         self.page.update()
 
+
+# Add the utility functions
+def get_excel_path():
+    """
+    Get Excel executable path from Windows registry.
+    Returns None if not found.
+    """
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"Excel.Application\CLSID") as key:
+            clsid = winreg.QueryValue(key, "")
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, f"CLSID\\{clsid}\\LocalServer32") as key:
+            excel_path = winreg.QueryValue(key, "").strip('"').split('"')[0]
+            return excel_path if os.path.exists(excel_path) else None
+    except Exception:
+        return None
+
+def open_path(path, select_in_folder=False):
+    """
+    Universal function to open files or folders.
+    
+    Args:
+        path (str): Path to file or folder
+        select_in_folder (bool): If True and path is a file, opens parent folder with file selected (Windows only)
+    """
+    try:
+        if not os.path.exists(path):
+            print(f"Path not found: {path}")
+            return False
+        
+        system = platform.system()
+        is_file = os.path.isfile(path)
+        
+        if system == 'Windows':
+            if is_file and select_in_folder:
+                # Open folder with file selected
+                subprocess.Popen(['explorer', '/select,', path], shell=False)
+            elif is_file:
+                # Check if it's an Excel file
+                file_ext = Path(path).suffix.lower()
+                if file_ext in ['.xlsx', '.xls', '.xlsm', '.xlsb']:
+                    excel_path = get_excel_path()
+                    if excel_path:
+                        subprocess.Popen([excel_path, path], shell=False)
+                        return True
+                os.startfile(path)
+            else:
+                # Open folder
+                subprocess.Popen(['explorer', path], shell=False)
+                
+        elif system == 'Darwin':
+            if is_file and select_in_folder:
+                subprocess.Popen(['open', '-R', path])
+            else:
+                subprocess.Popen(['open', path])
+                
+        else:  # Linux
+            subprocess.Popen(['xdg-open', path])
+        
+        return True
+        
+    except Exception as ex:
+        print(f"Error opening path '{path}': {ex}")
+        return False

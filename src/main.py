@@ -27,7 +27,7 @@ except:
     pass
 
 from views.dashboard_view import DashboardView
-from utils.excel_utils import save_invoice
+from utils.excel_utils import save_invoice, update_client_ledger
 
 
 def save_callback(filepath, op_num, client, driver, date_str, phone, items):
@@ -43,7 +43,68 @@ def save_callback(filepath, op_num, client, driver, date_str, phone, items):
         phone (str): رقم الهاتف
         items (list): قائمة عناصر الفاتورة
     """
+    # Save the invoice
     save_invoice(filepath, op_num, client, driver, items, date_str=date_str, phone=phone)
+    
+    # Skip ledger update for "ايراد" clients
+    if "ايراد" in client:
+        return
+    
+    # Create/update client ledger
+    try:
+        # Calculate total amount from items
+        total_amount = 0
+        invoice_items_details = []
+        
+        # Process items to get details for the ledger
+        for item in items:
+            try:
+                desc = item[0] or ""
+                block = item[1] or ""
+                thickness = item[2] or ""
+                material = item[3] or ""
+                count = float(item[4])
+                length = float(item[5])
+                height = float(item[6])
+                price_val = float(item[7])
+                
+                # Calculate area and total for this item
+                area = count * length * height
+                total = area * price_val
+                
+                # Add to total amount
+                total_amount += total
+                
+                # Store item details for the ledger
+                invoice_items_details.append((
+                    desc,
+                    material,
+                    thickness,
+                    area,
+                    total
+                ))
+            except (ValueError, IndexError):
+                continue
+        
+        # Get the client folder path (parent of the invoice folder)
+        client_folder = os.path.dirname(os.path.dirname(filepath))
+        
+        # Update or create the client's ledger
+        success, error = update_client_ledger(
+            client_folder, 
+            client, 
+            date_str, 
+            op_num, 
+            total_amount, 
+            driver, 
+            invoice_items_details
+        )
+        
+        if not success:
+            print(f"Warning: Could not update client ledger: {error}")
+    except Exception as e:
+        print(f"Error updating client ledger: {e}")
+        traceback.print_exc()
 
 
 def main(page: ft.Page):
