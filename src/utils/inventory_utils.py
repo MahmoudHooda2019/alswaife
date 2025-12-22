@@ -1,5 +1,6 @@
 import os
 import openpyxl
+import traceback
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
@@ -8,83 +9,181 @@ from datetime import datetime
 
 def initialize_inventory_excel(file_path):
     """
-    Initialize the inventory Excel file with proper formatting
+    Initialize the inventory Excel file with proper formatting and formulas
     
     Args:
         file_path (str): Path to the Excel file
     """
-    # Create workbook
-    wb = Workbook()
+    print(f"[DEBUG] initialize_inventory_excel called with file: {file_path}")
+    try:
+        # Create workbook
+        wb = Workbook()
+        
+        # Remove default sheet
+        default_sheet = wb.active
+        wb.remove(default_sheet)
+        
+        # Create sheets with Arabic right-to-left orientation
+        add_sheet = wb.create_sheet("اذن الاضافه", 0)
+        disburse_sheet = wb.create_sheet("اذن الصرف", 1)
+        inventory_sheet = wb.create_sheet("المخزون", 2)
+        
+        # Set right-to-left for all sheets
+        for sheet in wb.sheetnames:
+            wb[sheet].sheet_view.rightToLeft = True
+        
+        # Define styles
+        header_font = Font(name='Arial', size=12, bold=True, color='FFFFFF')
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # Add headers to add sheet
+        add_headers = ["رقم اذن الاضافه", "تاريخ الدخول", "اسم الصنف", "العدد", "ثمن الوحدة", "الإجمالي", "ملاحظات"]
+        for col_num, header in enumerate(add_headers, 1):
+            cell = add_sheet.cell(row=1, column=col_num, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = border
+        
+        # Set column widths for add sheet
+        column_widths = [18, 15, 25, 12, 15, 15, 30]
+        for col_num, width in enumerate(column_widths, 1):
+            add_sheet.column_dimensions[get_column_letter(col_num)].width = width
+        
+        # Add headers to disburse sheet
+        disburse_headers = ["رقم اذن الصرف", "تاريخ الصرف", "اسم الصنف", "العدد", "ثمن الوحدة", "الإجمالي", "ملاحظات"]
+        for col_num, header in enumerate(disburse_headers, 1):
+            cell = disburse_sheet.cell(row=1, column=col_num, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = border
+        
+        # Set column widths for disburse sheet
+        for col_num, width in enumerate(column_widths, 1):
+            disburse_sheet.column_dimensions[get_column_letter(col_num)].width = width
+        
+        # Add headers to inventory sheet
+        inventory_headers = ["اسم الصنف", "إجمالي الإضافات", "إجمالي الصرف", "الرصيد الحالي"]
+        for col_num, header in enumerate(inventory_headers, 1):
+            cell = inventory_sheet.cell(row=1, column=col_num, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = border
+        
+        # Set column widths for inventory sheet
+        inventory_column_widths = [30, 20, 20, 20]
+        for col_num, width in enumerate(inventory_column_widths, 1):
+            inventory_sheet.column_dimensions[get_column_letter(col_num)].width = width
+        
+        # Save the workbook
+        wb.save(file_path)
+        print(f"[DEBUG] Excel file initialized successfully")
+        return wb
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize Excel file: {e}")
+        traceback.print_exc()
+        raise
+
+
+def convert_existing_inventory_to_formulas(file_path):
+    """
+    Convert an existing inventory file to use formulas instead of manual calculations
     
-    # Remove default sheet
-    default_sheet = wb.active
-    wb.remove(default_sheet)
-    
-    # Create sheets with Arabic right-to-left orientation
-    add_sheet = wb.create_sheet("اذن الاضافه", 0)
-    disburse_sheet = wb.create_sheet("اذن الصرف", 1)
-    inventory_sheet = wb.create_sheet("المخزون", 2)
-    
-    # Set right-to-left for all sheets
-    for sheet in wb.sheetnames:
-        wb[sheet].sheet_view.rightToLeft = True
-    
-    # Define styles
-    header_font = Font(name='Arial', size=12, bold=True, color='FFFFFF')
-    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-    header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    
-    border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
-    
-    # Add headers to add sheet
-    add_headers = ["رقم اذن الاضافه", "تاريخ الدخول", "اسم الصنف", "العدد", "ثمن الوحدة", "الإجمالي", "ملاحظات"]
-    for col_num, header in enumerate(add_headers, 1):
-        cell = add_sheet.cell(row=1, column=col_num, value=header)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = header_alignment
-        cell.border = border
-    
-    # Set column widths for add sheet
-    column_widths = [18, 15, 25, 12, 15, 15, 30]
-    for col_num, width in enumerate(column_widths, 1):
-        add_sheet.column_dimensions[get_column_letter(col_num)].width = width
-    
-    # Add headers to disburse sheet
-    disburse_headers = ["رقم اذن الصرف", "تاريخ الصرف", "اسم الصنف", "العدد", "ثمن الوحدة", "الإجمالي", "ملاحظات"]
-    for col_num, header in enumerate(disburse_headers, 1):
-        cell = disburse_sheet.cell(row=1, column=col_num, value=header)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = header_alignment
-        cell.border = border
-    
-    # Set column widths for disburse sheet
-    for col_num, width in enumerate(column_widths, 1):
-        disburse_sheet.column_dimensions[get_column_letter(col_num)].width = width
-    
-    # Add headers to inventory sheet
-    inventory_headers = ["اسم الصنف", "إجمالي الإضافات", "إجمالي الصرف", "الرصيد الحالي"]
-    for col_num, header in enumerate(inventory_headers, 1):
-        cell = inventory_sheet.cell(row=1, column=col_num, value=header)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = header_alignment
-        cell.border = border
-    
-    # Set column widths for inventory sheet
-    inventory_column_widths = [30, 20, 20, 20]
-    for col_num, width in enumerate(inventory_column_widths, 1):
-        inventory_sheet.column_dimensions[get_column_letter(col_num)].width = width
-    
-    # Save the workbook
-    wb.save(file_path)
-    return wb
+    Args:
+        file_path (str): Path to the Excel file
+    """
+    print(f"[DEBUG] convert_existing_inventory_to_formulas called with file: {file_path}")
+    try:
+        if not os.path.exists(file_path):
+            print(f"[DEBUG] File does not exist, creating new one")
+            # If file doesn't exist, create a new one
+            initialize_inventory_excel(file_path)
+            return
+        
+        # Load workbook
+        wb = openpyxl.load_workbook(file_path)
+        add_sheet = wb["اذن الاضافه"]
+        disburse_sheet = wb["اذن الصرف"]
+        inventory_sheet = wb["المخزون"]
+        
+        # Get all unique item names from both sheets
+        item_names = set()
+        
+        # Get items from additions sheet (skip header row)
+        for row_num in range(2, add_sheet.max_row + 1):
+            item_name = add_sheet.cell(row=row_num, column=3).value  # Item name column
+            if item_name:
+                item_names.add(item_name)
+        
+        # Get items from disbursements sheet (skip header row)
+        for row_num in range(2, disburse_sheet.max_row + 1):
+            item_name = disburse_sheet.cell(row=row_num, column=3).value  # Item name column
+            if item_name:
+                item_names.add(item_name)
+        
+        print(f"[DEBUG] Found {len(item_names)} unique items")
+        
+        # Clear existing data in inventory sheet (keep header)
+        for row_num in range(2, inventory_sheet.max_row + 1):
+            for col_num in range(1, 5):
+                inventory_sheet.cell(row=row_num, column=col_num).value = None
+        
+        # Apply styles
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Add items to inventory sheet with corrected formulas
+        for row_num, item_name in enumerate(sorted(item_names), 2):
+            # Item name
+            inventory_sheet.cell(row=row_num, column=1, value=item_name).border = border
+            inventory_sheet.cell(row=row_num, column=1).alignment = alignment
+            
+            # Formula for total additions (SUMIF from additions sheet)
+            # Using single quotes around sheet names to handle spaces
+            additions_formula = f"=SUMIF('اذن الاضافه'!C:C,\"{item_name}\",'اذن الاضافه'!D:D)"
+            inventory_sheet.cell(row=row_num, column=2).value = additions_formula
+            inventory_sheet.cell(row=row_num, column=2).border = border
+            inventory_sheet.cell(row=row_num, column=2).alignment = alignment
+            inventory_sheet.cell(row=row_num, column=2).number_format = '#,##0.00'
+            
+            # Formula for total disbursements (SUMIF from disbursements sheet)
+            # Using single quotes around sheet names to handle spaces
+            disbursements_formula = f"=SUMIF('اذن الصرف'!C:C,\"{item_name}\",'اذن الصرف'!D:D)"
+            inventory_sheet.cell(row=row_num, column=3).value = disbursements_formula
+            inventory_sheet.cell(row=row_num, column=3).border = border
+            inventory_sheet.cell(row=row_num, column=3).alignment = alignment
+            inventory_sheet.cell(row=row_num, column=3).number_format = '#,##0.00'
+            
+            # Formula for current balance (additions - disbursements)
+            balance_formula = f"=B{row_num}-C{row_num}"
+            inventory_sheet.cell(row=row_num, column=4).value = balance_formula
+            inventory_sheet.cell(row=row_num, column=4).border = border
+            inventory_sheet.cell(row=row_num, column=4).alignment = alignment
+            inventory_sheet.cell(row=row_num, column=4).number_format = '#,##0.00'
+        
+        # Save the workbook
+        wb.save(file_path)
+        print(f"[DEBUG] Formulas converted successfully")
+    except Exception as e:
+        print(f"[ERROR] Failed to convert to formulas: {e}")
+        traceback.print_exc()
+        raise
 
 
 def add_inventory_entry(file_path, item_name, quantity, unit_price, notes="", entry_date=None):
@@ -102,60 +201,67 @@ def add_inventory_entry(file_path, item_name, quantity, unit_price, notes="", en
     Returns:
         int: Entry number
     """
-    # Load workbook
-    wb = openpyxl.load_workbook(file_path)
-    add_sheet = wb["اذن الاضافه"]
-    
-    # Determine the next entry number
-    next_entry_number = add_sheet.max_row
-    
-    # Get today's date if not provided
-    if entry_date is None:
-        entry_date = datetime.now().strftime('%d/%m/%Y')
-    
-    # Calculate total price
-    total_price = float(quantity) * float(unit_price)
-    
-    # Add data row
-    row_data = [
-        next_entry_number,  # Auto entry number
-        entry_date,
-        item_name,
-        float(quantity),
-        float(unit_price),
-        total_price,
-        notes
-    ]
-    
-    # Add row to sheet
-    add_sheet.append(row_data)
-    
-    # Apply styles to the new row
-    border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
-    
-    alignment = Alignment(horizontal='center', vertical='center')
-    
-    row_num = add_sheet.max_row
-    for col_num, value in enumerate(row_data, 1):
-        cell = add_sheet.cell(row=row_num, column=col_num)
-        cell.border = border
-        cell.alignment = alignment
-        # Apply number formatting for numeric columns
-        if col_num in [4, 5, 6]:  # Quantity, Unit Price, Total Price
-            cell.number_format = '#,##0.00'
-    
-    # Save the workbook
-    wb.save(file_path)
-    
-    # Update inventory sheet
-    update_inventory_summary(file_path, item_name, float(quantity), 0)
-    
-    return next_entry_number
+    print(f"[DEBUG] add_inventory_entry called")
+    try:
+        # Load workbook
+        wb = openpyxl.load_workbook(file_path)
+        add_sheet = wb["اذن الاضافه"]
+        
+        # Determine the next entry number
+        next_entry_number = add_sheet.max_row
+        
+        # Get today's date if not provided
+        if entry_date is None:
+            entry_date = datetime.now().strftime('%d/%m/%Y')
+        
+        # Calculate total price
+        total_price = float(quantity) * float(unit_price)
+        
+        # Add data row
+        row_data = [
+            next_entry_number,  # Auto entry number
+            entry_date,
+            item_name,
+            float(quantity),
+            float(unit_price),
+            total_price,
+            notes
+        ]
+        
+        # Add row to sheet
+        add_sheet.append(row_data)
+        
+        # Apply styles to the new row
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        alignment = Alignment(horizontal='center', vertical='center')
+        
+        row_num = add_sheet.max_row
+        for col_num, value in enumerate(row_data, 1):
+            cell = add_sheet.cell(row=row_num, column=col_num)
+            cell.border = border
+            cell.alignment = alignment
+            # Apply number formatting for numeric columns
+            if col_num in [4, 5, 6]:  # Quantity, Unit Price, Total Price
+                cell.number_format = '#,##0.00'
+        
+        # Save the workbook
+        wb.save(file_path)
+        
+        # Update inventory sheet with formulas
+        convert_existing_inventory_to_formulas(file_path)
+        
+        print(f"[DEBUG] Entry added successfully with number: {next_entry_number}")
+        return next_entry_number
+    except Exception as e:
+        print(f"[ERROR] Failed to add inventory entry: {e}")
+        traceback.print_exc()
+        raise
 
 
 def disburse_inventory_entry(file_path, item_name, quantity, unit_price, notes="", disburse_date=None):
@@ -173,133 +279,72 @@ def disburse_inventory_entry(file_path, item_name, quantity, unit_price, notes="
     Returns:
         int: Disbursement entry number
     """
-    # Load workbook
-    wb = openpyxl.load_workbook(file_path)
-    disburse_sheet = wb["اذن الصرف"]
-    
-    # Determine the next entry number
-    next_entry_number = disburse_sheet.max_row
-    
-    # Get today's date if not provided
-    if disburse_date is None:
-        disburse_date = datetime.now().strftime('%d/%m/%Y')
-    
-    # Calculate total price
-    total_price = float(quantity) * float(unit_price)
-    
-    # Add data row
-    row_data = [
-        next_entry_number,  # Auto entry number
-        disburse_date,
-        item_name,
-        float(quantity),
-        float(unit_price),
-        total_price,
-        notes
-    ]
-    
-    # Add row to sheet
-    disburse_sheet.append(row_data)
-    
-    # Apply styles to the new row
-    border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
-    
-    alignment = Alignment(horizontal='center', vertical='center')
-    
-    row_num = disburse_sheet.max_row
-    for col_num, value in enumerate(row_data, 1):
-        cell = disburse_sheet.cell(row=row_num, column=col_num)
-        cell.border = border
-        cell.alignment = alignment
-        # Apply number formatting for numeric columns
-        if col_num in [4, 5, 6]:  # Quantity, Unit Price, Total Price
-            cell.number_format = '#,##0.00'
-    
-    # Save the workbook
-    wb.save(file_path)
-    
-    # Update inventory sheet
-    update_inventory_summary(file_path, item_name, 0, float(quantity))
-    
-    return next_entry_number
-
-
-def update_inventory_summary(file_path, item_name, added_quantity, disbursed_quantity):
-    """
-    Update the inventory summary sheet
-    
-    Args:
-        file_path (str): Path to the Excel file
-        item_name (str): Name of the item
-        added_quantity (float): Quantity added
-        disbursed_quantity (float): Quantity disbursed
-    """
-    # Load workbook
-    wb = openpyxl.load_workbook(file_path)
-    inventory_sheet = wb["المخزون"]
-    
-    # Find if item already exists in inventory sheet
-    item_row = None
-    for row_num in range(2, inventory_sheet.max_row + 1):
-        if inventory_sheet.cell(row=row_num, column=1).value == item_name:
-            item_row = row_num
-            break
-    
-    # If item doesn't exist, add it
-    if item_row is None:
-        item_row = inventory_sheet.max_row + 1
-        inventory_sheet.cell(row=item_row, column=1, value=item_name)
-    
-    # Get current values
-    current_additions = inventory_sheet.cell(row=item_row, column=2).value or 0
-    current_disbursements = inventory_sheet.cell(row=item_row, column=3).value or 0
-    
-    # Update values
-    new_additions = float(current_additions) + added_quantity
-    new_disbursements = float(current_disbursements) + disbursed_quantity
-    balance = new_additions - new_disbursements
-    
-    # Apply styles
-    border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
-    
-    alignment = Alignment(horizontal='center', vertical='center')
-    
-    # Update cells
-    inventory_sheet.cell(row=item_row, column=2, value=new_additions).border = border
-    inventory_sheet.cell(row=item_row, column=3, value=new_disbursements).border = border
-    inventory_sheet.cell(row=item_row, column=4, value=balance).border = border
-    
-    # Apply number formatting
-    for col in range(2, 5):
-        inventory_sheet.cell(row=item_row, column=col).number_format = '#,##0.00'
-        inventory_sheet.cell(row=item_row, column=col).alignment = alignment
-    
-    # Color the balance cell based on value
-    balance_cell = inventory_sheet.cell(row=item_row, column=4)
-    if balance > 0:
-        balance_cell.fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')  # Green
-    elif balance < 0:
-        balance_cell.fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')  # Red
-    else:
-        balance_cell.fill = PatternFill(start_color='FFEB9C', end_color='FFEB9C', fill_type='solid')  # Yellow
-    
-    # Save the workbook
-    wb.save(file_path)
+    print(f"[DEBUG] disburse_inventory_entry called")
+    try:
+        # Load workbook
+        wb = openpyxl.load_workbook(file_path)
+        disburse_sheet = wb["اذن الصرف"]
+        
+        # Determine the next entry number
+        next_entry_number = disburse_sheet.max_row
+        
+        # Get today's date if not provided
+        if disburse_date is None:
+            disburse_date = datetime.now().strftime('%d/%m/%Y')
+        
+        # Calculate total price
+        total_price = float(quantity) * float(unit_price)
+        
+        # Add data row
+        row_data = [
+            next_entry_number,  # Auto entry number
+            disburse_date,
+            item_name,
+            float(quantity),
+            float(unit_price),
+            total_price,
+            notes
+        ]
+        
+        # Add row to sheet
+        disburse_sheet.append(row_data)
+        
+        # Apply styles to the new row
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        alignment = Alignment(horizontal='center', vertical='center')
+        
+        row_num = disburse_sheet.max_row
+        for col_num, value in enumerate(row_data, 1):
+            cell = disburse_sheet.cell(row=row_num, column=col_num)
+            cell.border = border
+            cell.alignment = alignment
+            # Apply number formatting for numeric columns
+            if col_num in [4, 5, 6]:  # Quantity, Unit Price, Total Price
+                cell.number_format = '#,##0.00'
+        
+        # Save the workbook
+        wb.save(file_path)
+        
+        # Update inventory sheet with formulas
+        convert_existing_inventory_to_formulas(file_path)
+        
+        print(f"[DEBUG] Disbursement entry added successfully with number: {next_entry_number}")
+        return next_entry_number
+    except Exception as e:
+        print(f"[ERROR] Failed to add disbursement entry: {e}")
+        traceback.print_exc()
+        raise
 
 
 def get_inventory_summary(file_path):
     """
-    Get inventory summary data
+    Get inventory summary data by evaluating formulas
     
     Args:
         file_path (str): Path to the Excel file
@@ -307,20 +352,126 @@ def get_inventory_summary(file_path):
     Returns:
         list: List of dictionaries containing inventory data
     """
+    print(f"[DEBUG] get_inventory_summary called with file: {file_path}")
     if not os.path.exists(file_path):
+        print(f"[DEBUG] File does not exist")
         return []
     
-    wb = openpyxl.load_workbook(file_path)
-    inventory_sheet = wb["المخزون"]
+    try:
+        wb = openpyxl.load_workbook(file_path, data_only=True)  # data_only=True to get calculated values
+        inventory_sheet = wb["المخزون"]
+        
+        inventory_data = []
+        for row_num in range(2, inventory_sheet.max_row + 1):
+            item_name = inventory_sheet.cell(row=row_num, column=1).value
+            if item_name:  # Only process rows with item names
+                total_additions = inventory_sheet.cell(row=row_num, column=2).value or 0
+                total_disbursements = inventory_sheet.cell(row=row_num, column=3).value or 0
+                current_balance = inventory_sheet.cell(row=row_num, column=4).value or 0
+                
+                # Convert to float and handle None values
+                try:
+                    total_additions = float(total_additions)
+                except (ValueError, TypeError):
+                    total_additions = 0
+                    
+                try:
+                    total_disbursements = float(total_disbursements)
+                except (ValueError, TypeError):
+                    total_disbursements = 0
+                    
+                try:
+                    current_balance = float(current_balance)
+                except (ValueError, TypeError):
+                    current_balance = 0
+                
+                item_data = {
+                    'item_name': item_name,
+                    'total_additions': total_additions,
+                    'total_disbursements': total_disbursements,
+                    'current_balance': current_balance
+                }
+                inventory_data.append(item_data)
+        
+        print(f"[DEBUG] Retrieved {len(inventory_data)} inventory items")
+        return inventory_data
+    except Exception as e:
+        print(f"[ERROR] Error reading inventory summary: {e}")
+        traceback.print_exc()
+        return []
+
+
+def get_available_items_with_prices(file_path):
+    """
+    Get available items with their average unit prices from additions
     
-    inventory_data = []
-    for row_num in range(2, inventory_sheet.max_row + 1):
-        item_data = {
-            'item_name': inventory_sheet.cell(row=row_num, column=1).value,
-            'total_additions': inventory_sheet.cell(row=row_num, column=2).value or 0,
-            'total_disbursements': inventory_sheet.cell(row=row_num, column=3).value or 0,
-            'current_balance': inventory_sheet.cell(row=row_num, column=4).value or 0
-        }
-        inventory_data.append(item_data)
+    Args:
+        file_path (str): Path to the Excel file
+        
+    Returns:
+        dict: Dictionary with item names as keys and average unit prices as values
+    """
+    print(f"[DEBUG] get_available_items_with_prices called with file: {file_path}")
+    if not os.path.exists(file_path):
+        print(f"[DEBUG] File does not exist")
+        return {}
     
-    return inventory_data
+    try:
+        wb = openpyxl.load_workbook(file_path, data_only=True)  # data_only=True to get calculated values
+        add_sheet = wb["اذن الاضافه"]
+        inventory_sheet = wb["المخزون"]
+        
+        # Get current inventory balances
+        inventory_balances = {}
+        for row_num in range(2, inventory_sheet.max_row + 1):
+            item_name = inventory_sheet.cell(row=row_num, column=1).value
+            if item_name:  # Only process rows with item names
+                balance = inventory_sheet.cell(row=row_num, column=4).value or 0
+                try:
+                    inventory_balances[item_name] = float(balance)
+                except (ValueError, TypeError):
+                    inventory_balances[item_name] = 0
+        
+        print(f"[DEBUG] Inventory balances: {inventory_balances}")
+        
+        # Get item prices from additions
+        item_prices = {}
+        item_quantities = {}
+        
+        # Skip header row (row 1)
+        for row_num in range(2, add_sheet.max_row + 1):
+            item_name = add_sheet.cell(row=row_num, column=3).value  # Item name column
+            quantity = add_sheet.cell(row=row_num, column=4).value or 0  # Quantity column
+            unit_price = add_sheet.cell(row=row_num, column=5).value or 0  # Unit price column
+            
+            try:
+                quantity = float(quantity)
+                unit_price = float(unit_price)
+            except (ValueError, TypeError):
+                continue  # Skip invalid rows
+            
+            if item_name and quantity > 0:
+                # Only include items that have positive balance in inventory
+                if inventory_balances.get(item_name, 0) > 0:
+                    if item_name not in item_prices:
+                        item_prices[item_name] = 0
+                        item_quantities[item_name] = 0
+                    
+                    # Accumulate weighted prices
+                    item_prices[item_name] += unit_price * quantity
+                    item_quantities[item_name] += quantity
+        
+        # Calculate average prices
+        avg_prices = {}
+        for item_name in item_prices:
+            if item_quantities[item_name] > 0:
+                avg_prices[item_name] = item_prices[item_name] / item_quantities[item_name]
+            else:
+                avg_prices[item_name] = 0
+        
+        print(f"[DEBUG] Available items with prices: {avg_prices}")
+        return avg_prices
+    except Exception as e:
+        print(f"[ERROR] Error getting available items with prices: {e}")
+        traceback.print_exc()
+        return {}

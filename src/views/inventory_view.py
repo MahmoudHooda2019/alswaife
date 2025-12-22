@@ -2,7 +2,7 @@ import flet as ft
 import os
 from datetime import datetime
 from utils.path_utils import resource_path
-from utils.inventory_utils import initialize_inventory_excel, add_inventory_entry
+from utils.inventory_utils import initialize_inventory_excel, add_inventory_entry, convert_existing_inventory_to_formulas
 
 
 class InventoryAddView:
@@ -250,6 +250,12 @@ class InventoryAddView:
             # Initialize Excel file if it doesn't exist
             if not os.path.exists(excel_file):
                 initialize_inventory_excel(excel_file)
+            else:
+                # Convert existing file to use formulas
+                try:
+                    convert_existing_inventory_to_formulas(excel_file)
+                except:
+                    pass  # If conversion fails, continue with existing data
             
             # Add entry using utility function
             entry_number = add_inventory_entry(
