@@ -4,8 +4,9 @@ from views.invoice_view import InvoiceView
 from views.attendance_view import AttendanceView
 from views.blocks_view import BlocksView
 from views.purchases_view import PurchasesView
-from views.inventory_view import InventoryAddView
+from views.inventory_add_view import InventoryAddView
 from views.inventory_disburse_view import InventoryDisburseView
+from views.slides_add_view import SlidesAddView
 from utils.path_utils import resource_path
 
 class DashboardView:
@@ -37,11 +38,11 @@ class DashboardView:
                     controls=[
                         self.create_menu_card("إدارة الفواتير", ft.Icons.RECEIPT_LONG, self.open_invoices, ft.Colors.BLUE_700),
                         self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.GREEN_700),
-                        self.create_menu_card("البلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
+                        self.create_menu_card("إضافة بلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
                         self.create_menu_card("المشتريات", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
-                        # Removed the single inventory card and added two separate cards
                         self.create_menu_card("إضافة للمخزون", ft.Icons.ADD_SHOPPING_CART, self.open_inventory_add, ft.Colors.GREEN_700),
                         self.create_menu_card("صرف من المخزون", ft.Icons.REMOVE_SHOPPING_CART, self.open_inventory_disburse, ft.Colors.RED_700),
+                        self.create_menu_card("إضافة شرائح", ft.Icons.ADD, self.open_slides_add, ft.Colors.BLUE_700),
                         self.create_menu_card("العملاء", ft.Icons.PEOPLE, None, ft.Colors.PURPLE_700),
                         self.create_menu_card("الإعدادات", ft.Icons.SETTINGS, None, ft.Colors.RED_700),
                         self.create_menu_card("التقارير", ft.Icons.ASSESSMENT, None, ft.Colors.TEAL_700),
@@ -74,11 +75,12 @@ class DashboardView:
                     controls=[
                         self.create_menu_card("إدارة الفواتير", ft.Icons.RECEIPT_LONG, self.open_invoices, ft.Colors.BLUE_700),
                         self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.GREEN_700),
-                        self.create_menu_card("البلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
+                        self.create_menu_card("إضافة بلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
                         self.create_menu_card("المشتريات", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
                         # Removed the single inventory card and added two separate cards
                         self.create_menu_card("إضافة للمخزون", ft.Icons.ADD_SHOPPING_CART, self.open_inventory_add, ft.Colors.GREEN_700),
                         self.create_menu_card("صرف من المخزون", ft.Icons.REMOVE_SHOPPING_CART, self.open_inventory_disburse, ft.Colors.RED_700),
+                        self.create_menu_card("إضافة شرائح", ft.Icons.ADD, self.open_slides_add, ft.Colors.BLUE_700),
                         self.create_menu_card("العملاء", ft.Icons.PEOPLE, None, ft.Colors.PURPLE_700),
                         self.create_menu_card("الإعدادات", ft.Icons.SETTINGS, None, ft.Colors.RED_700),
                         self.create_menu_card("التقارير", ft.Icons.ASSESSMENT, None, ft.Colors.TEAL_700),
@@ -203,6 +205,23 @@ class DashboardView:
         self.page.clean()
         inventory_view = InventoryDisburseView(self.page, on_back=self.go_back_to_inventory)
         inventory_view.build_ui()
+        self.page.update()
+
+
+    def open_slides_add(self, e):
+        """Open add slides inventory dialog"""
+
+        # Close any open dialogs first
+        for overlay in self.page.overlay:
+            if hasattr(overlay, 'open') and overlay.open:
+                overlay.open = False
+        self.page.update()
+        # Store reference to self for back navigation
+        self.page._dashboard_ref = self
+        # Clear page and load SlidesAddView directly
+        self.page.clean()
+        slides_view = SlidesAddView(self.page, on_back=self.go_back_to_inventory)
+        slides_view.build_ui()
         self.page.update()
 
 

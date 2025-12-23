@@ -42,26 +42,26 @@ class InventoryAddView:
         self.unit_price_field = ft.TextField(
             label="ثمن الوحدة",
             width=150,
-            keyboard_type=ft.KeyboardType.NUMBER
+            keyboard_type=ft.KeyboardType.NUMBER,
+            on_change=self.calculate_total
         )
         
         self.total_price_field = ft.TextField(
             label="الإجمالي",
             width=150,
-            read_only=True
+            read_only=True,
+            value="0"
         )
         
         self.notes_field = ft.TextField(
             label="ملاحظات",
-            width=300,
+            width=500,
             multiline=True,
-            min_lines=2,
             max_lines=3
         )
         
         # Bind events
         self.quantity_field.on_change = self.calculate_total
-        self.unit_price_field.on_change = self.calculate_total
 
     def calculate_total(self, e):
         """Calculate total price based on quantity and unit price"""
@@ -74,8 +74,95 @@ class InventoryAddView:
             self.total_price_field.value = "0"
         self.page.update()
 
+    def show_dialog(self, title, message, color=ft.Colors.GREEN_400):
+        """Show a dialog with the given message"""
+        def close_dlg(e):
+            dlg.open = False
+            self.page.update()
+        
+        dlg = ft.AlertDialog(
+            title=ft.Text(title),
+            content=ft.Text(message, rtl=True),
+            actions=[
+                ft.TextButton("حسناً", on_click=close_dlg)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def save_inventory(self, e):
+        """Save inventory entry to Excel file"""
+        print(f"[DEBUG] Saving inventory entry")
+        
+        # Validate inputs
+        if not self.item_name_field.value:
+            self.show_dialog("تحذير", "الرجاء إدخال اسم الصنف", ft.Colors.RED_400)
+            return
+        
+        if not self.quantity_field.value:
+            self.show_dialog("تحذير", "الرجاء إدخال العدد", ft.Colors.RED_400)
+            return
+        
+        try:
+            quantity = float(self.quantity_field.value)
+            if quantity <= 0:
+                self.show_dialog("تحذير", "العدد يجب أن يكون أكبر من صفر", ft.Colors.RED_400)
+                return
+        except ValueError:
+            self.show_dialog("تحذير", "الرجاء إدخال عدد صحيح", ft.Colors.RED_400)
+            return
+        
+        try:
+            unit_price = float(self.unit_price_field.value) if self.unit_price_field.value else 0
+        except ValueError:
+            self.show_dialog("تحذير", "الرجاء إدخال سعر صحيح", ft.Colors.RED_400)
+            return
+        
+        # Save to Excel file using the utility function
+        try:
+            excel_file = os.path.join(self.inventory_path, "مخزون ادوات التشغيل.xlsx")
+            
+            # Initialize Excel file if it doesn't exist
+            if not os.path.exists(excel_file):
+                print(f"[DEBUG] Initializing new Excel file")
+                initialize_inventory_excel(excel_file)
+            else:
+                # Convert existing file to use formulas
+                try:
+                    convert_existing_inventory_to_formulas(excel_file)
+                except:
+                    pass  # If conversion fails, continue with existing data
+            
+            # Add inventory entry using utility function
+            print(f"[DEBUG] Adding inventory entry")
+            entry_number = add_inventory_entry(
+                file_path=excel_file,
+                item_name=self.item_name_field.value,
+                quantity=self.quantity_field.value,
+                unit_price=self.unit_price_field.value,
+                notes=self.notes_field.value,
+                entry_date=self.date_field.value
+            )
+            print(f"[DEBUG] Entry added with number: {entry_number}")
+            
+            # Clear form
+            self.item_name_field.value = ""
+            self.quantity_field.value = ""
+            self.unit_price_field.value = ""
+            self.total_price_field.value = "0"
+            self.notes_field.value = ""
+            
+            self.show_dialog("نجاح", f"تم حفظ إذن الإضافة برقم: {entry_number}")
+            
+        except Exception as e:
+            print(f"[ERROR] Error saving inventory: {e}")
+            self.show_dialog("خطأ", "حدث خطأ أثناء حفظ البيانات", ft.Colors.RED_400)
+
     def go_back(self, e):
         """Navigate back to main dashboard"""
+        print(f"[DEBUG] Going back")
         if self.on_back:
             self.on_back()
         else:
@@ -234,108 +321,4 @@ class InventoryAddView:
         
         self.page.clean()
         self.page.add(main_layout)
-        self.page.update()
-
-    def save_inventory(self, e):
-        """Save inventory record to Excel file"""
-        # Validate required fields
-        if not self.item_name_field.value or not self.quantity_field.value or not self.unit_price_field.value:
-            self.show_dialog("خطأ", "يرجى ملء جميع الحقول المطلوبة", ft.Colors.RED_400)
-            return
-            
-        # Save to Excel file using the utility function
-        excel_file = os.path.join(self.inventory_path, "مخزون ادوات التشغيل.xlsx")
-        
-        try:
-            # Initialize Excel file if it doesn't exist
-            if not os.path.exists(excel_file):
-                initialize_inventory_excel(excel_file)
-            else:
-                # Convert existing file to use formulas
-                try:
-                    convert_existing_inventory_to_formulas(excel_file)
-                except:
-                    pass  # If conversion fails, continue with existing data
-            
-            # Add entry using utility function
-            entry_number = add_inventory_entry(
-                file_path=excel_file,
-                item_name=self.item_name_field.value,
-                quantity=self.quantity_field.value,
-                unit_price=self.unit_price_field.value,
-                notes=self.notes_field.value,
-                entry_date=self.date_field.value
-            )
-            
-            # Clear form
-            self.item_name_field.value = ""
-            self.quantity_field.value = ""
-            self.unit_price_field.value = ""
-            self.total_price_field.value = ""
-            self.notes_field.value = ""
-            
-            self.page.update()
-            self.show_success_dialog(excel_file)
-            
-        except PermissionError as e:
-            self.show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
-        except Exception as e:
-            self.show_dialog("خطأ", f"حدث خطأ أثناء حفظ البيانات: {str(e)}", ft.Colors.RED_400)
-
-    def show_success_dialog(self, file_path):
-        """Show success dialog with file path"""
-        def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            
-        def open_file(e):
-            dlg.open = False
-            self.page.update()
-            os.startfile(file_path)
-            
-        def open_folder(e):
-            dlg.open = False
-            self.page.update()
-            os.startfile(os.path.dirname(file_path))
-            
-        dlg = ft.AlertDialog(
-            title=ft.Text("تم الحفظ بنجاح", color=ft.Colors.GREEN_400),
-            content=ft.Text("تم حفظ بيانات الإضافة إلى ملف Excel"),
-            actions=[
-                ft.TextButton(
-                    "فتح الملف",
-                    on_click=open_file,
-                    icon=ft.Icons.FILE_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.GREEN_300)
-                ),
-                ft.TextButton(
-                    "فتح المجلد",
-                    on_click=open_folder,
-                    icon=ft.Icons.FOLDER_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
-                ),
-                ft.TextButton("حسناً", on_click=close_dlg)
-            ],
-            actions_alignment=ft.MainAxisAlignment.END
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
-
-    def show_dialog(self, title, message, color):
-        """Show a dialog with a message"""
-        def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            
-        dlg = ft.AlertDialog(
-            title=ft.Text(title, color=color),
-            content=ft.Text(message),
-            actions=[
-                ft.TextButton("حسناً", on_click=close_dlg)
-            ],
-            actions_alignment=ft.MainAxisAlignment.END
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
         self.page.update()

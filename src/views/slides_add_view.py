@@ -1,20 +1,30 @@
+import flet as ft
+import json
 import os
 from datetime import datetime
-from pickle import TRUE
-import flet as ft
-from openpyxl import load_workbook
-import xlsxwriter
-import traceback
+from utils.path_utils import resource_path
+from utils.slides_utils import initialize_slides_inventory_excel, add_slides_inventory_entry, convert_existing_slides_inventory_to_formulas
 
-from utils.blocks_utils import export_simple_blocks_excel
 
-class BlockRow:
-    """Row UI for block entry with improved styling"""
-    
+class SlideRow:
+    """Row UI for slide entry with styling similar to blocks view"""
+
     MATERIAL_OPTIONS = [
         ft.dropdown.Option("نيو حلايب"),
         ft.dropdown.Option("جندولا"),
         ft.dropdown.Option("احمر اسوان"),
+    ]
+
+    MACHINE_OPTIONS = [
+        ft.dropdown.Option("1"),
+        ft.dropdown.Option("2"),
+        ft.dropdown.Option("3"),
+    ]
+
+    THICKNESS_OPTIONS = [
+        ft.dropdown.Option("2سم"),
+        ft.dropdown.Option("3سم"),
+        ft.dropdown.Option("4سم"),
     ]
 
     def __init__(self, page: ft.Page, delete_callback, data=None):
@@ -66,41 +76,17 @@ class BlockRow:
         width_small = 130
         width_medium = 160
         width_large = 190
-        numeric_filter = ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*$")
-        
-        # Trip number
-        self.trip_number = self._create_styled_textfield(
-            "رقم النقله",
-            width_small,
-            on_change=self._on_field_change,
-            icon=ft.Icons.NUMBERS
-        )
-        
-        # Trip count
-        self.trip_count = self._create_styled_textfield(
-            "عدد النقله",
-            width_small,
-            on_change=self._on_field_change,
-            icon=ft.Icons.TAG
-        )
-        
-        # Date field
-        self.date_field = self._create_styled_textfield(
-            "التاريخ",
+        numeric_filter = ft.InputFilter(regex_string=r"^[0-9]*$")
+
+        # Publishing date
+        self.publishing_date = self._create_styled_textfield(
+            "تاريخ النشر",
             width_medium,
             value=datetime.now().strftime("%Y-%m-%d"),
             read_only=True,
             icon=ft.Icons.CALENDAR_TODAY
         )
-        
-        # Quarry
-        self.quarry = self._create_styled_textfield(
-            "المحجر",
-            width_medium,
-            on_change=self._on_field_change,
-            icon=ft.Icons.LOCATION_CITY
-        )
-        
+
         # Block number
         self.block_number = self._create_styled_textfield(
             "رقم البلوك",
@@ -108,82 +94,83 @@ class BlockRow:
             on_change=self.on_block_change,
             icon=ft.Icons.NUMBERS
         )
-        
+
         # Material dropdown
         self.material_dropdown = self._create_styled_dropdown(
-            "الخامه",
+            "النوع",
             width_medium,
             self.MATERIAL_OPTIONS,
             on_change=self._on_material_change,
             icon=ft.Icons.CATEGORY
         )
-        
+
+        # Machine number dropdown
+        self.machine_number = self._create_styled_dropdown(
+            "رقم المكينه",
+            width_small,
+            self.MACHINE_OPTIONS,
+            icon=ft.Icons.SETTINGS
+        )
+
+        # Quantity
+        self.quantity_field = self._create_styled_textfield(
+            "عدد",
+            width_small,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=numeric_filter,
+            on_change=self._on_field_change,
+            icon=ft.Icons.NUMBERS
+        )
+
         # Length
         self.length_field = self._create_styled_textfield(
             "الطول",
             width_small,
             keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=numeric_filter,
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز*$"),
             on_change=self._on_field_change,
             suffix_text="م"
         )
-        
-        # Width
-        self.width_field = self._create_styled_textfield(
-            "العرض",
-            width_small,
-            keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=numeric_filter,
-            on_change=self._on_field_change,
-            suffix_text="م"
-        )
-        
+
         # Height
         self.height_field = self._create_styled_textfield(
             "الارتفاع",
             width_small,
             keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=numeric_filter,
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز*$"),
             on_change=self._on_field_change,
             suffix_text="م"
         )
-        
-        # Volume (م3) - read-only, calculated automatically
-        self.volume_field = self._create_styled_textfield(
-            "م3",
+
+        # Thickness dropdown
+        self.thickness_dropdown = self._create_styled_dropdown(
+            "السمك",
+            width_small,
+            self.THICKNESS_OPTIONS,
+            on_change=self._on_thickness_change,
+            icon=ft.Icons.LINE_WEIGHT
+        )
+
+        # Area (م2) - read-only, calculated automatically
+        self.area_field = self._create_styled_textfield(
+            "م2",
             width_small,
             read_only=True,
             icon=ft.Icons.CALCULATE,
             value="0.00"
         )
-        
-        # Weight per m3 - read-only, based on material
-        self.weight_per_m3_field = self._create_styled_textfield(
-            "الوزن",
-            width_small,
-            read_only=True,
-            icon=ft.Icons.SCALE,
-            value="0.00"
-        )
-        
-        # Block weight - read-only, calculated automatically
-        self.block_weight_field = self._create_styled_textfield(
-            "وزن البلوك",
+
+        # Price per meter - editable, with default based on material and thickness
+        self.price_per_meter_field = self._create_styled_textfield(
+            "سعر المتر",
             width_medium,
-            read_only=True,
-            icon=ft.Icons.SCALE,
-            value="0.00"
-        )
-        
-        # Price per ton - read-only, based on material
-        self.price_per_ton_field = self._create_styled_textfield(
-            "سعر الطن",
-            width_medium,
-            read_only=True,
             icon=ft.Icons.ATTACH_MONEY,
-            value="0.00"
+            value="0.00",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*$"),
+            on_change=self._on_field_change
         )
-        
+
         # Total price - read-only, calculated automatically
         self.total_price_field = self._create_styled_textfield(
             "اجمالي السعر",
@@ -192,7 +179,30 @@ class BlockRow:
             icon=ft.Icons.ATTACH_MONEY,
             value="0.00"
         )
-        
+
+        # Entry time
+        self.entry_time = self._create_styled_textfield(
+            "وقت الدخول",
+            width_medium,
+            icon=ft.Icons.ACCESS_TIME
+        )
+
+        # Exit time
+        self.exit_time = self._create_styled_textfield(
+            "وقت الخروج",
+            width_medium,
+            icon=ft.Icons.ACCESS_TIME
+        )
+
+        # Hours count - read-only, calculated automatically
+        self.hours_count = self._create_styled_textfield(
+            "عدد الساعات",
+            width_small,
+            read_only=True,
+            icon=ft.Icons.TIMER,
+            value="0.00"
+        )
+
         # Delete button
         self.delete_btn = ft.IconButton(
             icon=ft.Icons.DELETE_OUTLINE,
@@ -205,7 +215,7 @@ class BlockRow:
                 shape=ft.RoundedRectangleBorder(radius=10)
             )
         )
-        
+
         # Section header style
         def create_section_header(text, color):
             return ft.Container(
@@ -228,7 +238,7 @@ class BlockRow:
                 ),
                 margin=ft.margin.only(bottom=10)
             )
-        
+
         # Create the main card with gradient background
         self.card = ft.Card(
             content=ft.Container(
@@ -250,19 +260,10 @@ class BlockRow:
                         
                         ft.Row(
                             controls=[
-                                self.trip_number,
-                                self.trip_count,
-                                self.date_field,
-                                self.quarry,
-                            ],
-                            spacing=15,
-                            wrap=True
-                        ),
-                        
-                        ft.Row(
-                            controls=[
+                                self.publishing_date,
                                 self.block_number,
                                 self.material_dropdown,
+                                self.machine_number,
                             ],
                             spacing=15,
                             wrap=True
@@ -275,10 +276,10 @@ class BlockRow:
                         
                         ft.Row(
                             controls=[
+                                self.quantity_field,
                                 self.length_field,
-                                self.width_field,
                                 self.height_field,
-                                self.volume_field,
+                                self.thickness_dropdown,
                             ],
                             spacing=15,
                             wrap=True
@@ -291,10 +292,24 @@ class BlockRow:
                         
                         ft.Row(
                             controls=[
-                                self.weight_per_m3_field,
-                                self.block_weight_field,
-                                self.price_per_ton_field,
+                                self.area_field,
+                                self.price_per_meter_field,
                                 self.total_price_field,
+                            ],
+                            spacing=15,
+                            wrap=True
+                        ),
+                        
+                        ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
+                        
+                        # Time Section
+                        create_section_header("أوقات التشغيل", ft.Colors.PURPLE_400),
+                        
+                        ft.Row(
+                            controls=[
+                                self.entry_time,
+                                self.exit_time,
+                                self.hours_count,
                             ],
                             spacing=15,
                             wrap=True
@@ -313,13 +328,30 @@ class BlockRow:
             ),
             elevation=8,
         )
-        
+
         self.row = self.card
 
+    def _on_field_change(self, e=None):
+        """Handle field changes and trigger calculations"""
+        # Replace 'ز' with decimal point in length and height fields
+        if e and e.control == self.length_field and self.length_field.value:
+            new_value = self.length_field.value.replace('ز', '.')
+            if new_value != self.length_field.value:
+                self.length_field.value = new_value
+        elif e and e.control == self.height_field and self.height_field.value:
+            new_value = self.height_field.value.replace('ز', '.')
+            if new_value != self.height_field.value:
+                self.height_field.value = new_value
+        
+        self._calculate_values()
+    
     def on_block_change(self, e):
         """Handle block number changes and replace Arabic characters with English equivalents"""
         val = self.block_number.value
         if val:
+            # Replace Arabic characters with their English counterparts
+            # 'ش' is 'a' on Arabic keyboard
+            # 'لا' (lam-alif) is 'b' on Arabic keyboard
             new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B').replace('ِ', 'A').replace('لآ', 'B')
             if new_val != val:
                 self.block_number.value = new_val
@@ -329,130 +361,186 @@ class BlockRow:
         # Always trigger calculations after any change
         self._calculate_values()
 
-    def _on_field_change(self, e=None):
-        """Handle field changes and trigger calculations"""
-        self._calculate_values()
-    
     def _on_material_change(self, e=None):
-        """Handle material change and update weight per m3 and price per ton"""
+        """Handle material change and update price per meter"""
         material = self.material_dropdown.value
+        thickness = self.thickness_dropdown.value
         
-        if material == "نيو حلايب":
-            self.weight_per_m3_field.value = "2.70"
-            self.price_per_ton_field.value = "1150"
-        elif material == "جندولا":
-            self.weight_per_m3_field.value = "2.85"
-            self.price_per_ton_field.value = "1500"
-        elif material == "احمر اسوان":
-            self.weight_per_m3_field.value = "0"
-            self.price_per_ton_field.value = "0"
-            
+        if material and thickness:
+            # Extract numeric part from thickness (e.g., "2سم" -> "2")
+            thickness_value = ''.join(filter(str.isdigit, thickness))
+            price = self._get_price_from_json(material, thickness_value)
+            # Only update if the field is empty or has the default value
+            if not self.price_per_meter_field.value or self.price_per_meter_field.value == "0.00":
+                self.price_per_meter_field.value = str(price)
+        
         self._calculate_values()
         self.page.update()
-    
+
+    def _on_thickness_change(self, e=None):
+        """Handle thickness change and update price per meter"""
+        self._on_material_change(e)
+
+    def _get_price_from_json(self, material, thickness_value):
+        """Get price from slides_products.json based on material and thickness"""
+        try:
+            # Load the JSON file - path relative to project root
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            json_path = os.path.join(project_root, "data", "slides_products.json")
+            with open(json_path, 'r', encoding='utf-8') as f:
+                products = json.load(f)
+            
+            # Find the material in the products list
+            for product in products:
+                if product["name"] == material:
+                    prices = product["prices"]
+                    if thickness_value in prices:
+                        price_data = prices[thickness_value]
+                        
+                        # Handle different price structures (list or direct value)
+                        if isinstance(price_data, list):
+                            # For complex pricing with ranges, return first price
+                            if len(price_data) > 0 and isinstance(price_data[0], dict) and 'price' in price_data[0]:
+                                return price_data[0]['price']
+                            else:
+                                return 0
+                        elif isinstance(price_data, (int, float)):
+                            return price_data
+                        else:
+                            return 0
+                    else:
+                        return 0
+            return 0
+        except Exception as e:
+            print(f"[ERROR] Error getting price from JSON: {e}")
+            return 0
+
     def _calculate_values(self):
         """Calculate all dependent values with error handling"""
         try:
             # Get numeric values with error handling
+            quantity = int(self.quantity_field.value) if self.quantity_field.value else 0
             length = float(self.length_field.value) if self.length_field.value else 0
-            width = float(self.width_field.value) if self.width_field.value else 0
             height = float(self.height_field.value) if self.height_field.value else 0
-            weight_per_m3 = float(self.weight_per_m3_field.value) if self.weight_per_m3_field.value else 0
-            price_per_ton = float(self.price_per_ton_field.value) if self.price_per_ton_field.value else 0
+            price_per_meter = float(self.price_per_meter_field.value) if self.price_per_meter_field.value else 0
             
-            # Calculate volume (م3) = length * width * height
-            volume = length * width * height
-            self.volume_field.value = f"{volume:.2f}"
+            # Calculate area (م2) = length * height * quantity
+            area = length * height * quantity
+            self.area_field.value = f"{area:.2f}"
             
-            # Calculate block weight = volume * weight_per_m3
-            block_weight = volume * weight_per_m3
-            self.block_weight_field.value = f"{block_weight:.2f}"
-            
-            # Calculate total price = price_per_ton * block_weight
-            total_price = price_per_ton * block_weight
+            # Calculate total price = area * price_per_meter
+            total_price = area * price_per_meter
             self.total_price_field.value = f"{total_price:.2f}"
+            
+            # Calculate hours from entry and exit time if both are provided
+            if self.entry_time.value and self.exit_time.value:
+                try:
+                    # Parse time in HH:MM format
+                    entry_parts = self.entry_time.value.split(':')
+                    exit_parts = self.exit_time.value.split(':')
+                    
+                    if len(entry_parts) == 2 and len(exit_parts) == 2:
+                        entry_hour = int(entry_parts[0])
+                        entry_min = int(entry_parts[1])
+                        exit_hour = int(exit_parts[0])
+                        exit_min = int(exit_parts[1])
+                        
+                        entry_total_minutes = entry_hour * 60 + entry_min
+                        exit_total_minutes = exit_hour * 60 + exit_min
+                        
+                        # Calculate difference in minutes and convert to hours
+                        diff_minutes = exit_total_minutes - entry_total_minutes
+                        if diff_minutes < 0:
+                            # Handle overnight case
+                            diff_minutes += 24 * 60
+                        
+                        hours = diff_minutes / 60.0
+                        self.hours_count.value = f"{hours:.2f}"
+                    else:
+                        self.hours_count.value = "0.00"
+                except ValueError:
+                    self.hours_count.value = "0.00"
             
         except ValueError:
             # If any field contains non-numeric values, set calculated fields to 0
-            self.volume_field.value = "0.00"
-            self.block_weight_field.value = "0.00"
+            self.area_field.value = "0.00"
             self.total_price_field.value = "0.00"
         
         self.page.update()
-    
+
     def _set_default_values(self):
         """Set default values for the row"""
         if not self.material_dropdown.value:
             self.material_dropdown.value = "نيو حلايب"
+        if not self.machine_number.value:
+            self.machine_number.value = "1"
+        if not self.thickness_dropdown.value:
+            self.thickness_dropdown.value = "2سم"
         if not self.length_field.value:
             self.length_field.value = "1.0"
-        if not self.width_field.value:
-            self.width_field.value = "1.0"
         if not self.height_field.value:
             self.height_field.value = "1.0"
+        if not self.quantity_field.value:
+            self.quantity_field.value = "1"
         
         self._on_material_change()
-    
+
     def to_dict(self):
         """Convert row data to dictionary for export"""
-        # Return data with calculated values for Excel export
         return {
-            'trip_number': self.trip_number.value,
-            'trip_count': self.trip_count.value,
-            'date': self.date_field.value,
-            'quarry': self.quarry.value,
+            'publishing_date': self.publishing_date.value,
             'block_number': self.block_number.value,
             'material': self.material_dropdown.value,
+            'machine_number': self.machine_number.value,
+            'quantity': self.quantity_field.value,
             'length': self.length_field.value,
-            'width': self.width_field.value,
             'height': self.height_field.value,
-            'volume': self.volume_field.value,  # Calculated: length * width * height
-            'weight_per_m3': self.weight_per_m3_field.value,  # Based on material
-            'block_weight': self.block_weight_field.value,  # Calculated: volume * weight_per_m3
-            'price_per_ton': self.price_per_ton_field.value,  # Based on material
-            'total_price': self.total_price_field.value,  # Calculated: price_per_ton * block_weight
+            'thickness': self.thickness_dropdown.value,
+            'area': self.area_field.value,  # Calculated: length * height * quantity
+            'price_per_meter': self.price_per_meter_field.value,  # Based on material and thickness
+            'total_price': self.total_price_field.value,  # Calculated: area * price_per_meter
+            'entry_time': self.entry_time.value,
+            'exit_time': self.exit_time.value,
+            'hours_count': self.hours_count.value,  # Calculated: exit_time - entry_time
         }
 
 
-class BlocksView:
-    """Main view for blocks management with improved UX"""
-    _instance = None
-
+class SlidesAddView:
+    """View for adding slides inventory items with design similar to blocks section"""
+    
     def __init__(self, page: ft.Page, on_back=None):
-        self.__class__._instance = self
         self.page = page
         self.on_back = on_back
-        self.page.title = "مصنع السويفي - مخزون البلوكات"
+        self.page.title = "مصنع السويفي - إضافة شرائح"
         self.page.rtl = True
         self.page.theme_mode = ft.ThemeMode.DARK
-
-        self.rows: list[BlockRow] = []
+        
+        # Initialize data storage
+        self.documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
+        self.slides_path = os.path.join(self.documents_path, "الشرائح")
+        os.makedirs(self.slides_path, exist_ok=True)
+        
+        self.rows: list[SlideRow] = []
         self.rows_container = ft.Column(
             spacing=20,
             scroll=ft.ScrollMode.AUTO,
             expand=True
         )
 
-    @classmethod
-    def get_instance(cls):
-        """Get the singleton instance"""
-        return cls._instance
-
     def _row_has_data(self, row) -> bool:
         """Check if a row has any meaningful data"""
         return any([
-            row.trip_number.value,
-            row.trip_count.value,
-            row.quarry.value,
+            row.publishing_date.value,
             row.block_number.value,
             row.material_dropdown.value != "نيو حلايب",
+            row.machine_number.value != "1",
+            row.quantity_field.value,
             row.length_field.value,
-            row.width_field.value,
             row.height_field.value,
         ])
 
     def build_ui(self):
-        """Build the main UI with enhanced styling"""
+        """Build the slides add UI with design similar to blocks section"""
         
         # Create AppBar with title and actions
         app_bar = ft.AppBar(
@@ -465,7 +553,7 @@ class BlocksView:
                 controls=[
                     ft.Icon(ft.Icons.INVENTORY_2_ROUNDED, size=24, color=ft.Colors.BLUE_200),
                     ft.Text(
-                        "مخزون البلوكات",
+                        "إضافة شرائح",
                         size=20,
                         weight=ft.FontWeight.BOLD,
                         color=ft.Colors.BLUE_200
@@ -477,7 +565,7 @@ class BlocksView:
                 ft.IconButton(
                     icon=ft.Icons.ADD,
                     on_click=self.add_row,
-                    tooltip="إضافة بلوك جديد"
+                    tooltip="إضافة شريحة جديدة"
                 ),
                 ft.Container(
                     content=ft.IconButton(
@@ -519,8 +607,8 @@ class BlocksView:
             self.on_back()
 
     def add_row(self, e=None):
-        """Add a new block row and scroll to it"""
-        row = BlockRow(
+        """Add a new slide row and scroll to it"""
+        row = SlideRow(
             page=self.page,
             delete_callback=self.delete_row
         )
@@ -553,18 +641,29 @@ class BlocksView:
 
         try:
             data = [row.to_dict() for row in self.rows if self._row_has_data(row)]
-            file_path = export_simple_blocks_excel(data)
+            
+            # Create Excel file for slides inventory
+            excel_file = os.path.join(self.slides_path, "مخزون الشرائح.xlsx")
+            
+            # Initialize Excel file if it doesn't exist
+            if not os.path.exists(excel_file):
+                print(f"[DEBUG] Initializing new slides publishing Excel file")
+                from utils.slides_utils import initialize_slides_publishing_excel
+                initialize_slides_publishing_excel(excel_file)
+            
+            # Add publishing entries using utility function
+            from utils.slides_utils import add_slides_publishing_entry
+            add_slides_publishing_entry(excel_file, data)
             
             # Reset rows after save
             for row in self.rows:
                 row._set_default_values()
             
-            self._show_success_dialog(file_path)
+            self._show_success_dialog(excel_file)
             
-        except PermissionError as e:
-            self._show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
         except Exception as e:
             self._show_dialog("خطأ", f"حدث خطأ أثناء حفظ الملف:\n{str(e)}", ft.Colors.RED_400)
+            import traceback
             traceback.print_exc()
 
     def _show_dialog(self, title: str, message: str, title_color=ft.Colors.BLUE_300):
@@ -667,3 +766,14 @@ class BlocksView:
         self.page.overlay.append(dlg)
         dlg.open = True
         self.page.update()
+
+
+def main():
+    def on_back():
+        print("Back button clicked")
+    
+    ft.app(target=lambda page: SlidesAddView(page, on_back).build_ui())
+
+
+if __name__ == "__main__":
+    main()
