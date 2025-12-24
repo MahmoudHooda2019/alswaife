@@ -8,16 +8,9 @@ import xlsxwriter
 from typing import List, Tuple
 import os
 
-# Set up logging to file with UTF-8 encoding
-log_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'app_logs.txt')
-file_handler = logging.FileHandler(log_file, encoding='utf-8')
-file_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
-
+# Set up logging - only ERROR level to reduce noise
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logger.addHandler(file_handler)
+logger.setLevel(logging.ERROR)
 
 
 def save_invoice(filepath: str, op_num: str, client: str, driver: str,
