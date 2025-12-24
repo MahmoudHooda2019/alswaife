@@ -591,6 +591,9 @@ def add_slides_publishing_entry(file_path, publishing_data):
                 cell = publish_sheet.cell(row=row_num, column=col_num)
                 cell.border = border
                 cell.alignment = alignment
+                # Convert quantity (col 5) to int, keep others as float
+                if col_num == 5:  # Quantity column should be integer
+                    cell.value = int(float(value)) if value else 0
                 # Apply number formatting for numeric columns
                 if col_num in [5, 6, 7, 9, 10, 11, 14]:  # Quantity, Length, Height, Area, Price, Total, Hours
                     if col_num == 5:  # Quantity column should be integer

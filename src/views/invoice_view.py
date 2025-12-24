@@ -16,7 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import database utilities
 try:
-    from utils.db_utils import init_db as init_db_real, get_counter as get_counter_real, increment_counter as increment_counter_real, get_zoom_level, set_zoom_level
+    from utils.db_utils import init_db as init_db_real, get_counter as get_counter_real, increment_counter as increment_counter_real, get_zoom_level, set_zoom_level, save_invoice_to_db, load_invoice_from_db, invoice_exists
     
     # Re-export with proper type annotations
     init_db = init_db_real
@@ -29,7 +29,7 @@ except ImportError:
     def get_zoom_level(db_path: str) -> float: return 1.0
     def set_zoom_level(db_path: str, zoom_level: float) -> None: pass
 
-from utils.excel_utils import update_client_ledger
+from utils.excel_utils import update_client_ledger, remove_invoice_from_ledger, delete_existing_invoice_file, update_invoice_in_ledger
 from utils.path_utils import resource_path
 
 class InvoiceRow:
@@ -453,7 +453,12 @@ class InvoiceView:
         self.scale_factor = get_zoom_level(self.db_path)
         
         # Form fields
-        self.ent_op = ft.TextField(label="رقم العملية", value=str(self.op_counter), width=100)
+        self.ent_op = ft.TextField(
+            label="رقم العملية", 
+            value=str(self.op_counter), 
+            width=100, 
+            on_blur=self.on_op_number_blur  # Check only when focus leaves the field
+        )
         
         # Get date - try internet first, fallback to local time
         date_value = self.get_internet_date()
@@ -467,6 +472,7 @@ class InvoiceView:
         self.ent_client = ft.TextField(
             label="اسم العميل",
             on_change=self.on_client_text_change,
+            on_submit=self.on_client_submit,
             width=200
         )
         
@@ -599,6 +605,27 @@ class InvoiceView:
         self.suggestions_list.visible = False
         self.suggestions_list.controls.clear()
         self.page.update()
+        
+        # Load client data if it exists
+        self.load_client_data(client_name)
+    
+    def on_client_submit(self, e):
+        """Handle client field submission"""
+        client_name = self.ent_client.value.strip() if self.ent_client.value is not None else ""
+        if client_name:
+            # Load client data if it exists
+            self.load_client_data(client_name)
+    
+    def load_client_data(self, client_name):
+        """Load default data for the selected client"""
+        # This method can be expanded to load default values for the client
+        # In the future, this could load default driver, phone, or other client-specific settings
+        pass
+    
+    def sanitize(self, s):
+        """Sanitize string for file/folder names"""
+        import re
+        return re.sub(r'[\\/*?:"<>|]', "", str(s))
 
     def load_products(self):
         # Check if file exists first to avoid unnecessary operations
@@ -743,21 +770,66 @@ class InvoiceView:
             self.page.update()
             return
 
+        # Validate items before saving
         items_data = []
-        for row in self.rows:
-            # Collect actual data from the row controls and format it as expected by excel_utils
-            # Note: We only send the final calculated length, not the "before" or "discount" values
+        validation_errors = []
+        
+        for row_index, row in enumerate(self.rows):
+            row_num = row_index + 1
+            
+            # Check for empty required fields (except block number)
+            if not row.product_dropdown.value or row.product_dropdown.value.strip() == "":
+                validation_errors.append(f"الصف {row_num}: البيان فارغ")
+            
+            if not row.thick_var.value or row.thick_var.value.strip() == "":
+                validation_errors.append(f"الصف {row_num}: السمك فارغ")
+            
+            count_val = row.count_var.value or "0"
+            if count_val.strip() == "" or count_val.strip() == "0":
+                validation_errors.append(f"الصف {row_num}: العدد فارغ أو صفر")
+            
+            len_before_val = row.len_before_var.value or "0"
+            if len_before_val.strip() == "" or len_before_val.strip() == "0":
+                validation_errors.append(f"الصف {row_num}: الطول قبل فارغ أو صفر")
+            
+            height_val = row.height_var.value or "0"
+            if height_val.strip() == "" or height_val.strip() == "0":
+                validation_errors.append(f"الصف {row_num}: الارتفاع فارغ أو صفر")
+            
+            price_val = row.price_var.value or "0"
+            if price_val.strip() == "" or price_val.strip() == "0":
+                validation_errors.append(f"الصف {row_num}: السعر فارغ أو صفر")
+            
+            # Collect actual data from the row controls
             item_data = (
                 row.product_dropdown.value or "",  # description
-                row.block_var.value or "",         # block
+                row.block_var.value or "",         # block (optional)
                 row.thick_var.value or "",         # thickness
                 row.material_value or "",          # material
                 row.count_var.value or "0",        # count
                 row.len_var.value or "0",          # length (final calculated value only)
                 row.height_var.value or "0",       # height
-                row.price_var.value or "0"         # price
+                row.price_var.value or "0",        # price
+                row.len_before_var.value or "0",   # length_before (for calculation)
+                row.discount_var.value or "0"      # discount (for calculation)
             )
             items_data.append(item_data)
+
+        # Show validation errors if any
+        if validation_errors:
+            error_message = "\n".join(validation_errors[:10])  # Show max 10 errors
+            if len(validation_errors) > 10:
+                error_message += f"\n... و {len(validation_errors) - 10} أخطاء أخرى"
+            
+            dlg = ft.AlertDialog(
+                title=ft.Text("تنبيه - خانات فارغة"),
+                content=ft.Text(error_message, rtl=True),
+                rtl=True
+            )
+            self.page.overlay.append(dlg)
+            dlg.open = True
+            self.page.update()
+            return
 
         if not items_data:
             dlg = ft.AlertDialog(
@@ -797,9 +869,138 @@ class InvoiceView:
         full_path = os.path.join(my_invoices_dir, fname)
         
         try:
+            # Check if this is an update to an existing invoice
+            invoice_already_exists = invoice_exists(self.db_path, op_num)
+            old_file_path = None
+            
+            if invoice_already_exists:
+                # Load the existing invoice to check if the client name has changed
+                existing_invoice = load_invoice_from_db(self.db_path, op_num)
+                if existing_invoice:
+                    # Get the old file path to delete it
+                    old_file_path = existing_invoice.get("file_path", None)
+                    
+                    old_client_name = existing_invoice.get("client_name", "")
+                    old_client_safe = self.sanitize(old_client_name)
+                    if not old_client_safe:
+                        old_client_safe = "General"
+                    
+                    # If client name has changed, remove from old client's ledger
+                    # (update_invoice_in_ledger will handle adding to the new client's ledger)
+                    if old_client_name != client:
+                        old_client_folder = os.path.join(self.invoices_root, old_client_safe)
+                        try:
+                            remove_invoice_from_ledger(old_client_folder, op_num)
+                        except Exception as ledger_ex:
+                            print(f"Error removing old ledger entry: {ledger_ex}")
+                    # Note: If client name is the same, update_invoice_in_ledger will handle
+                    # removing and re-adding the invoice entry internally
+            
+            # Delete the old invoice file if it exists
+            if old_file_path and old_file_path != full_path:
+                try:
+                    delete_existing_invoice_file(old_file_path)
+                except Exception as file_ex:
+                    print(f"Error deleting old invoice file: {file_ex}")
+            
+            # Save the invoice Excel file directly
+            from utils.excel_utils import save_invoice
+            # Extract only the first 8 elements for saving to Excel (excluding length_before and discount)
+            items_for_excel = []
+            for item in items_data:
+                # Take only the first 8 elements: description, block, thickness, material, count, length, height, price
+                item_excel = tuple(item[:8]) if len(item) >= 8 else item
+                items_for_excel.append(item_excel)
+            
             # Save the invoice
-            self.save_callback(full_path, op_num, client, driver, date_str, phone, items_data)
+            save_invoice(full_path, op_num, client, driver, items_for_excel, date_str=date_str, phone=phone)
+            
+            # Save invoice data to database
+            try:
+                # Calculate total amount from items
+                total_amount = 0
+                for item in items_data:
+                    try:
+                        count = int(float(item[4])) if item[4] else 0  # Convert to int (count should be whole number)
+                        length = float(item[5]) if item[5] else 0
+                        height = float(item[6]) if item[6] else 0
+                        price = float(item[7]) if item[7] else 0
+                        area = count * length * height
+                        total_amount += area * price
+                    except (ValueError, IndexError):
+                        continue
                 
+                # Save to database
+                save_invoice_to_db(self.db_path, op_num, client, driver, phone, date_str, full_path, items_data, total_amount)
+                
+                # If this is an update to an existing invoice, we need to update the ledger properly
+                if invoice_already_exists:
+                    # Update the invoice in the ledger instead of appending
+                    try:
+                        # Calculate invoice items for ledger
+                        invoice_items_details = []
+                        for item in items_data:
+                            try:
+                                desc = item[0] or ""
+                                material = item[3] or ""
+                                thickness = item[2] or ""
+                                count = int(float(item[4])) if item[4] else 0  # Convert to int (count should be whole number)
+                                length = float(item[5]) if item[5] else 0
+                                height = float(item[6]) if item[6] else 0
+                                price_val = float(item[7]) if item[7] else 0
+                                
+                                # Calculate area for this item
+                                area = count * length * height
+                                
+                                # Store item details for the ledger - format: (desc, material, thickness, area, total_price_for_item)
+                                # In the original code, the last element is the total price for the item, not the unit price
+                                item_total_price = area * price_val
+                                invoice_items_details.append((
+                                    desc,
+                                    material,
+                                    thickness,
+                                    area,
+                                    item_total_price  # This should be the total price for the item, not unit price
+                                ))
+                            except (ValueError, IndexError):
+                                continue
+                        
+                        # Update the invoice in the ledger
+                        success, error = update_invoice_in_ledger(
+                            client_dir,
+                            op_num,
+                            client,
+                            date_str,
+                            total_amount,
+                            driver,
+                            invoice_items_details
+                        )
+                        
+                        if not success:
+                            import logging
+                            logger = logging.getLogger('src.utils.excel_utils')
+                            logger.error(f"❌ CRITICAL: Could not update invoice in ledger: {error}")
+                            print(f"Warning: Could not update invoice in ledger: {error}")
+                    except Exception as ledger_ex:
+                        import logging
+                        logger = logging.getLogger('src.utils.excel_utils')
+                        logger.error(f"❌ CRITICAL EXCEPTION: {ledger_ex}", exc_info=True)
+                        print(f"Error updating invoice in ledger: {ledger_ex}")
+                else:
+                    # For new invoices, use the original save_callback to handle ledger update
+                    # Calculate items for original callback
+                    items_for_callback = []
+                    for item in items_data:
+                        # Take only the first 8 elements: description, block, thickness, material, count, length, height, price
+                        item_callback = tuple(item[:8]) if len(item) >= 8 else item
+                        items_for_callback.append(item_callback)
+                    
+                    # Call the original save callback which will handle ledger update
+                    self.save_callback(full_path, op_num, client, driver, date_str, phone, items_for_callback)
+            except Exception as db_ex:
+                print(f"Error saving invoice to database: {db_ex}")
+                # Continue with the process even if database save fails
+            
             def open_file(e):
                 # Use our universal function to open the file
                 open_path(full_path)
@@ -831,7 +1032,10 @@ class InvoiceView:
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
-            self.increment_op()
+            
+            # زيادة رقم العملية تلقائياً بعد الحفظ الناجح (فقط للفواتير الجديدة)
+            if not invoice_already_exists:
+                self.increment_op()
             
         except PermissionError as ex:
             dlg = ft.AlertDialog(
@@ -863,20 +1067,66 @@ class InvoiceView:
             self.page.update()
             return
 
+        # Validate items before saving
         items_data = []
-        for row in self.rows:
-            # Collect actual data from the row controls and format it as expected by excel_utils
+        validation_errors = []
+        
+        for row_index, row in enumerate(self.rows):
+            row_num = row_index + 1
+            
+            # Check for empty required fields (except block number)
+            if not row.product_dropdown.value or row.product_dropdown.value.strip() == "":
+                validation_errors.append(f"الصف {row_num}: البيان فارغ")
+            
+            if not row.thick_var.value or row.thick_var.value.strip() == "":
+                validation_errors.append(f"الصف {row_num}: السمك فارغ")
+            
+            count_val = row.count_var.value or "0"
+            if count_val.strip() == "" or count_val.strip() == "0":
+                validation_errors.append(f"الصف {row_num}: العدد فارغ أو صفر")
+            
+            len_before_val = row.len_before_var.value or "0"
+            if len_before_val.strip() == "" or len_before_val.strip() == "0":
+                validation_errors.append(f"الصف {row_num}: الطول قبل فارغ أو صفر")
+            
+            height_val = row.height_var.value or "0"
+            if height_val.strip() == "" or height_val.strip() == "0":
+                validation_errors.append(f"الصف {row_num}: الارتفاع فارغ أو صفر")
+            
+            price_val = row.price_var.value or "0"
+            if price_val.strip() == "" or price_val.strip() == "0":
+                validation_errors.append(f"الصف {row_num}: السعر فارغ أو صفر")
+            
+            # Collect actual data from the row controls
             item_data = (
                 row.product_dropdown.value or "",  # description
-                row.block_var.value or "",         # block
+                row.block_var.value or "",         # block (optional)
                 row.thick_var.value or "",         # thickness
                 row.material_value or "",          # material
                 row.count_var.value or "0",        # count
                 row.len_var.value or "0",          # length (already net)
                 row.height_var.value or "0",       # height
-                row.price_var.value or "0"         # price
+                row.price_var.value or "0",        # price
+                row.len_before_var.value or "0",   # length_before (for calculation)
+                row.discount_var.value or "0"      # discount (for calculation)
             )
             items_data.append(item_data)
+
+        # Show validation errors if any
+        if validation_errors:
+            error_message = "\n".join(validation_errors[:10])  # Show max 10 errors
+            if len(validation_errors) > 10:
+                error_message += f"\n... و {len(validation_errors) - 10} أخطاء أخرى"
+            
+            dlg = ft.AlertDialog(
+                title=ft.Text("تنبيه - خانات فارغة"),
+                content=ft.Text(error_message, rtl=True),
+                rtl=True
+            )
+            self.page.overlay.append(dlg)
+            dlg.open = True
+            self.page.update()
+            return
 
         if not items_data:
             dlg = ft.AlertDialog(
@@ -911,9 +1161,76 @@ class InvoiceView:
         full_path = os.path.join(my_invoices_dir, fname)
         
         try:
+            # For revenue invoices, check if it already exists
+            invoice_already_exists = invoice_exists(self.db_path, op_num)
+            old_file_path = None
+            
+            # Revenue invoices don't have ledger entries, so no need to remove them
+            
+            # But if it's an update, we might need to handle client changes
+            if invoice_already_exists:
+                # Load the existing invoice to check if the client name has changed
+                existing_invoice = load_invoice_from_db(self.db_path, op_num)
+                if existing_invoice:
+                    # Get the old file path to delete it
+                    old_file_path = existing_invoice.get("file_path", None)
+                    
+                    old_client_name = existing_invoice.get("client_name", "")
+                    # For revenue invoices, still check if we need to clean up old client ledger
+                    if old_client_name != client and "ايراد" not in old_client_name:
+                        # If the old invoice was not revenue but new one is, remove from old client's ledger
+                        old_client_safe = self.sanitize(old_client_name)
+                        if not old_client_safe:
+                            old_client_safe = "General"
+                        old_client_folder = os.path.join(self.invoices_root, old_client_safe)
+                        try:
+                            remove_invoice_from_ledger(old_client_folder, op_num)
+                        except Exception as ledger_ex:
+                            print(f"Error removing old ledger entry: {ledger_ex}")
+            
+            # Delete the old invoice file if it exists
+            if old_file_path and old_file_path != full_path:
+                try:
+                    delete_existing_invoice_file(old_file_path)
+                except Exception as file_ex:
+                    print(f"Error deleting old invoice file: {file_ex}")
+            
+            # Save the revenue invoice Excel file directly
+            from utils.excel_utils import save_invoice
+            # Extract only the first 8 elements for saving to Excel (excluding length_before and discount)
+            items_for_excel = []
+            for item in items_data:
+                # Take only the first 8 elements: description, block, thickness, material, count, length, height, price
+                item_excel = tuple(item[:8]) if len(item) >= 8 else item
+                items_for_excel.append(item_excel)
+            
             # Save the invoice
-            self.save_callback(full_path, op_num, client, driver, date_str, phone, items_data)
+            save_invoice(full_path, op_num, client, driver, items_for_excel, date_str=date_str, phone=phone)
+            
+            # Save revenue invoice data to database
+            try:
+                # Calculate total amount from items
+                total_amount = 0
+                for item in items_data:
+                    try:
+                        count = int(float(item[4])) if item[4] else 0  # Convert to int (count should be whole number)
+                        length = float(item[5]) if item[5] else 0
+                        height = float(item[6]) if item[6] else 0
+                        price = float(item[7]) if item[7] else 0
+                        area = count * length * height
+                        total_amount += area * price
+                    except (ValueError, IndexError):
+                        continue
                 
+                # Save to database
+                save_invoice_to_db(self.db_path, op_num, client, driver, phone, date_str, full_path, items_data, total_amount)
+                
+                # For revenue invoices, no ledger update is needed, but if this was a conversion
+                # from a regular invoice to revenue, we already handled the ledger removal above
+            except Exception as db_ex:
+                print(f"Error saving revenue invoice to database: {db_ex}")
+                # Continue with the process even if database save fails
+            
             def open_file(e):
                 try:
                     if platform.system() == 'Windows':
@@ -958,7 +1275,10 @@ class InvoiceView:
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
-            self.increment_op()
+            
+            # زيادة رقم العملية تلقائياً بعد الحفظ الناجح (فقط للفواتير الجديدة)
+            if not invoice_already_exists:
+                self.increment_op()
             
         except PermissionError as ex:
             dlg = ft.AlertDialog(
@@ -979,6 +1299,96 @@ class InvoiceView:
             dlg.open = True
             self.page.update()
 
+    def on_op_number_blur(self, e):
+        """Handle when focus leaves the invoice number field"""
+        op_num = self.ent_op.value.strip() if self.ent_op.value else ""
+        if op_num:
+            # Check if invoice exists in database
+            if invoice_exists(self.db_path, op_num):
+                # Ask user if they want to load the existing invoice
+                def on_confirm_load(e):
+                    confirm_dlg.open = False
+                    self.page.update()
+                    self.load_invoice_data(op_num)
+                
+                def on_cancel_load(e):
+                    confirm_dlg.open = False
+                    self.page.update()
+                
+                confirm_dlg = ft.AlertDialog(
+                    title=ft.Text("تنبيه"),
+                    content=ft.Text(f"يوجد فاتورة برقم {op_num} محفوظة مسبقاً. هل تريد تحميل بياناتها؟", rtl=True),
+                    actions=[
+                        ft.TextButton("نعم", on_click=on_confirm_load),
+                        ft.TextButton("لا", on_click=on_cancel_load)
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END
+                )
+                self.page.overlay.append(confirm_dlg)
+                confirm_dlg.open = True
+                self.page.update()
+        
+    def load_invoice_data(self, op_num):
+        """Load invoice data from database and populate the form"""
+        try:
+            invoice_data = load_invoice_from_db(self.db_path, op_num)
+            if invoice_data:
+                # Populate form fields
+                self.ent_op.value = invoice_data["invoice_number"]
+                self.ent_client.value = invoice_data["client_name"]
+                self.ent_driver.value = invoice_data["driver_name"]
+                self.ent_phone.value = invoice_data["phone"]
+                self.date_var.value = invoice_data["date"]
+                
+                # Clear existing rows
+                self.rows.clear()
+                self.rows_container.controls.clear()
+                
+                # Add rows with loaded data
+                for item in invoice_data["items"]:
+                    self.add_row()  # Add an empty row
+                    new_row = self.rows[-1]  # Get the newly added row
+                    
+                    # Set values for the row
+                    new_row.product_dropdown.value = item[0] if len(item) > 0 else ""
+                    new_row.block_var.value = item[1] if len(item) > 1 else ""
+                    new_row.thick_var.value = item[2] if len(item) > 2 else ""
+                    new_row.material_value = item[3] if len(item) > 3 else ""
+                    
+                    # Set numeric values - convert count to int to avoid "10.0" display
+                    new_row.count_var.value = str(int(float(item[4]))) if len(item) > 4 and item[4] else "0"
+                    
+                    # Set the length fields - final length, length_before, and discount
+                    saved_length = str(item[5]) if len(item) > 5 else "0"
+                    saved_length_before = str(item[8]) if len(item) > 8 else "0"
+                    saved_discount = str(item[9]) if len(item) > 9 else "0"
+                    
+                    # Set the length fields
+                    new_row.len_var.value = saved_length
+                    new_row.len_before_var.value = saved_length_before
+                    new_row.discount_var.value = saved_discount
+                    
+                    new_row.height_var.value = str(item[6]) if len(item) > 6 else "0"
+                    # Convert price to int to avoid "100.0" display
+                    new_row.price_var.value = str(int(float(item[7]))) if len(item) > 7 and item[7] else "0"
+                    
+                    # Update the row calculations
+                    new_row.calculate(update_page=False)
+                
+                # Update the UI
+                self.page.update()
+            
+        except Exception as ex:
+            print(f"Error loading invoice data: {ex}")
+            dlg = ft.AlertDialog(
+                title=ft.Text("خطأ"),
+                content=ft.Text(f"حدث خطأ أثناء تحميل بيانات الفاتورة:\n{ex}", rtl=True),
+                rtl=True
+            )
+            self.page.overlay.append(dlg)
+            dlg.open = True
+            self.page.update()
+
     def increment_op(self):
         try:
             new_val = increment_counter(self.db_path)
@@ -990,13 +1400,25 @@ class InvoiceView:
         self.page.update()
 
     def reset_form(self, e):
+        """إعادة تعيين النموذج لعملية جديدة مع زيادة رقم العملية"""
         self.ent_client.value = ""
         self.ent_driver.value = ""
         self.ent_phone.value = ""
         
+        # تحديث التاريخ للتاريخ الحالي
+        date_value = self.get_internet_date()
+        if not date_value:
+            date_value = datetime.now().strftime('%d/%m/%Y')
+        self.date_var.value = date_value
+        
         # Clear all rows
         self.rows.clear()
         self.rows_container.controls.clear()
+        if hasattr(self, 'row_wrappers'):
+            self.row_wrappers.clear()
+        
+        # زيادة رقم العملية للعملية الجديدة
+        self.increment_op()
         
         # Add one empty row
         self.add_row()

@@ -6,8 +6,25 @@
 import sys
 import os
 import traceback
+import logging
 import flet as ft
 from utils.path_utils import resource_path
+
+# Configure logging - logs only for excel_utils
+log_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app_logs.txt')
+logging.basicConfig(
+    level=logging.WARNING,  # Set to WARNING to reduce noise
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# Configure logging ONLY for excel_utils
+excel_logger = logging.getLogger('src.utils.excel_utils')
+excel_logger.setLevel(logging.DEBUG)
+file_handler = logging.FileHandler(log_file)
+file_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+excel_logger.addHandler(file_handler)
 
 # Version information
 try:
@@ -27,7 +44,7 @@ except:
     pass
 
 from views.dashboard_view import DashboardView
-from utils.excel_utils import save_invoice, update_client_ledger
+from utils.excel_utils import save_invoice, update_client_ledger, remove_invoice_from_ledger, update_invoice_in_ledger
 
 
 def save_callback(filepath, op_num, client, driver, date_str, phone, items):
@@ -43,8 +60,15 @@ def save_callback(filepath, op_num, client, driver, date_str, phone, items):
         phone (str): رقم الهاتف
         items (list): قائمة عناصر الفاتورة
     """
+    # Extract only the first 8 elements for saving to Excel (excluding length_before and discount)
+    items_for_excel = []
+    for item in items:
+        # Take only the first 8 elements: description, block, thickness, material, count, length, height, price
+        item_excel = tuple(item[:8]) if len(item) >= 8 else item
+        items_for_excel.append(item_excel)
+    
     # Save the invoice
-    save_invoice(filepath, op_num, client, driver, items, date_str=date_str, phone=phone)
+    save_invoice(filepath, op_num, client, driver, items_for_excel, date_str=date_str, phone=phone)
     
     # Skip ledger update for "ايراد" clients
     if "ايراد" in client:
@@ -57,13 +81,13 @@ def save_callback(filepath, op_num, client, driver, date_str, phone, items):
         invoice_items_details = []
         
         # Process items to get details for the ledger
-        for item in items:
+        for item in items_for_excel:  # Use the items for excel format
             try:
                 desc = item[0] or ""
                 block = item[1] or ""
                 thickness = item[2] or ""
                 material = item[3] or ""
-                count = float(item[4])
+                count = int(float(item[4]))  # Convert to int (count should be whole number)
                 length = float(item[5])
                 height = float(item[6])
                 price_val = float(item[7])

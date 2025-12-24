@@ -104,7 +104,13 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
             cell.fill = PatternFill(start_color=column_colors[0], end_color=column_colors[0], fill_type="solid")
             
             # Column 2: عدد النقله
-            cell = worksheet.cell(row=excel_row, column=2, value=block_data.get("trip_count", ""))
+            trip_count = block_data.get("trip_count", "")
+            if trip_count:
+                try:
+                    trip_count = int(float(trip_count))
+                except (ValueError, TypeError):
+                    trip_count = ""
+            cell = worksheet.cell(row=excel_row, column=2, value=trip_count)
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[1], end_color=column_colors[1], fill_type="solid")
@@ -314,7 +320,14 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         # --- الجدول الأول ---
         # Write values and formulas for calculations
         worksheet.write(excel_row, 0, block_data.get("trip_number", ""), data_formats[0])  # رقم النقله
-        worksheet.write(excel_row, 1, block_data.get("trip_count", ""), data_formats[1])  # عدد النقله
+        # Convert trip_count to int if it's a numeric value
+        trip_count = block_data.get("trip_count", "")
+        if trip_count:
+            try:
+                trip_count = int(float(trip_count))
+            except (ValueError, TypeError):
+                trip_count = ""
+        worksheet.write(excel_row, 1, trip_count, data_formats[1])  # عدد النقله
         worksheet.write(excel_row, 2, block_data.get("date", ""), data_formats[2])  # التاريخ
         worksheet.write(excel_row, 3, block_data.get("quarry", ""), data_formats[3])  # المحجر
         worksheet.write(excel_row, 4, block_data.get("block_number", ""), data_formats[4])  # رقم البلوك
