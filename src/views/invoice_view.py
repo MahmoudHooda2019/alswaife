@@ -29,8 +29,37 @@ except ImportError:
     def get_zoom_level(db_path: str) -> float: return 1.0
     def set_zoom_level(db_path: str, zoom_level: float) -> None: pass
 
-from utils.excel_utils import update_client_ledger, remove_invoice_from_ledger, delete_existing_invoice_file, update_invoice_in_ledger
+from utils.invoice_utils import update_client_ledger, remove_invoice_from_ledger, delete_existing_invoice_file, update_invoice_in_ledger
 from utils.path_utils import resource_path
+from utils.slides_utils import disburse_slides_from_invoice
+
+
+def is_excel_running():
+    """Check if Microsoft Excel is currently running"""
+    try:
+        if platform.system() == 'Windows':
+            # Use tasklist to check for Excel process
+            result = subprocess.run(
+                ['tasklist', '/FI', 'IMAGENAME eq EXCEL.EXE', '/NH'],
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            return 'EXCEL.EXE' in result.stdout.upper()
+        elif platform.system() == 'Darwin':  # macOS
+            result = subprocess.run(
+                ['pgrep', '-x', 'Microsoft Excel'],
+                capture_output=True
+            )
+            return result.returncode == 0
+        else:  # Linux
+            result = subprocess.run(
+                ['pgrep', '-f', 'libreoffice.*calc'],
+                capture_output=True
+            )
+            return result.returncode == 0
+    except Exception:
+        return False
 
 class InvoiceRow:
     """ كلاس صف الفاتورة (البند) """
@@ -710,6 +739,76 @@ class InvoiceView:
             self.page.update()
 
     def save_excel(self, e):
+        # Check if Excel is running first
+        if is_excel_running():
+            self._show_excel_warning_dialog()
+            return
+        
+        self._perform_save()
+    
+    def _show_excel_warning_dialog(self):
+        """Show warning dialog when Excel is open"""
+        def on_skip(e):
+            dlg.open = False
+            self.page.update()
+            # Proceed with save anyway
+            self._perform_save()
+        
+        def on_cancel(e):
+            dlg.open = False
+            self.page.update()
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.ORANGE_400, size=28),
+                    ft.Text("تنبيه - برنامج Excel مفتوح", weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_400),
+                ],
+                spacing=10
+            ),
+            content=ft.Column(
+                controls=[
+                    ft.Text(
+                        "تم اكتشاف أن برنامج Microsoft Excel مفتوح حالياً.",
+                        size=14),
+                    ft.Container(height=10),
+                    ft.Text(
+                        "قد يؤدي ذلك إلى فشل حفظ الملفات إذا كانت مفتوحة في Excel.",
+                        size=14,
+                        rtl=True,
+                        color=ft.Colors.GREY_400
+                    ),
+                    ft.Container(height=10),
+                    ft.Text(
+                        "يُنصح بإغلاق جميع ملفات Excel قبل المتابعة.",
+                        size=14,
+                        rtl=True,
+                        weight=ft.FontWeight.W_500
+                    ),
+                ],
+                tight=True),
+            actions=[
+                ft.TextButton(
+                    "تخطي والمتابعة",
+                    on_click=on_skip,
+                    style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
+                ),
+                ft.TextButton(
+                    "إلغاء",
+                    on_click=on_cancel,
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.GREY_900
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+    
+    def _perform_save(self):
+        """Perform the actual save operation"""
         try:
             op_num = self.ent_op.value.strip() if self.ent_op.value else ""
             client = self.ent_client.value.strip() if self.ent_client.value is not None else ""
@@ -736,7 +835,7 @@ class InvoiceView:
                 
                 confirm_dlg = ft.AlertDialog(
                     title=ft.Text("تنبيه"),
-                    content=ft.Text("العميل فارغ أو يحتوي على كلمة 'ايراد'. سيتم حفظ الفاتورة في مجلد الإيرادات دون إنشاء كشف حساب. هل توافق؟", rtl=True),
+                    content=ft.Text("العميل فارغ أو يحتوي على كلمة 'ايراد'. سيتم حفظ الفاتورة في مجلد الإيرادات دون إنشاء كشف حساب. هل توافق؟"),
                     actions=[
                         ft.TextButton("نعم", on_click=on_confirm_revenue),
                         ft.TextButton("لا", on_click=on_cancel_revenue)
@@ -751,8 +850,7 @@ class InvoiceView:
             if not op_num:
                 dlg = ft.AlertDialog(
                     title=ft.Text("خطأ"),
-                    content=ft.Text("يرجى إدخال رقم العملية", rtl=True),
-                    rtl=True
+                    content=ft.Text("يرجى إدخال رقم العملية")
                 )
                 self.page.overlay.append(dlg)
                 dlg.open = True
@@ -762,8 +860,7 @@ class InvoiceView:
         except Exception as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}", rtl=True),
-                rtl=True
+                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -776,7 +873,6 @@ class InvoiceView:
         
         for row_index, row in enumerate(self.rows):
             row_num = row_index + 1
-            
             # Check for empty required fields (except block number)
             if not row.product_dropdown.value or row.product_dropdown.value.strip() == "":
                 validation_errors.append(f"الصف {row_num}: البيان فارغ")
@@ -823,9 +919,7 @@ class InvoiceView:
             
             dlg = ft.AlertDialog(
                 title=ft.Text("تنبيه - خانات فارغة"),
-                content=ft.Text(error_message, rtl=True),
-                rtl=True
-            )
+                content=ft.Text(error_message))
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
@@ -834,7 +928,7 @@ class InvoiceView:
         if not items_data:
             dlg = ft.AlertDialog(
                 title=ft.Text("تنبيه"),
-                content=ft.Text("لا توجد بنود للحفظ", rtl=True)
+                content=ft.Text("لا توجد بنود للحفظ")
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -858,7 +952,7 @@ class InvoiceView:
         try:
             os.makedirs(my_invoices_dir, exist_ok=True)
         except OSError as ex:
-             dlg = ft.AlertDialog(title=ft.Text("خطأ"), content=ft.Text(f"فشل إنشاء المجلد: {ex}", rtl=True))
+             dlg = ft.AlertDialog(title=ft.Text("خطأ"), content=ft.Text(f"فشل إنشاء المجلد: {ex}"))
              self.page.overlay.append(dlg)
              dlg.open = True
              self.page.update()
@@ -904,7 +998,7 @@ class InvoiceView:
                     print(f"Error deleting old invoice file: {file_ex}")
             
             # Save the invoice Excel file directly
-            from utils.excel_utils import save_invoice
+            from utils.invoice_utils import save_invoice
             # Extract only the first 8 elements for saving to Excel (excluding length_before and discount)
             items_for_excel = []
             for item in items_data:
@@ -1001,6 +1095,15 @@ class InvoiceView:
                 print(f"Error saving invoice to database: {db_ex}")
                 # Continue with the process even if database save fails
             
+            # Disburse slides from inventory if invoice contains slide products
+            try:
+                slides_success, slides_message, disbursed_items = disburse_slides_from_invoice(
+                    op_num, date_str, items_data, client
+                )
+            except Exception as slides_ex:
+                print(f"[ERROR] Error disbursing slides: {slides_ex}")
+                # Continue with the process even if slides disbursement fails
+            
             def open_file(e):
                 # Use our universal function to open the file
                 open_path(full_path)
@@ -1020,7 +1123,7 @@ class InvoiceView:
 
             dlg = ft.AlertDialog(
                 title=ft.Text("نجاح"),
-                content=ft.Text(f"تم حفظ الفاتورة وتحديث كشف الحساب بنجاح.\المسار: {full_path}", rtl=True),
+                content=ft.Text(f"تم حفظ الفاتورة وتحديث كشف الحساب بنجاح.\المسار: {full_path}"),
                 actions=[
                     ft.TextButton("فتح الفاتورة", on_click=open_file),
                     ft.TextButton("فتح كشف الحساب", on_click=open_ledger),
@@ -1040,16 +1143,14 @@ class InvoiceView:
         except PermissionError as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", rtl=True),
-                rtl=True
-            )
+                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى."))
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
         except Exception as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}", rtl=True)
+                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -1120,9 +1221,7 @@ class InvoiceView:
             
             dlg = ft.AlertDialog(
                 title=ft.Text("تنبيه - خانات فارغة"),
-                content=ft.Text(error_message, rtl=True),
-                rtl=True
-            )
+                content=ft.Text(error_message))
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
@@ -1131,7 +1230,7 @@ class InvoiceView:
         if not items_data:
             dlg = ft.AlertDialog(
                 title=ft.Text("تنبيه"),
-                content=ft.Text("لا توجد بنود للحفظ", rtl=True)
+                content=ft.Text("لا توجد بنود للحفظ")
             )
             self.page.overlay.append(dlg)
             dlg.open = True
@@ -1151,7 +1250,7 @@ class InvoiceView:
         try:
             os.makedirs(my_invoices_dir, exist_ok=True)
         except OSError as ex:
-             dlg = ft.AlertDialog(title=ft.Text("خطأ"), content=ft.Text(f"فشل إنشاء المجلد: {ex}", rtl=True))
+             dlg = ft.AlertDialog(title=ft.Text("خطأ"), content=ft.Text(f"فشل إنشاء المجلد: {ex}"))
              self.page.overlay.append(dlg)
              dlg.open = True
              self.page.update()
@@ -1196,7 +1295,7 @@ class InvoiceView:
                     print(f"Error deleting old invoice file: {file_ex}")
             
             # Save the revenue invoice Excel file directly
-            from utils.excel_utils import save_invoice
+            from utils.invoice_utils import save_invoice
             # Extract only the first 8 elements for saving to Excel (excluding length_before and discount)
             items_for_excel = []
             for item in items_data:
@@ -1231,6 +1330,15 @@ class InvoiceView:
                 print(f"Error saving revenue invoice to database: {db_ex}")
                 # Continue with the process even if database save fails
             
+            # Disburse slides from inventory if invoice contains slide products
+            try:
+                slides_success, slides_message, disbursed_items = disburse_slides_from_invoice(
+                    op_num, date_str, items_data, client
+                )
+            except Exception as slides_ex:
+                print(f"[ERROR] Error disbursing slides for revenue invoice: {slides_ex}")
+                # Continue with the process even if slides disbursement fails
+            
             def open_file(e):
                 try:
                     if platform.system() == 'Windows':
@@ -1263,8 +1371,8 @@ class InvoiceView:
                 self.page.update()
 
             dlg = ft.AlertDialog(
-                title=ft.Text("نجاح", rtl=True),
-                content=ft.Text(f"تم حفظ فاتورة الإيراد بنجاح.\نالمسار: {full_path}", rtl=True),
+                title=ft.Text("نجاح"),
+                content=ft.Text(f"تم حفظ فاتورة الإيراد بنجاح.\نالمسار: {full_path}"),
                 actions=[
                     ft.TextButton("فتح الفاتورة", on_click=open_file),
                     ft.TextButton("فتح المجلد", on_click=open_folder),
@@ -1283,18 +1391,14 @@ class InvoiceView:
         except PermissionError as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", rtl=True),
-                rtl=True
-            )
+                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى."))
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
         except Exception as ex:
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}", rtl=True),
-                rtl=True
-            )
+                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}"))
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
@@ -1317,7 +1421,7 @@ class InvoiceView:
                 
                 confirm_dlg = ft.AlertDialog(
                     title=ft.Text("تنبيه"),
-                    content=ft.Text(f"يوجد فاتورة برقم {op_num} محفوظة مسبقاً. هل تريد تحميل بياناتها؟", rtl=True),
+                    content=ft.Text(f"يوجد فاتورة برقم {op_num} محفوظة مسبقاً. هل تريد تحميل بياناتها؟"),
                     actions=[
                         ft.TextButton("نعم", on_click=on_confirm_load),
                         ft.TextButton("لا", on_click=on_cancel_load)
@@ -1382,9 +1486,7 @@ class InvoiceView:
             print(f"Error loading invoice data: {ex}")
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء تحميل بيانات الفاتورة:\n{ex}", rtl=True),
-                rtl=True
-            )
+                content=ft.Text(f"حدث خطأ أثناء تحميل بيانات الفاتورة:\n{ex}"))
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()

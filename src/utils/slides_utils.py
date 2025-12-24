@@ -1,4 +1,5 @@
 import os
+import json
 import openpyxl
 import traceback
 from openpyxl import Workbook
@@ -14,7 +15,6 @@ def initialize_slides_inventory_excel(file_path):
     Args:
         file_path (str): Path to the Excel file
     """
-    print(f"[DEBUG] initialize_slides_inventory_excel called with file: {file_path}")
     try:
         # Create workbook
         wb = Workbook()
@@ -58,8 +58,8 @@ def initialize_slides_inventory_excel(file_path):
         for col_num, width in enumerate(column_widths, 1):
             add_sheet.column_dimensions[get_column_letter(col_num)].width = width
         
-        # Add headers to disburse sheet
-        disburse_headers = ["رقم اذن الصرف", "تاريخ الصرف", "اسم الصنف", "العدد", "ثمن الوحدة", "الإجمالي", "ملاحظات"]
+        # Add headers to disburse sheet - New format with merged cells like ledger
+        disburse_headers = ["رقم الفاتورة", "تاريخ الصرف", "اسم العميل", "اسم الصنف", "رقم البلوك", "السمك", "العدد", "ثمن الوحدة", "الإجمالي", "ملاحظات"]
         for col_num, header in enumerate(disburse_headers, 1):
             cell = disburse_sheet.cell(row=1, column=col_num, value=header)
             cell.font = header_font
@@ -68,7 +68,8 @@ def initialize_slides_inventory_excel(file_path):
             cell.border = border
         
         # Set column widths for disburse sheet
-        for col_num, width in enumerate(column_widths, 1):
+        disburse_column_widths = [15, 15, 20, 20, 12, 10, 10, 15, 15, 25]
+        for col_num, width in enumerate(disburse_column_widths, 1):
             disburse_sheet.column_dimensions[get_column_letter(col_num)].width = width
         
         # Add headers to inventory sheet
@@ -87,7 +88,6 @@ def initialize_slides_inventory_excel(file_path):
         
         # Save the workbook
         wb.save(file_path)
-        print(f"[DEBUG] Slides Excel file initialized successfully")
         return wb
     except Exception as e:
         print(f"[ERROR] Failed to initialize slides Excel file: {e}")
@@ -102,10 +102,8 @@ def convert_existing_slides_inventory_to_formulas(file_path):
     Args:
         file_path (str): Path to the Excel file
     """
-    print(f"[DEBUG] convert_existing_slides_inventory_to_formulas called with file: {file_path}")
     try:
         if not os.path.exists(file_path):
-            print(f"[DEBUG] File does not exist, creating new one")
             # If file doesn't exist, create a new one
             initialize_slides_inventory_excel(file_path)
             return
@@ -120,18 +118,18 @@ def convert_existing_slides_inventory_to_formulas(file_path):
         item_names = set()
         
         # Get items from additions sheet (skip header row)
+        # Column 3 (C) = اسم الصنف in additions sheet
         for row_num in range(2, add_sheet.max_row + 1):
-            item_name = add_sheet.cell(row=row_num, column=3).value  # Item name column
+            item_name = add_sheet.cell(row=row_num, column=3).value
             if item_name:
                 item_names.add(item_name)
         
         # Get items from disbursements sheet (skip header row)
+        # Column 4 (D) = اسم الصنف in new disburse sheet format
         for row_num in range(2, disburse_sheet.max_row + 1):
-            item_name = disburse_sheet.cell(row=row_num, column=3).value  # Item name column
+            item_name = disburse_sheet.cell(row=row_num, column=4).value
             if item_name:
                 item_names.add(item_name)
-        
-        print(f"[DEBUG] Found {len(item_names)} unique items")
         
         # Clear existing data in inventory sheet (keep header)
         for row_num in range(2, inventory_sheet.max_row + 1):
@@ -155,29 +153,30 @@ def convert_existing_slides_inventory_to_formulas(file_path):
             inventory_sheet.cell(row=row_num, column=1).alignment = alignment
             
             # Formula for total additions (SUMIF for additions)
+            # Additions: Column C = اسم الصنف, Column D = العدد
             additions_formula = f"=SUMIF('اذن اضافة الشرائح'!C:C,A{row_num},'اذن اضافة الشرائح'!D:D)"
             inventory_sheet.cell(row=row_num, column=2).value = additions_formula
             inventory_sheet.cell(row=row_num, column=2).border = border
             inventory_sheet.cell(row=row_num, column=2).alignment = alignment
-            inventory_sheet.cell(row=row_num, column=2).number_format = '#,##0.00'
+            inventory_sheet.cell(row=row_num, column=2).number_format = '#,##0'
             
             # Formula for total disbursements (SUMIF for disbursements)
-            disbursements_formula = f"=SUMIF('اذن صرف الشرائح'!C:C,A{row_num},'اذن صرف الشرائح'!D:D)"
+            # Disbursements: Column D = اسم الصنف, Column G = العدد (new format with block number)
+            disbursements_formula = f"=SUMIF('اذن صرف الشرائح'!D:D,A{row_num},'اذن صرف الشرائح'!G:G)"
             inventory_sheet.cell(row=row_num, column=3).value = disbursements_formula
             inventory_sheet.cell(row=row_num, column=3).border = border
             inventory_sheet.cell(row=row_num, column=3).alignment = alignment
-            inventory_sheet.cell(row=row_num, column=3).number_format = '#,##0.00'
+            inventory_sheet.cell(row=row_num, column=3).number_format = '#,##0'
             
             # Formula for current balance (additions - disbursements)
             balance_formula = f"=B{row_num}-C{row_num}"
             inventory_sheet.cell(row=row_num, column=4).value = balance_formula
             inventory_sheet.cell(row=row_num, column=4).border = border
             inventory_sheet.cell(row=row_num, column=4).alignment = alignment
-            inventory_sheet.cell(row=row_num, column=4).number_format = '#,##0.00'
+            inventory_sheet.cell(row=row_num, column=4).number_format = '#,##0'
         
         # Save the workbook
         wb.save(file_path)
-        print(f"[DEBUG] Slides formulas converted successfully")
     except Exception as e:
         print(f"[ERROR] Failed to convert slides to formulas: {e}")
         traceback.print_exc()
@@ -199,7 +198,6 @@ def add_slides_inventory_entry(file_path, item_name, quantity, unit_price, notes
     Returns:
         int: Entry number
     """
-    print(f"[DEBUG] add_slides_inventory_entry called")
     try:
         # Load workbook
         wb = openpyxl.load_workbook(file_path)
@@ -254,7 +252,6 @@ def add_slides_inventory_entry(file_path, item_name, quantity, unit_price, notes
         # Update inventory sheet with formulas
         convert_existing_slides_inventory_to_formulas(file_path)
         
-        print(f"[DEBUG] Slides entry added successfully with number: {next_entry_number}")
         return next_entry_number
     except Exception as e:
         print(f"[ERROR] Failed to add slides inventory entry: {e}")
@@ -262,46 +259,62 @@ def add_slides_inventory_entry(file_path, item_name, quantity, unit_price, notes
         raise
 
 
-def disburse_slides_inventory_entry(file_path, item_name, quantity, unit_price, notes="", disburse_date=None):
+def disburse_slides_inventory_entry(
+    file_path, 
+    invoice_number,
+    disburse_date,
+    client_name,
+    item_name,
+    block_number,
+    thickness,
+    quantity, 
+    unit_price, 
+    notes=""
+):
     """
     Add a slides inventory disbursement entry to the disbursements sheet
     
     Args:
         file_path (str): Path to the Excel file
+        invoice_number (str): Invoice number
+        disburse_date (str): Date of disbursement
+        client_name (str): Client name
         item_name (str): Name of the item
-        quantity (float): Quantity of the item
+        block_number (str): Block number
+        thickness (str): Thickness of the item
+        quantity (int): Quantity (count) of the item
         unit_price (float): Price per unit
         notes (str): Additional notes
-        disburse_date (str): Date of disbursement (defaults to today)
         
     Returns:
-        int: Disbursement entry number
+        int: Row number of the entry
     """
-    print(f"[DEBUG] disburse_slides_inventory_entry called")
     try:
         # Load workbook
         wb = openpyxl.load_workbook(file_path)
         disburse_sheet = wb["اذن صرف الشرائح"]
         
-        # Determine the next entry number
-        next_entry_number = disburse_sheet.max_row
-        
         # Get today's date if not provided
         if disburse_date is None:
             disburse_date = datetime.now().strftime('%d/%m/%Y')
         
-        # Calculate total price
-        total_price = float(quantity) * float(unit_price)
+        # Round values
+        quantity_int = int(float(quantity))
+        unit_price_rounded = round(float(unit_price), 0)
+        total_price = round(quantity_int * unit_price_rounded, 0)
         
         # Add data row
         row_data = [
-            next_entry_number,  # Auto entry number
-            disburse_date,
-            item_name,
-            float(quantity),
-            float(unit_price),
-            total_price,
-            notes
+            invoice_number,      # رقم الفاتورة
+            disburse_date,       # تاريخ الصرف
+            client_name,         # اسم العميل
+            item_name,           # اسم الصنف
+            block_number,        # رقم البلوك
+            thickness,           # السمك
+            quantity_int,        # العدد
+            unit_price_rounded,  # ثمن الوحدة
+            total_price,         # الإجمالي
+            notes                # ملاحظات
         ]
         
         # Add row to sheet
@@ -323,8 +336,10 @@ def disburse_slides_inventory_entry(file_path, item_name, quantity, unit_price, 
             cell.border = border
             cell.alignment = alignment
             # Apply number formatting for numeric columns
-            if col_num in [4, 5, 6]:  # Quantity, Unit Price, Total Price
-                cell.number_format = '#,##0.00'
+            if col_num == 7:  # العدد
+                cell.number_format = '#,##0'
+            elif col_num in [8, 9]:  # ثمن الوحدة، الإجمالي
+                cell.number_format = '#,##0'
         
         # Save the workbook
         wb.save(file_path)
@@ -332,8 +347,7 @@ def disburse_slides_inventory_entry(file_path, item_name, quantity, unit_price, 
         # Update inventory sheet with formulas
         convert_existing_slides_inventory_to_formulas(file_path)
         
-        print(f"[DEBUG] Slides disbursement entry added successfully with number: {next_entry_number}")
-        return next_entry_number
+        return row_num
     except Exception as e:
         print(f"[ERROR] Failed to add slides disbursement entry: {e}")
         traceback.print_exc()
@@ -350,9 +364,7 @@ def get_slides_inventory_summary(file_path):
     Returns:
         list: List of dictionaries containing inventory data
     """
-    print(f"[DEBUG] get_slides_inventory_summary called with file: {file_path}")
     if not os.path.exists(file_path):
-        print(f"[DEBUG] File does not exist")
         return []
     
     try:
@@ -391,7 +403,6 @@ def get_slides_inventory_summary(file_path):
                 }
                 inventory_data.append(item_data)
         
-        print(f"[DEBUG] Retrieved {len(inventory_data)} slides inventory items")
         return inventory_data
     except Exception as e:
         print(f"[ERROR] Error reading slides inventory summary: {e}")
@@ -409,9 +420,7 @@ def get_available_slides_items_with_prices(file_path):
     Returns:
         dict: Dictionary with item names as keys and average unit prices as values
     """
-    print(f"[DEBUG] get_available_slides_items_with_prices called with file: {file_path}")
     if not os.path.exists(file_path):
-        print(f"[DEBUG] File does not exist")
         return {}
     
     try:
@@ -429,8 +438,6 @@ def get_available_slides_items_with_prices(file_path):
                     inventory_balances[item_name] = float(balance)
                 except (ValueError, TypeError):
                     inventory_balances[item_name] = 0
-        
-        print(f"[DEBUG] Slides inventory balances: {inventory_balances}")
         
         # Get item prices from additions
         item_prices = {}
@@ -467,7 +474,6 @@ def get_available_slides_items_with_prices(file_path):
             else:
                 avg_prices[item_name] = 0
         
-        print(f"[DEBUG] Available slides items with prices: {avg_prices}")
         return avg_prices
     except Exception as e:
         print(f"[ERROR] Error getting available slides items with prices: {e}")
@@ -482,7 +488,6 @@ def initialize_slides_publishing_excel(file_path):
     Args:
         file_path (str): Path to the Excel file
     """
-    print(f"[DEBUG] initialize_slides_publishing_excel called with file: {file_path}")
     try:
         # Create workbook
         wb = Workbook()
@@ -529,10 +534,274 @@ def initialize_slides_publishing_excel(file_path):
         
         # Save the workbook
         wb.save(file_path)
-        print(f"[DEBUG] Slides publishing Excel file initialized successfully")
         return wb
     except Exception as e:
         print(f"[ERROR] Failed to initialize slides publishing Excel file: {e}")
+        traceback.print_exc()
+        raise
+
+
+def _remove_invoice_from_slides_disbursement(file_path, invoice_number):
+    """
+    Remove all disbursement entries for a specific invoice number.
+    This is used when updating an existing invoice.
+    
+    Args:
+        file_path (str): Path to the Excel file
+        invoice_number (str): Invoice number to remove
+    """
+    try:
+        if not os.path.exists(file_path):
+            return
+        
+        wb = openpyxl.load_workbook(file_path)
+        disburse_sheet = wb["اذن صرف الشرائح"]
+        
+        # Find all rows with this invoice number (Column A = رقم الفاتورة)
+        rows_to_delete = []
+        for row_num in range(2, disburse_sheet.max_row + 1):
+            cell_value = disburse_sheet.cell(row=row_num, column=1).value
+            if cell_value is not None and str(cell_value) == str(invoice_number):
+                rows_to_delete.append(row_num)
+        
+        # Also check for merged cells - the invoice number might only be in the first row of a merged group
+        # We need to find all rows that belong to this invoice
+        # Check if there are rows after the invoice number that have empty first column (part of merge)
+        if rows_to_delete:
+            first_row = rows_to_delete[0]
+            # Check subsequent rows until we find a non-empty cell or another invoice number
+            for row_num in range(first_row + 1, disburse_sheet.max_row + 1):
+                cell_value = disburse_sheet.cell(row=row_num, column=1).value
+                if cell_value is None or str(cell_value).strip() == "":
+                    # This row might be part of the merged group
+                    # Check if it has data in other columns (like item name)
+                    item_name = disburse_sheet.cell(row=row_num, column=4).value
+                    if item_name:
+                        rows_to_delete.append(row_num)
+                else:
+                    # Found another invoice number, stop
+                    break
+        
+        # Delete rows in reverse order to maintain correct indices
+        rows_to_delete = sorted(set(rows_to_delete), reverse=True)
+        for row_num in rows_to_delete:
+            # Unmerge any merged cells in this row first
+            for merged_range in list(disburse_sheet.merged_cells.ranges):
+                if merged_range.min_row <= row_num <= merged_range.max_row:
+                    try:
+                        disburse_sheet.unmerge_cells(str(merged_range))
+                    except Exception:
+                        pass
+            disburse_sheet.delete_rows(row_num)
+        
+        if rows_to_delete:
+            wb.save(file_path)
+            # Update inventory formulas
+            convert_existing_slides_inventory_to_formulas(file_path)
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to remove invoice from slides disbursement: {e}")
+        traceback.print_exc()
+
+
+def disburse_slides_from_invoice(invoice_number, invoice_date, items_data, client_name=""):
+    """
+    Disburse slides from inventory based on invoice items.
+    This function is called when saving an invoice that contains slide products.
+    
+    Args:
+        invoice_number (str): Invoice number for reference
+        invoice_date (str): Invoice date
+        items_data (list): List of tuples containing item data from invoice
+                          Format: (description, block, thickness, material, count, length, height, price, ...)
+        client_name (str): Client name
+        
+    Returns:
+        tuple: (success: bool, message: str, disbursed_items: list)
+    """
+    try:
+        # Get the slides inventory file path
+        documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
+        slides_path = os.path.join(documents_path, "الشرائح")
+        inventory_file = os.path.join(slides_path, "مخزون الشرائح.xlsx")
+        
+        # Check if inventory file exists
+        if not os.path.exists(inventory_file):
+            os.makedirs(slides_path, exist_ok=True)
+            initialize_slides_inventory_excel(inventory_file)
+        
+        # Remove old entries for this invoice first (for updates)
+        _remove_invoice_from_slides_disbursement(inventory_file, invoice_number)
+        
+        # Load slides products to check if item is a slide product
+        slides_products = []
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            json_path = os.path.join(project_root, "data", "slides_products.json")
+            with open(json_path, 'r', encoding='utf-8') as f:
+                products = json.load(f)
+                slides_products = [p["name"] for p in products]
+        except Exception:
+            # Default slides products if JSON fails
+            slides_products = ["نيو حلايب", "جندولا", "احمر اسوان"]
+        
+        # Collect all slide items first
+        slide_items_to_add = []
+        
+        # Process each item in the invoice
+        for item in items_data:
+            try:
+                description = item[0] if len(item) > 0 else ""
+                
+                if not description:
+                    continue
+                
+                # Check if this is a slide product
+                # The description could be just the name (e.g., "نيو حلايب") 
+                # or with prefix (e.g., "ش نيو حلايب")
+                material_name = description
+                if description.startswith("ش "):
+                    material_name = description[2:]
+                
+                # Check if material is in slides products list
+                if material_name not in slides_products:
+                    continue
+                
+                # Get item details
+                block_number = item[1] if len(item) > 1 else ""
+                thickness = item[2] if len(item) > 2 else ""
+                count = int(float(item[4])) if len(item) > 4 and item[4] else 0
+                price = float(item[7]) if len(item) > 7 and item[7] else 0
+                
+                if count <= 0:
+                    continue
+                
+                # Item name is just the material name (without thickness)
+                item_name = material_name
+                
+                # Calculate total price for this item
+                total_price = count * price
+                
+                slide_items_to_add.append({
+                    'item_name': item_name,
+                    'block_number': block_number,
+                    'thickness': thickness,
+                    'quantity': count,
+                    'unit_price': price,
+                    'total_price': total_price
+                })
+                
+            except Exception as item_ex:
+                print(f"[ERROR] Error processing item for disbursement: {item_ex}")
+                continue
+        
+        # If we have slide items, add them with merged cells
+        if slide_items_to_add:
+            _add_slides_disbursement_with_merge(
+                inventory_file,
+                invoice_number,
+                invoice_date,
+                client_name,
+                slide_items_to_add
+            )
+        
+        if slide_items_to_add:
+            return True, f"تم صرف {len(slide_items_to_add)} صنف من الشرائح", slide_items_to_add
+        else:
+            return True, "لا توجد شرائح في الفاتورة", []
+            
+    except Exception as e:
+        print(f"[ERROR] Error disbursing slides from invoice: {e}")
+        traceback.print_exc()
+        return False, f"خطأ في صرف الشرائح: {str(e)}", []
+
+
+def _add_slides_disbursement_with_merge(file_path, invoice_number, invoice_date, client_name, items):
+    """
+    Add multiple slides disbursement entries with merged cells for invoice info
+    
+    Args:
+        file_path (str): Path to the Excel file
+        invoice_number (str): Invoice number
+        invoice_date (str): Date of disbursement
+        client_name (str): Client name
+        items (list): List of item dictionaries
+    """
+    try:
+        wb = openpyxl.load_workbook(file_path)
+        disburse_sheet = wb["اذن صرف الشرائح"]
+        
+        # Get the starting row
+        start_row = disburse_sheet.max_row + 1
+        num_items = len(items)
+        
+        # Define styles
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Add all item rows first
+        for idx, item in enumerate(items):
+            row_num = start_row + idx
+            
+            quantity_int = int(float(item['quantity']))
+            unit_price_rounded = round(float(item['unit_price']), 0)
+            total_price = round(quantity_int * unit_price_rounded, 0)
+            
+            # Set values for each column
+            # Column 1: رقم الفاتورة (will be merged)
+            disburse_sheet.cell(row=row_num, column=1, value=invoice_number if idx == 0 else "")
+            # Column 2: تاريخ الصرف (will be merged)
+            disburse_sheet.cell(row=row_num, column=2, value=invoice_date if idx == 0 else "")
+            # Column 3: اسم العميل (will be merged)
+            disburse_sheet.cell(row=row_num, column=3, value=client_name if idx == 0 else "")
+            # Column 4: اسم الصنف
+            disburse_sheet.cell(row=row_num, column=4, value=item['item_name'])
+            # Column 5: رقم البلوك
+            disburse_sheet.cell(row=row_num, column=5, value=item['block_number'])
+            # Column 6: السمك
+            disburse_sheet.cell(row=row_num, column=6, value=item['thickness'])
+            # Column 7: العدد
+            disburse_sheet.cell(row=row_num, column=7, value=quantity_int)
+            # Column 8: ثمن الوحدة
+            disburse_sheet.cell(row=row_num, column=8, value=unit_price_rounded)
+            # Column 9: الإجمالي
+            disburse_sheet.cell(row=row_num, column=9, value=total_price)
+            # Column 10: ملاحظات
+            disburse_sheet.cell(row=row_num, column=10, value="")
+            
+            # Apply styles to all cells
+            for col_num in range(1, 11):
+                cell = disburse_sheet.cell(row=row_num, column=col_num)
+                cell.border = border
+                cell.alignment = alignment
+                if col_num == 7:  # العدد
+                    cell.number_format = '#,##0'
+                elif col_num in [8, 9]:  # ثمن الوحدة، الإجمالي
+                    cell.number_format = '#,##0'
+        
+        # Merge cells for invoice info if more than one item
+        if num_items > 1:
+            end_row = start_row + num_items - 1
+            # Merge رقم الفاتورة (Column A)
+            disburse_sheet.merge_cells(start_row=start_row, start_column=1, end_row=end_row, end_column=1)
+            # Merge تاريخ الصرف (Column B)
+            disburse_sheet.merge_cells(start_row=start_row, start_column=2, end_row=end_row, end_column=2)
+            # Merge اسم العميل (Column C)
+            disburse_sheet.merge_cells(start_row=start_row, start_column=3, end_row=end_row, end_column=3)
+        
+        # Save the workbook
+        wb.save(file_path)
+        
+        # Update inventory sheet with formulas
+        convert_existing_slides_inventory_to_formulas(file_path)
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to add slides disbursement with merge: {e}")
         traceback.print_exc()
         raise
 
@@ -548,7 +817,6 @@ def add_slides_publishing_entry(file_path, publishing_data):
     Returns:
         int: Number of entries added
     """
-    print(f"[DEBUG] add_slides_publishing_entry called")
     try:
         # Load workbook
         wb = openpyxl.load_workbook(file_path)
@@ -613,7 +881,6 @@ def add_slides_publishing_entry(file_path, publishing_data):
         # Save the workbook
         wb.save(file_path)
         
-        print(f"[DEBUG] {len(publishing_data)} slides inventory entries added successfully")
         return len(publishing_data)
     except Exception as e:
         print(f"[ERROR] Failed to add slides publishing entries: {e}")
