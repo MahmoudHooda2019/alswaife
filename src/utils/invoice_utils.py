@@ -5,6 +5,8 @@ This module provides functions to generate Excel invoices from invoice data.
 
 import logging
 import xlsxwriter
+import openpyxl
+from openpyxl.cell.cell import MergedCell
 from typing import List, Tuple
 import os
 
@@ -408,6 +410,216 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
     except Exception as e:
         logger.error(f"Error when closing workbook for invoice {op_num}: {e}")
         raise
+
+
+def update_payment_in_invoice(filepath: str, payment_amount: float) -> bool:
+    """
+    Update the payment amount in an existing invoice Excel file.
+    
+    Args:
+        filepath (str): Path to the invoice Excel file
+        payment_amount (float): The payment amount to set
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    logger.info(f"Updating payment in invoice file: {filepath}")
+    
+    if not os.path.exists(filepath):
+        logger.error(f"Invoice file does not exist: {filepath}")
+        return False
+    
+    try:
+        import openpyxl
+        from openpyxl.cell.cell import MergedCell
+        
+        workbook = openpyxl.load_workbook(filepath)
+        sheet = workbook.active
+        
+        if sheet is None:
+            logger.error("Could not access active sheet in invoice")
+            workbook.close()
+            return False
+        
+        # Find the payments table - look for "المدفوعات" header
+        payments_row = None
+        for row in range(1, sheet.max_row + 1):
+            for col in range(1, sheet.max_column + 1):
+                cell_value = sheet.cell(row=row, column=col).value
+                if cell_value == "المدفوعات":
+                    payments_row = row
+                    break
+            if payments_row:
+                break
+        
+        if not payments_row:
+            logger.error("Could not find payments table in invoice")
+            workbook.close()
+            return False
+        
+        # The payment data row is 2 rows after the header (header + column labels + data)
+        # Header row: "المدفوعات"
+        # Labels row: "المبلغ" | "المدفوع" | "المتبقي"
+        # Data row: value | payment | remaining
+        payment_data_row = payments_row + 2
+        
+        # In xlsxwriter (0-indexed): column 8=I (المبلغ), column 9=J (المدفوع), column 10=K (المتبقي)
+        # In openpyxl (1-indexed): column 9=I, column 10=J, column 11=K
+        # So "المدفوع" is column 10 in openpyxl
+        paid_column = 10  # Column J in openpyxl (1-indexed)
+        
+        # Update the payment cell
+        cell = sheet.cell(row=payment_data_row, column=paid_column)
+        if not isinstance(cell, MergedCell):
+            cell.value = payment_amount
+            logger.info(f"Updated payment cell at row {payment_data_row}, column {paid_column} with value {payment_amount}")
+        else:
+            logger.warning(f"Payment cell is merged, cannot update directly")
+            workbook.close()
+            return False
+        
+        # Save the workbook
+        workbook.save(filepath)
+        workbook.close()
+        logger.info(f"Successfully updated payment in invoice: {filepath}")
+        return True
+        
+    except PermissionError as e:
+        logger.error(f"Permission error updating payment in invoice: {e}")
+        raise PermissionError("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+    except Exception as e:
+        logger.error(f"Error updating payment in invoice: {e}")
+        return False
+
+
+def get_payment_from_invoice(filepath: str) -> float:
+    """
+    Read the payment amount from an existing invoice Excel file.
+    
+    Args:
+        filepath (str): Path to the invoice Excel file
+        
+    Returns:
+        float: The payment amount, or 0 if not found
+    """
+    if not os.path.exists(filepath):
+        return 0
+    
+    try:
+        workbook = openpyxl.load_workbook(filepath, data_only=True)
+        sheet = workbook.active
+        
+        # Find the payments table - look for "المدفوعات" header
+        payments_row = None
+        for row in range(1, sheet.max_row + 1):
+            for col in range(1, sheet.max_column + 1):
+                cell_value = sheet.cell(row=row, column=col).value
+                if cell_value == "المدفوعات":
+                    payments_row = row
+                    break
+            if payments_row:
+                break
+        
+        if not payments_row:
+            workbook.close()
+            return 0
+        
+        # The payment data row is 2 rows after the header
+        payment_data_row = payments_row + 2
+        paid_column = 10  # Column J in openpyxl (1-indexed) - المدفوع
+        
+        # Read the payment cell
+        cell = sheet.cell(row=payment_data_row, column=paid_column)
+        payment_value = cell.value
+        
+        workbook.close()
+        
+        if payment_value is not None:
+            try:
+                return float(payment_value)
+            except (ValueError, TypeError):
+                return 0
+        return 0
+        
+    except Exception as e:
+        logger.error(f"Error reading payment from invoice: {e}")
+        return 0
+
+
+def update_payment_in_ledger(folder_path: str, op_num: str, payment_amount: float) -> bool:
+    """
+    Update the payment amount for a specific invoice in the client ledger.
+    
+    Args:
+        folder_path (str): Path to the client's folder
+        op_num (str): Invoice number to update
+        payment_amount (float): The payment amount to set
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    logger.info(f"Updating payment in ledger for invoice {op_num} at {folder_path}")
+    
+    filename = "كشف حساب.xlsx"
+    filepath = os.path.join(folder_path, filename)
+    
+    if not os.path.exists(filepath):
+        logger.error(f"Ledger file does not exist: {filepath}")
+        return False
+    
+    try:
+        import openpyxl
+        from openpyxl.cell.cell import MergedCell
+        
+        workbook = openpyxl.load_workbook(filepath)
+        sheet = workbook.active
+        
+        if sheet is None:
+            logger.error("Could not access active sheet in ledger")
+            workbook.close()
+            return False
+        
+        # Find the row with the matching invoice number (column 1)
+        found_row = None
+        for row in range(3, sheet.max_row + 1):
+            cell_value = sheet.cell(row=row, column=1).value
+            if str(cell_value) == str(op_num):
+                found_row = row
+                logger.info(f"Found invoice {op_num} at row {row}")
+                break
+        
+        if not found_row:
+            logger.warning(f"Invoice {op_num} not found in ledger")
+            workbook.close()
+            return False
+        
+        # Column 9 is "الدفعات" (payments) in the ledger
+        # Update the payment cell
+        payment_cell = sheet.cell(row=found_row, column=9)
+        if not isinstance(payment_cell, MergedCell):
+            payment_cell.value = payment_amount
+            logger.info(f"Updated payment cell at row {found_row}, column 9 with value {payment_amount}")
+        else:
+            # If merged, find the top-left cell of the merge
+            for merged_range in sheet.merged_cells.ranges:
+                if payment_cell.coordinate in merged_range:
+                    top_left = sheet.cell(row=merged_range.min_row, column=merged_range.min_col)
+                    top_left.value = payment_amount
+                    logger.info(f"Updated merged payment cell at row {merged_range.min_row} with value {payment_amount}")
+                    break
+        
+        # Save the workbook
+        workbook.save(filepath)
+        workbook.close()
+        logger.info(f"Successfully updated payment in ledger for invoice {op_num}")
+        return True
+        
+    except PermissionError as e:
+        logger.error(f"Permission error updating payment in ledger: {e}")
+        raise PermissionError("ملف كشف الحساب مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+    except Exception as e:
+        logger.error(f"Error updating payment in ledger: {e}")
+        return False
 
 
 def delete_existing_invoice_file(filepath: str) -> bool:

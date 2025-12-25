@@ -29,9 +29,10 @@ except ImportError:
     def get_zoom_level(db_path: str) -> float: return 1.0
     def set_zoom_level(db_path: str, zoom_level: float) -> None: pass
 
-from utils.invoice_utils import update_client_ledger, remove_invoice_from_ledger, delete_existing_invoice_file, update_invoice_in_ledger
+from utils.invoice_utils import update_client_ledger, remove_invoice_from_ledger, delete_existing_invoice_file, update_invoice_in_ledger, update_payment_in_invoice, update_payment_in_ledger, get_payment_from_invoice
 from utils.path_utils import resource_path
 from utils.slides_utils import disburse_slides_from_invoice
+from utils.purchases_utils import add_income_record
 
 
 def is_excel_running():
@@ -455,15 +456,15 @@ class InvoiceView:
         
         self.products_path = resource_path(os.path.join('data', 'products.json'))
         # Use Documents folder for database instead of resources (which is read-only)
-        documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
-        if not os.path.exists(documents_path):
+        self.documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
+        if not os.path.exists(self.documents_path):
             try:
-                os.makedirs(documents_path)
+                os.makedirs(self.documents_path)
             except OSError as e:
-                print(f"Warning: Could not create directory {documents_path}: {e}")
+                print(f"Warning: Could not create directory {self.documents_path}: {e}")
                 # Fallback to current directory
-                documents_path = "."
-        self.db_path = os.path.join(documents_path, 'invoice.db')
+                self.documents_path = "."
+        self.db_path = os.path.join(self.documents_path, 'invoice.db')
         
         # Initialize database with error handling
         try:
@@ -513,6 +514,17 @@ class InvoiceView:
 
         self.ent_driver = ft.TextField(label="اسم السائق", width=150)
         self.ent_phone = ft.TextField(label="رقم التليفون", width=150)
+        
+        # Payment field for sending payment to Excel
+        self.ent_payment = ft.TextField(
+            label="المدفوع",
+            width=120,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*$")
+        )
+        
+        # Variable to store the current invoice file path
+        self.current_invoice_path = None
         
         # Main container - using ListView for better performance with many rows
         self.rows_container = ft.ListView(
@@ -1104,6 +1116,56 @@ class InvoiceView:
                 print(f"[ERROR] Error disbursing slides: {slides_ex}")
                 # Continue with the process even if slides disbursement fails
             
+            # Store the current invoice path for payment updates
+            self.current_invoice_path = full_path
+            
+            # Send payment to Excel if payment field has a value
+            payment_str = self.ent_payment.value.strip() if self.ent_payment.value else ""
+            payment_amount = 0
+            if payment_str:
+                try:
+                    payment_amount = float(payment_str)
+                    # Update payment in invoice file
+                    payment_success = update_payment_in_invoice(full_path, payment_amount)
+                    if payment_success:
+                        print(f"Successfully sent payment ({payment_amount}) to invoice")
+                    else:
+                        print(f"Failed to send payment to invoice")
+                    
+                    # Also update payment in client ledger
+                    ledger_success = update_payment_in_ledger(client_dir, op_num, payment_amount)
+                    if ledger_success:
+                        print(f"Successfully sent payment ({payment_amount}) to client ledger")
+                    else:
+                        print(f"Failed to send payment to client ledger")
+                except ValueError:
+                    print(f"Invalid payment value: {payment_str}")
+                except Exception as payment_ex:
+                    print(f"Error sending payment: {payment_ex}")
+            
+            # Add income record to purchases/income ledger (always record invoice)
+            print(f"[DEBUG] Starting income record save...")
+            print(f"[DEBUG] documents_path: {self.documents_path}")
+            try:
+                purchases_folder = os.path.join(self.documents_path, "ايرادات ومصروفات")
+                print(f"[DEBUG] purchases_folder: {purchases_folder}")
+                os.makedirs(purchases_folder, exist_ok=True)
+                purchases_file = os.path.join(purchases_folder, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
+                print(f"[DEBUG] Saving income to: {purchases_file}")
+                income_record = {
+                    'date': date_str,
+                    'invoice_number': op_num,
+                    'client': client if client else "بدون اسم",
+                    'amount': payment_amount if payment_amount > 0 else total_amount,
+                }
+                print(f"[DEBUG] income_record: {income_record}")
+                result = add_income_record(purchases_file, income_record)
+                print(f"[SUCCESS] Added income record for invoice {op_num} to {result}")
+            except Exception as income_ex:
+                import traceback
+                print(f"[ERROR] Error adding income record: {income_ex}")
+                traceback.print_exc()
+            
             def open_file(e):
                 # Use our universal function to open the file
                 open_path(full_path)
@@ -1135,10 +1197,6 @@ class InvoiceView:
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
-            
-            # زيادة رقم العملية تلقائياً بعد الحفظ الناجح (فقط للفواتير الجديدة)
-            if not invoice_already_exists:
-                self.increment_op()
             
         except PermissionError as ex:
             dlg = ft.AlertDialog(
@@ -1256,7 +1314,7 @@ class InvoiceView:
              self.page.update()
              return
 
-        fname = f"{sanitize(op_num)}_{now.strftime('%Y-%m-%d_%H-%M-%S')}.xlsx"
+        fname = f"فاتورة رقم ({sanitize(op_num)}) _ ايراد _ بتاريخ {date_str.replace('/', '-')}.xlsx"
         full_path = os.path.join(my_invoices_dir, fname)
         
         try:
@@ -1339,6 +1397,46 @@ class InvoiceView:
                 print(f"[ERROR] Error disbursing slides for revenue invoice: {slides_ex}")
                 # Continue with the process even if slides disbursement fails
             
+            # Store the current invoice path for payment updates
+            self.current_invoice_path = full_path
+            
+            # Send payment to Excel if payment field has a value
+            payment_str = self.ent_payment.value.strip() if self.ent_payment.value else ""
+            payment_amount = 0
+            if payment_str:
+                try:
+                    payment_amount = float(payment_str)
+                    payment_success = update_payment_in_invoice(full_path, payment_amount)
+                    if payment_success:
+                        print(f"Successfully sent payment ({payment_amount}) to revenue invoice")
+                    else:
+                        print(f"Failed to send payment to revenue invoice")
+                except ValueError:
+                    print(f"Invalid payment value: {payment_str}")
+                except Exception as payment_ex:
+                    print(f"Error sending payment: {payment_ex}")
+            
+            # Add income record to income/expenses ledger
+            print(f"[DEBUG] Starting income record save for revenue invoice...")
+            try:
+                purchases_folder = os.path.join(self.documents_path, "ايرادات ومصروفات")
+                os.makedirs(purchases_folder, exist_ok=True)
+                purchases_file = os.path.join(purchases_folder, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
+                print(f"[DEBUG] Saving income to: {purchases_file}")
+                income_record = {
+                    'date': date_str,
+                    'invoice_number': op_num,
+                    'client': client if client else "بدون اسم",
+                    'amount': payment_amount if payment_amount > 0 else total_amount,
+                }
+                print(f"[DEBUG] income_record: {income_record}")
+                result = add_income_record(purchases_file, income_record)
+                print(f"[SUCCESS] Added income record for revenue invoice {op_num} to {result}")
+            except Exception as income_ex:
+                import traceback
+                print(f"[ERROR] Error adding income record: {income_ex}")
+                traceback.print_exc()
+            
             def open_file(e):
                 try:
                     if platform.system() == 'Windows':
@@ -1383,10 +1481,6 @@ class InvoiceView:
             self.page.overlay.append(dlg)
             dlg.open = True
             self.page.update()
-            
-            # زيادة رقم العملية تلقائياً بعد الحفظ الناجح (فقط للفواتير الجديدة)
-            if not invoice_already_exists:
-                self.increment_op()
             
         except PermissionError as ex:
             dlg = ft.AlertDialog(
@@ -1443,6 +1537,19 @@ class InvoiceView:
                 self.ent_driver.value = invoice_data["driver_name"]
                 self.ent_phone.value = invoice_data["phone"]
                 self.date_var.value = invoice_data["date"]
+                
+                # Store the invoice file path for payment updates
+                self.current_invoice_path = invoice_data.get("file_path", None)
+                
+                # Load payment from invoice file if exists
+                if self.current_invoice_path and os.path.exists(self.current_invoice_path):
+                    payment_value = get_payment_from_invoice(self.current_invoice_path)
+                    if payment_value > 0:
+                        self.ent_payment.value = str(int(payment_value)) if payment_value == int(payment_value) else str(payment_value)
+                    else:
+                        self.ent_payment.value = ""
+                else:
+                    self.ent_payment.value = ""
                 
                 # Clear existing rows
                 self.rows.clear()
@@ -1506,6 +1613,10 @@ class InvoiceView:
         self.ent_client.value = ""
         self.ent_driver.value = ""
         self.ent_phone.value = ""
+        self.ent_payment.value = ""
+        
+        # Reset invoice path
+        self.current_invoice_path = None
         
         # تحديث التاريخ للتاريخ الحالي
         date_value = self.get_internet_date()
@@ -1636,6 +1747,10 @@ class InvoiceView:
                          spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 ft.Column([ft.Icon(ft.Icons.PHONE, color=ft.Colors.BLUE_300, size=20), self.ent_phone], 
                          spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Column([
+                    ft.Icon(ft.Icons.PAYMENTS, color=ft.Colors.GREEN_300, size=20),
+                    self.ent_payment
+                ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             ], spacing=10, alignment=ft.MainAxisAlignment.SPACE_EVENLY),
         ], spacing=5)
         

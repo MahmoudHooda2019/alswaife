@@ -1,125 +1,169 @@
 import os
-import json
 from datetime import datetime
 import flet as ft
-from utils.path_utils import resource_path
-from utils.purchases_utils import export_purchases_to_excel, load_purchases_from_excel, load_item_names_from_excel
-import xlsxwriter
-from openpyxl import load_workbook
-from openpyxl.styles import Border, Side, Alignment, PatternFill, Font
+from utils.purchases_utils import export_purchases_to_excel, load_item_names_from_excel
 
 
-class PurchasesView:
-    """View for managing purchases with auto-complete functionality"""
+class PurchaseRow:
+    """Row UI for expense entry with improved styling"""
     
-    def __init__(self, page: ft.Page, on_back=None):
+    def __init__(self, page: ft.Page, delete_callback, items_list=None):
         self.page = page
-        self.on_back = on_back
-        self.page.title = "مصنع السويفي - المشتريات"
-        self.page.rtl = True
-        self.page.theme_mode = ft.ThemeMode.DARK
+        self.delete_callback = delete_callback
+        self.items_list = items_list or []
+        self._build_controls()
+
+    def _create_styled_textfield(self, label, width, **kwargs):
+        """Create a consistently styled text field"""
+        bgcolor = kwargs.pop('bgcolor', ft.Colors.BLUE_GREY_900)
         
-        # Initialize data storage
-        self.documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
-        self.purchases_path = os.path.join(self.documents_path, "المشتريات")
-        os.makedirs(self.purchases_path, exist_ok=True)
+        return ft.TextField(
+            label=label,
+            width=width,
+            border_radius=10,
+            filled=True,
+            bgcolor=bgcolor,
+            border_color=ft.Colors.GREY_700,
+            focused_border_color=ft.Colors.WHITE,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            text_style=ft.TextStyle(size=14, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+            cursor_color=ft.Colors.WHITE,
+            **kwargs
+        )
+
+    def _build_controls(self):
+        """Build all UI controls with improved styling"""
+        width_small = 130
+        width_medium = 160
+        width_large = 440
+        numeric_filter = ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*$")
         
-        # Load existing items for auto-complete
-        self.items_list = self.load_existing_items()
-        self.suppliers_list = ["مستر مصطفي", "مستر محمد", ""]  # Predefined suppliers
-        
-        # Form fields
-        self.date_field = ft.TextField(
-            label="التاريخ",
-            value=datetime.now().strftime('%d/%m/%Y'),
-            width=150
+        # Date field
+        self.date_field = self._create_styled_textfield(
+            "تاريخ الصرف",
+            width_medium,
+            value=datetime.now().strftime("%d/%m/%Y"),
+            icon=ft.Icons.CALENDAR_TODAY
         )
         
-        self.code_field = ft.TextField(
-            label="الكود",
-            width=150,
-            keyboard_type=ft.KeyboardType.NUMBER
+        # Quantity field
+        self.quantity_field = self._create_styled_textfield(
+            "العدد",
+            width_small,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=numeric_filter,
+            icon=ft.Icons.TAG
         )
         
-        self.quantity_field = ft.TextField(
-            label="العدد",
-            width=150,
-            keyboard_type=ft.KeyboardType.NUMBER
+        # Item name field (البيان)
+        self.item_name_field = self._create_styled_textfield(
+            "البيان",
+            width_large,
+            on_change=self._on_item_name_change,
+            icon=ft.Icons.DESCRIPTION
         )
         
-        # Item name with auto-complete
-        self.item_name_field = ft.TextField(
-            label="اسم الصنف",
-            width=None,  # Remove fixed width to allow expansion
-            expand=True,  # Allow field to expand
-            on_change=self.on_item_name_change
-        )
-        
-        # Suggestions list for items
+        # Suggestions container
         self.item_suggestions = ft.Column(
             visible=False,
             spacing=0
         )
         
-        self.total_price_field = ft.TextField(
-            label="إجمالي السعر",
-            width=150,
-            keyboard_type=ft.KeyboardType.NUMBER
+        # Total price field (المبلغ)
+        self.total_price_field = self._create_styled_textfield(
+            "المبلغ",
+            width_medium,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=numeric_filter,
+            icon=ft.Icons.ATTACH_MONEY
         )
         
-        # Supplier with auto-complete
-        self.supplier_field = ft.TextField(
-            label="من",
-            width=200,
-            on_change=self.on_supplier_change
+        # Delete button
+        self.delete_btn = ft.IconButton(
+            icon=ft.Icons.DELETE_OUTLINE,
+            icon_color=ft.Colors.RED_400,
+            tooltip="حذف الصف",
+            on_click=lambda e: self.delete_callback(self),
+            bgcolor=ft.Colors.GREY_800,
+            icon_size=20,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=10)
+            )
         )
         
-        # Suggestions list for suppliers
-        self.supplier_suggestions = ft.Column(
-            visible=False,
-            spacing=0
+        # Section header style
+        def create_section_header(text, color):
+            return ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Container(
+                            width=4,
+                            height=24,
+                            bgcolor=color,
+                            border_radius=2
+                        ),
+                        ft.Text(
+                            text,
+                            weight=ft.FontWeight.BOLD,
+                            size=16,
+                            color=color
+                        ),
+                    ],
+                    spacing=10
+                ),
+                margin=ft.margin.only(bottom=10)
+            )
+        
+        # Create the main card
+        self.card = ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        # Header with delete button
+                        ft.Row(
+                            controls=[
+                                ft.Container(expand=True),
+                                self.delete_btn
+                            ],
+                            alignment=ft.MainAxisAlignment.END
+                        ),
+                        
+                        ft.Divider(height=20, color=ft.Colors.GREY_700),
+                        
+                        # Expense Information Section
+                        create_section_header("بيانات المصروف", ft.Colors.RED_400),
+                        
+                        ft.Row(
+                            controls=[
+                                self.date_field,
+                                self.quantity_field,
+                                ft.Column([
+                                    self.item_name_field,
+                                    self.item_suggestions,
+                                ], spacing=0),
+                                self.total_price_field,
+                            ],
+                            spacing=15,
+                            wrap=True
+                        ),
+                    ],
+                    spacing=12
+                ),
+                padding=20,
+                gradient=ft.LinearGradient(
+                    begin=ft.alignment.top_left,
+                    end=ft.alignment.bottom_right,
+                    colors=[ft.Colors.GREY_900, ft.Colors.GREY_800]
+                ),
+                border_radius=15,
+                border=ft.border.all(1, ft.Colors.RED_900)
+            ),
+            elevation=8,
         )
         
-        self.notes_field = ft.TextField(
-            label="الملاحظات",
-            multiline=True,
-            min_lines=3,
-            max_lines=5,
-            width=400
-        )
-        
-        # Data table
-        self.data_table = ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("التاريخ")),
-                ft.DataColumn(ft.Text("الكود")),
-                ft.DataColumn(ft.Text("اسم الصنف")),
-                ft.DataColumn(ft.Text("العدد")),
-                ft.DataColumn(ft.Text("إجمالي السعر")),
-                ft.DataColumn(ft.Text("الرصيد")),
-                ft.DataColumn(ft.Text("من")),
-                ft.DataColumn(ft.Text("الملاحظات")),
-            ],
-            rows=[]
-        )
-        
-        # Load existing data
-        self.load_existing_data()
+        self.row = self.card
 
-    def load_existing_items(self):
-        """Load existing item names for auto-complete from Excel file"""
-        excel_file = os.path.join(self.purchases_path, "سجل المشتريات.xlsx")
-        return load_item_names_from_excel(excel_file)
-
-    def load_existing_data(self):
-        """Load existing purchase records from Excel file"""
-        excel_file = os.path.join(self.purchases_path, "سجل المشتريات.xlsx")
-        records = load_purchases_from_excel(excel_file)
-        
-        for record in records:
-            self.add_row_to_table(record)
-
-    def on_item_name_change(self, e):
+    def _on_item_name_change(self, e):
         """Handle item name change with auto-complete suggestions"""
         search_text = self.item_name_field.value.strip().lower() if self.item_name_field.value else ""
         
@@ -129,15 +173,14 @@ class PurchasesView:
             self.page.update()
             return
         
-        # Filter suggestions
         filtered = [item for item in self.items_list if search_text in item.lower()]
         
         if filtered:
             self.item_suggestions.controls.clear()
-            for item in filtered[:5]:  # Show max 5 suggestions
+            for item in filtered[:5]:
                 suggestion_btn = ft.TextButton(
                     text=item,
-                    on_click=lambda e, i=item: self.select_item_suggestion(i),
+                    on_click=lambda e, i=item: self._select_item_suggestion(i),
                     style=ft.ButtonStyle(
                         padding=ft.padding.all(5),
                     )
@@ -150,147 +193,235 @@ class PurchasesView:
         
         self.page.update()
 
-    def select_item_suggestion(self, item_name):
+    def _select_item_suggestion(self, item_name):
         """Select an item from suggestions"""
         self.item_name_field.value = item_name
         self.item_suggestions.visible = False
         self.item_suggestions.controls.clear()
         self.page.update()
 
-    def on_supplier_change(self, e):
-        """Handle supplier change with auto-complete suggestions"""
-        search_text = self.supplier_field.value.strip().lower() if self.supplier_field.value else ""
-        
-        if not search_text:
-            self.supplier_suggestions.visible = False
-            self.supplier_suggestions.controls.clear()
-            self.page.update()
-            return
-        
-        # Filter suggestions
-        filtered = [supplier for supplier in self.suppliers_list if search_text in supplier.lower()]
-        
-        if filtered:
-            self.supplier_suggestions.controls.clear()
-            for supplier in filtered[:5]:  # Show max 5 suggestions
-                suggestion_btn = ft.TextButton(
-                    text=supplier,
-                    on_click=lambda e, s=supplier: self.select_supplier_suggestion(s),
-                    style=ft.ButtonStyle(
-                        padding=ft.padding.all(5),
-                    )
-                )
-                self.supplier_suggestions.controls.append(suggestion_btn)
-            self.supplier_suggestions.visible = True
-        else:
-            self.supplier_suggestions.visible = False
-            self.supplier_suggestions.controls.clear()
-        
-        self.page.update()
-
-    def select_supplier_suggestion(self, supplier_name):
-        """Select a supplier from suggestions"""
-        self.supplier_field.value = supplier_name
-        self.supplier_suggestions.visible = False
-        self.supplier_suggestions.controls.clear()
-        self.page.update()
-
-    def add_row_to_table(self, record):
-        """Add a record to the data table"""
-        # Calculate balance for display (this is a simplified version for the table display)
-        # In the actual Excel, the balance is calculated with formulas
-        balance = record.get('total_price', '')  # Simplified for display purposes
-        
-        self.data_table.rows.append(
-            ft.DataRow(
-                cells=[
-                    ft.DataCell(ft.Text(record.get('date', ''))),
-                    ft.DataCell(ft.Text(record.get('code', ''))),
-                    ft.DataCell(ft.Text(record.get('item_name', ''))),
-                    ft.DataCell(ft.Text(record.get('quantity', ''))),
-                    ft.DataCell(ft.Text(record.get('total_price', ''))),
-                    ft.DataCell(ft.Text(balance)),  # Balance column
-                    ft.DataCell(ft.Text(record.get('supplier', ''))),
-                    ft.DataCell(ft.Text(record.get('notes', ''))),
-                ]
-            )
-        )
-
-    def save_purchase(self, e):
-        """Save purchase record to Excel file"""
-        # Validate only the item name field is required
-        if not self.item_name_field.value or not self.item_name_field.value.strip():
-            self.show_dialog("خطأ", "يرجى إدخال اسم الصنف", ft.Colors.RED_400)
-            return
-            
-        # Create record (use empty strings or default values for missing fields)
-        record = {
-            'date': self.date_field.value,
-            'code': self.code_field.value if self.code_field.value else "",
-            'item_name': self.item_name_field.value,
-            'quantity': self.quantity_field.value if self.quantity_field.value else "",
-            'total_price': self.total_price_field.value if self.total_price_field.value else "",
-            'supplier': self.supplier_field.value if self.supplier_field.value else "",
-            'notes': self.notes_field.value if self.notes_field.value else ""
+    def to_dict(self):
+        """Convert row data to dictionary for export"""
+        return {
+            'date': self.date_field.value or "",
+            'quantity': self.quantity_field.value or "",
+            'item_name': self.item_name_field.value or "",
+            'total_price': self.total_price_field.value or "",
         }
-        
-        # Save to Excel file using the utility
-        excel_file = os.path.join(self.purchases_path, "سجل المشتريات.xlsx")
-        
-        try:
-            # Export the record to Excel
-            export_purchases_to_excel([record], excel_file)
-                
-            # Add to table
-            self.add_row_to_table(record)
-            
-            # Add to items list for future auto-complete
-            if record['item_name'] not in self.items_list:
-                self.items_list.append(record['item_name'])
-            
-            # Clear form (only clear the item name field)
-            self.item_name_field.value = ""
-            
-            self.page.update()
-            self.show_success_dialog(excel_file)
-            
-        except PermissionError as e:
-            self.show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
-        except Exception as e:
-            self.show_dialog("خطأ", f"حدث خطأ أثناء حفظ البيانات: {str(e)}", ft.Colors.RED_400)
 
-    def show_dialog(self, title, message, color):
-        """Show a dialog with a message"""
-        def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            
-        dlg = ft.AlertDialog(
-            title=ft.Text(title, color=color),
-            content=ft.Text(message, rtl=True),
-            actions=[
-                ft.TextButton("حسناً", on_click=close_dlg)
-            ]
+    def clear(self):
+        """Clear all fields except date"""
+        self.quantity_field.value = ""
+        self.item_name_field.value = ""
+        self.total_price_field.value = ""
+
+
+class PurchasesView:
+    """Main view for expenses management"""
+    _instance = None
+
+    def __init__(self, page: ft.Page, on_back=None):
+        self.__class__._instance = self
+        self.page = page
+        self.on_back = on_back
+        self.page.title = "مصنع السويفي - صرف"
+        self.page.rtl = True
+        self.page.theme_mode = ft.ThemeMode.DARK
+
+        # Initialize data storage
+        self.documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
+        self.purchases_path = os.path.join(self.documents_path, "ايرادات ومصروفات")
+        os.makedirs(self.purchases_path, exist_ok=True)
+        
+        # Load existing items for auto-complete
+        self.excel_file = os.path.join(self.purchases_path, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
+        self.items_list = load_item_names_from_excel(self.excel_file)
+
+        self.rows: list[PurchaseRow] = []
+        self.rows_container = ft.Column(
+            spacing=20,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True
         )
-        self.page.dialog = dlg
-        dlg.open = True
+
+    @classmethod
+    def get_instance(cls):
+        """Get the singleton instance"""
+        return cls._instance
+
+    def _row_has_data(self, row) -> bool:
+        """Check if a row has any meaningful data"""
+        return bool(row.item_name_field.value and row.item_name_field.value.strip())
+
+    def build_ui(self):
+        """Build the main UI"""
+        
+        # Create AppBar
+        app_bar = ft.AppBar(
+            leading=ft.IconButton(
+                icon=ft.Icons.ARROW_BACK,
+                on_click=self.go_back,
+                tooltip="العودة"
+            ),
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.MONEY_OFF, size=24, color=ft.Colors.RED_300),
+                    ft.Text(
+                        "صرف",
+                        size=20,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.RED_200
+                    ),
+                ],
+                spacing=10
+            ),
+            actions=[
+                ft.Container(
+                    content=ft.IconButton(
+                        icon=ft.Icons.FOLDER_OPEN,
+                        icon_color=ft.Colors.BLUE_300,
+                        on_click=self.open_purchases_file,
+                        tooltip="فتح ملف السجل",
+                        icon_size=24,
+                    ),
+                    margin=ft.margin.only(right=5, left=5),
+                    bgcolor=ft.Colors.GREY_800,
+                    border_radius=20,
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.ADD,
+                    on_click=self.add_row,
+                    tooltip="إضافة صف جديد"
+                ),
+                ft.Container(
+                    content=ft.IconButton(
+                        icon=ft.Icons.SAVE,
+                        on_click=self.save_to_excel,
+                        tooltip="حفظ البيانات"
+                    ),
+                    margin=ft.margin.only(left=40, right=15)
+                )
+            ],
+            bgcolor=ft.Colors.GREY_900,
+        )
+        
+        self.page.appbar = app_bar
+        
+        # Main layout
+        main_column = ft.Column(
+            controls=[
+                self.rows_container
+            ],
+            spacing=15,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True
+        )
+        
+        self.page.add(main_column)
+        
+        # Add initial row
+        self.add_row()
+        
+        self.page.update()
+        return main_column
+
+    def go_back(self, e):
+        """Navigate back to previous view"""
+        if self.on_back:
+            self.on_back()
+
+    def add_row(self, e=None):
+        """Add a new expense row"""
+        row = PurchaseRow(
+            page=self.page,
+            delete_callback=self.delete_row,
+            items_list=self.items_list
+        )
+        self.rows.append(row)
+        self.rows_container.controls.append(row.row)
         self.page.update()
 
-    def show_success_dialog(self, filepath):
-        """Show success dialog with file actions like blocks view"""
+    def delete_row(self, row_obj):
+        """Delete a specific row"""
+        if row_obj in self.rows:
+            self.rows.remove(row_obj)
+            self.rows_container.controls.remove(row_obj.row)
+            self.page.update()
+
+    def save_to_excel(self, e=None):
+        """Save data to Excel file"""
+        if not any(self._row_has_data(row) for row in self.rows):
+            self._show_dialog("تحذير", "لا توجد بيانات لحفظها", ft.Colors.ORANGE_400)
+            return
+
+        try:
+            data = [row.to_dict() for row in self.rows if self._row_has_data(row)]
+            export_purchases_to_excel(data, self.excel_file)
+            
+            # Add new items to auto-complete list
+            for record in data:
+                if record['item_name'] and record['item_name'] not in self.items_list:
+                    self.items_list.append(record['item_name'])
+            
+            # Clear rows after save
+            for row in self.rows:
+                row.clear()
+            
+            self._show_success_dialog(self.excel_file)
+            
+        except PermissionError:
+            self._show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
+        except Exception as e:
+            self._show_dialog("خطأ", f"حدث خطأ أثناء حفظ الملف:\n{str(e)}", ft.Colors.RED_400)
+
+    def open_purchases_file(self, e):
+        """Open the purchases Excel file"""
+        if os.path.exists(self.excel_file):
+            try:
+                os.startfile(self.excel_file)
+            except Exception:
+                self._show_dialog("خطأ", "لا يمكن فتح الملف حالياً", ft.Colors.RED_400)
+        else:
+            self._show_dialog("معلومات", "ملف السجل لم يتم إنشاؤه بعد", ft.Colors.BLUE_400)
+
+    def _show_dialog(self, title: str, message: str, title_color=ft.Colors.BLUE_300):
+        """Show a styled dialog"""
         def close_dlg(e=None):
             dlg.open = False
             self.page.update()
 
-        def open_file(e):
-            close_dlg(None)
+        dlg = ft.AlertDialog(
+            title=ft.Text(title, color=title_color, weight=ft.FontWeight.BOLD),
+            content=ft.Text(message, size=16, rtl=True),
+            actions=[
+                ft.TextButton(
+                    "إغلاق",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.BLUE_GREY_900
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def _show_success_dialog(self, filepath: str):
+        """Show success dialog with file actions"""
+        def close_dlg(e=None):
+            dlg.open = False
+            self.page.update()
+
+        def open_file(e=None):
+            close_dlg()
             try:
                 os.startfile(filepath)
             except Exception:
                 pass
 
-        def open_folder(e):
-            close_dlg(None)
+        def open_folder(e=None):
+            close_dlg()
             try:
                 folder = os.path.dirname(filepath)
                 os.startfile(folder)
@@ -303,12 +434,13 @@ class PurchasesView:
                     ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=30),
                     ft.Text("تم الحفظ بنجاح", color=ft.Colors.GREEN_300, weight=ft.FontWeight.BOLD),
                 ],
+                rtl=True,
                 spacing=10
             ),
             content=ft.Column(
                 rtl=True,
                 controls=[
-                    ft.Text("تم إنشاء الملف بنجاح:", size=14, rtl=True),
+                    ft.Text("تم إضافة المصروف إلى السجل:", size=14, rtl=True),
                     ft.Container(
                         content=ft.Text(
                             os.path.basename(filepath),
@@ -319,7 +451,8 @@ class PurchasesView:
                         bgcolor=ft.Colors.BLUE_GREY_800,
                         padding=10,
                         border_radius=8,
-                        margin=ft.margin.only(top=10)
+                        margin=ft.margin.only(top=10),
+                        rtl=True
                     )
                 ],
                 tight=True
@@ -337,160 +470,15 @@ class PurchasesView:
                     icon=ft.Icons.FOLDER_OPEN,
                     style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
                 ),
-                ft.TextButton("حسناً", on_click=lambda e: close_dlg(None))
+                ft.TextButton(
+                    "إغلاق",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                ),
             ],
-            actions_alignment=ft.MainAxisAlignment.END
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.BLUE_GREY_900
         )
         self.page.overlay.append(dlg)
         dlg.open = True
         self.page.update()
-
-    def build_ui(self):
-        """Build the purchases UI"""
-        # Create AppBar with title and save button
-        self.page.appbar = ft.AppBar(
-            leading=ft.IconButton(
-                icon=ft.Icons.ARROW_BACK,
-                on_click=self.go_back,
-                tooltip="العودة للقائمة الرئيسية"
-            ),
-            title=ft.Text(
-                "المشتريات", 
-                size=20, 
-                weight=ft.FontWeight.BOLD,
-                color=ft.Colors.BLUE_100
-            ),
-            bgcolor=ft.Colors.BLUE_GREY_900,
-            actions=[
-                ft.Container(
-                    content=ft.IconButton(
-                        icon=ft.Icons.FOLDER_OPEN,
-                        icon_color=ft.Colors.BLUE_300,
-                        on_click=self.open_purchases_file,
-                        tooltip="فتح ملف المشتريات",
-                        icon_size=24,
-                    ),
-                    margin=ft.margin.only(right=5, left=5),
-                    bgcolor=ft.Colors.GREY_800,
-                    border_radius=20,
-                ),
-                ft.Container(
-                    content=ft.IconButton(
-                        icon=ft.Icons.SAVE,
-                        icon_color=ft.Colors.GREEN_300,
-                        on_click=self.save_purchase,
-                        tooltip="حفظ البيانات",
-                        icon_size=24,
-                    ),
-                    margin=ft.margin.only(right=15, left=5),
-                    bgcolor=ft.Colors.GREY_800,
-                    border_radius=20,
-                ),
-            ]
-        )
-        
-        # Form section (removed the "إدخال بيانات المشتريات" text)
-        form_section = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Row(
-                        controls=[
-                            self.date_field,
-                            self.code_field,
-                            self.quantity_field,
-                        ],
-                        spacing=20,
-                        alignment=ft.MainAxisAlignment.CENTER
-                    ),
-                    ft.Row(
-                        controls=[
-                            ft.Column([
-                                self.item_name_field,
-                                self.item_suggestions,
-                            ], spacing=0, expand=True),
-                        ],
-                        spacing=20,
-                        alignment=ft.MainAxisAlignment.CENTER
-                    ),
-                    ft.Row(
-                        controls=[
-                            ft.Column(
-                                controls=[
-                                    self.total_price_field,
-                                    self.supplier_field,
-                                ],
-                                spacing=10,
-                                width=200
-                            ),
-                            self.notes_field,
-                        ],
-                        spacing=20,
-                        alignment=ft.MainAxisAlignment.CENTER
-                    ),
-                ],
-                spacing=15,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER
-            ),
-            padding=20,
-            bgcolor=ft.Colors.GREY_900,
-            border_radius=15,
-            margin=ft.margin.only(bottom=10)
-        )
-        
-        # Data table section
-        table_section = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text("السجلات السابقة", size=20, weight=ft.FontWeight.BOLD),
-                    ft.Container(
-                        content=ft.ListView(
-                            controls=[self.data_table],
-                            expand=True,
-                            height=400
-                        ),
-                        border=ft.border.all(1, ft.Colors.GREY_700),
-                        border_radius=10,
-                        padding=10
-                    )
-                ],
-                spacing=15,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER
-            ),
-            padding=20,
-            bgcolor=ft.Colors.GREY_900,
-            border_radius=15
-        )
-        
-        # Main layout
-        main_layout = ft.Column(
-            controls=[
-                form_section,
-                table_section
-            ],
-            spacing=15,
-            scroll=ft.ScrollMode.AUTO,
-            expand=True,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER
-        )
-        
-        self.page.clean()
-        self.page.add(main_layout)
-        self.page.update()
-
-    def go_back(self, e):
-        """Navigate back to dashboard"""
-        if self.on_back:
-            self.on_back()
-
-    def open_purchases_file(self, e):
-        """Open the purchases Excel file if it exists"""
-        filepath = os.path.join(self.purchases_path, "سجل المشتريات.xlsx")
-        if os.path.exists(filepath):
-            try:
-                os.startfile(filepath)
-            except Exception:
-                # Show error message if file can't be opened
-                self.show_dialog("خطأ", "لا يمكن فتح الملف حالياً", ft.Colors.RED_400)
-        else:
-            # Show message if file doesn't exist
-            self.show_dialog("معلومات", "ملف المشتريات لم يتم إنشاؤه بعد", ft.Colors.BLUE_400)

@@ -117,12 +117,28 @@ def init_db(db_path: str):
 
 
 def get_counter(db_path: str, key: str = "invoice") -> int:
+    """
+    Get the next available invoice number by finding the maximum existing invoice number.
+    """
     try:
         with get_db_connection(db_path) as conn:
             cur = conn.cursor()
-            cur.execute("SELECT value FROM counters WHERE key=?", (key,))
+            
+            # First, try to get the maximum invoice number from the invoices table
+            cur.execute("SELECT MAX(CAST(invoice_number AS INTEGER)) FROM invoices WHERE invoice_number GLOB '[0-9]*'")
             row = cur.fetchone()
-            return int(row[0]) if row else 1
+            max_invoice = int(row[0]) if row and row[0] else 0
+            
+            # Also check the counter table
+            cur.execute("SELECT value FROM counters WHERE key=?", (key,))
+            counter_row = cur.fetchone()
+            counter_value = int(counter_row[0]) if counter_row else 1
+            
+            # Return the higher value + 1 (or just the higher value if it's from counter)
+            # The next invoice number should be max(max_invoice + 1, counter_value)
+            next_value = max(max_invoice + 1, counter_value)
+            
+            return next_value
     except Exception as e:
         return 1
 
