@@ -44,8 +44,15 @@ def initialize_slides_inventory_excel(file_path):
             bottom=Side(style='thin')
         )
         
-        # Add headers to add sheet
-        add_headers = ["رقم اذن الاضافه", "تاريخ الدخول", "اسم الصنف", "العدد", "ثمن الوحدة", "الإجمالي", "ملاحظات"]
+        # Add headers to add sheet - Full publishing data
+        # Columns: تاريخ النشر، رقم البلوك، النوع، رقم المكينه، وقت الدخول، وقت الخروج، عدد الساعات،
+        #          السمك، العدد، الطول، الخصم، الطول بعد الخصم، الارتفاع، الكمية م2، سعر المتر، اجمالي السعر
+        add_headers = [
+            "تاريخ النشر", "رقم البلوك", "النوع", "رقم المكينه", 
+            "وقت الدخول", "وقت الخروج", "عدد الساعات",
+            "السمك", "العدد", "الطول", "الخصم", "الطول بعد", 
+            "الارتفاع", "الكمية م2", "سعر المتر", "اجمالي السعر"
+        ]
         for col_num, header in enumerate(add_headers, 1):
             cell = add_sheet.cell(row=1, column=col_num, value=header)
             cell.font = header_font
@@ -54,8 +61,8 @@ def initialize_slides_inventory_excel(file_path):
             cell.border = border
         
         # Set column widths for add sheet
-        column_widths = [18, 15, 25, 12, 15, 15, 30]
-        for col_num, width in enumerate(column_widths, 1):
+        add_column_widths = [12, 12, 15, 10, 12, 12, 12, 10, 8, 10, 8, 12, 10, 12, 12, 15]
+        for col_num, width in enumerate(add_column_widths, 1):
             add_sheet.column_dimensions[get_column_letter(col_num)].width = width
         
         # Add headers to disburse sheet - New format with merged cells like ledger
@@ -72,8 +79,8 @@ def initialize_slides_inventory_excel(file_path):
         for col_num, width in enumerate(disburse_column_widths, 1):
             disburse_sheet.column_dimensions[get_column_letter(col_num)].width = width
         
-        # Add headers to inventory sheet
-        inventory_headers = ["اسم الصنف", "إجمالي الإضافات", "إجمالي الصرف", "الرصيد الحالي"]
+        # Add headers to inventory sheet - with block number and thickness
+        inventory_headers = ["اسم الصنف", "رقم البلوك", "السمك", "إجمالي الإضافات", "إجمالي الصرف", "الرصيد الحالي"]
         for col_num, header in enumerate(inventory_headers, 1):
             cell = inventory_sheet.cell(row=1, column=col_num, value=header)
             cell.font = header_font
@@ -82,7 +89,7 @@ def initialize_slides_inventory_excel(file_path):
             cell.border = border
         
         # Set column widths for inventory sheet
-        inventory_column_widths = [30, 20, 20, 20]
+        inventory_column_widths = [20, 15, 12, 18, 18, 18]
         for col_num, width in enumerate(inventory_column_widths, 1):
             inventory_sheet.column_dimensions[get_column_letter(col_num)].width = width
         
@@ -98,6 +105,7 @@ def initialize_slides_inventory_excel(file_path):
 def convert_existing_slides_inventory_to_formulas(file_path):
     """
     Convert an existing slides inventory file to use formulas instead of manual calculations
+    Shows inventory grouped by item name (النوع), block number, and thickness
     
     Args:
         file_path (str): Path to the Excel file
@@ -114,26 +122,30 @@ def convert_existing_slides_inventory_to_formulas(file_path):
         disburse_sheet = wb["اذن صرف الشرائح"]
         inventory_sheet = wb["مخزون الشرائح"]
         
-        # Get all unique item names from both sheets
-        item_names = set()
+        # Get all unique combinations of (item_name, block_number, thickness) from both sheets
+        item_combinations = set()
         
         # Get items from additions sheet (skip header row)
-        # Column 3 (C) = اسم الصنف in additions sheet
+        # New structure: Column B(2) = رقم البلوك, Column C(3) = النوع, Column H(8) = السمك, Column I(9) = العدد
         for row_num in range(2, add_sheet.max_row + 1):
-            item_name = add_sheet.cell(row=row_num, column=3).value
+            item_name = add_sheet.cell(row=row_num, column=3).value  # النوع (Column C)
+            block_number = add_sheet.cell(row=row_num, column=2).value or ""  # رقم البلوك (Column B)
+            thickness = add_sheet.cell(row=row_num, column=8).value or ""  # السمك (Column H)
             if item_name:
-                item_names.add(item_name)
+                item_combinations.add((item_name, str(block_number), str(thickness)))
         
         # Get items from disbursements sheet (skip header row)
-        # Column 4 (D) = اسم الصنف in new disburse sheet format
+        # Column 4 (D) = اسم الصنف, Column 5 (E) = رقم البلوك, Column 6 (F) = السمك, Column 7 (G) = العدد
         for row_num in range(2, disburse_sheet.max_row + 1):
             item_name = disburse_sheet.cell(row=row_num, column=4).value
+            block_number = disburse_sheet.cell(row=row_num, column=5).value or ""
+            thickness = disburse_sheet.cell(row=row_num, column=6).value or ""
             if item_name:
-                item_names.add(item_name)
+                item_combinations.add((item_name, str(block_number), str(thickness)))
         
         # Clear existing data in inventory sheet (keep header)
         for row_num in range(2, inventory_sheet.max_row + 1):
-            for col_num in range(1, 5):
+            for col_num in range(1, 7):
                 inventory_sheet.cell(row=row_num, column=col_num).value = None
         
         # Apply styles
@@ -146,34 +158,63 @@ def convert_existing_slides_inventory_to_formulas(file_path):
         
         alignment = Alignment(horizontal='center', vertical='center')
         
-        # Add items to inventory sheet with corrected formulas
-        for row_num, item_name in enumerate(sorted(item_names), 2):
-            # Item name
+        # Sort combinations by item name, then block number, then thickness
+        sorted_combinations = sorted(item_combinations, key=lambda x: (x[0], x[1], x[2]))
+        
+        # Add items to inventory sheet with formulas
+        row_num = 2
+        for item_name, block_number, thickness in sorted_combinations:
+            # Column 1: اسم الصنف
             inventory_sheet.cell(row=row_num, column=1, value=item_name).border = border
             inventory_sheet.cell(row=row_num, column=1).alignment = alignment
             
-            # Formula for total additions (SUMIF for additions)
-            # Additions: Column C = اسم الصنف, Column D = العدد
-            additions_formula = f"=SUMIF('اذن اضافة الشرائح'!C:C,A{row_num},'اذن اضافة الشرائح'!D:D)"
-            inventory_sheet.cell(row=row_num, column=2).value = additions_formula
-            inventory_sheet.cell(row=row_num, column=2).border = border
+            # Column 2: رقم البلوك
+            inventory_sheet.cell(row=row_num, column=2, value=block_number).border = border
             inventory_sheet.cell(row=row_num, column=2).alignment = alignment
-            inventory_sheet.cell(row=row_num, column=2).number_format = '#,##0'
             
-            # Formula for total disbursements (SUMIF for disbursements)
-            # Disbursements: Column D = اسم الصنف, Column G = العدد (new format with block number)
-            disbursements_formula = f"=SUMIF('اذن صرف الشرائح'!D:D,A{row_num},'اذن صرف الشرائح'!G:G)"
-            inventory_sheet.cell(row=row_num, column=3).value = disbursements_formula
-            inventory_sheet.cell(row=row_num, column=3).border = border
+            # Column 3: السمك
+            inventory_sheet.cell(row=row_num, column=3, value=thickness).border = border
             inventory_sheet.cell(row=row_num, column=3).alignment = alignment
-            inventory_sheet.cell(row=row_num, column=3).number_format = '#,##0'
             
-            # Formula for current balance (additions - disbursements)
-            balance_formula = f"=B{row_num}-C{row_num}"
-            inventory_sheet.cell(row=row_num, column=4).value = balance_formula
+            # Column 4: إجمالي الإضافات - SUMIFS based on item name, block number, and thickness
+            # New additions structure: C = النوع, B = رقم البلوك, H = السمك, I = العدد
+            if block_number and thickness:
+                additions_formula = f'=SUMIFS(\'اذن اضافة الشرائح\'!I:I,\'اذن اضافة الشرائح\'!C:C,A{row_num},\'اذن اضافة الشرائح\'!B:B,B{row_num},\'اذن اضافة الشرائح\'!H:H,C{row_num})'
+            elif block_number:
+                additions_formula = f'=SUMIFS(\'اذن اضافة الشرائح\'!I:I,\'اذن اضافة الشرائح\'!C:C,A{row_num},\'اذن اضافة الشرائح\'!B:B,B{row_num})'
+            elif thickness:
+                additions_formula = f'=SUMIFS(\'اذن اضافة الشرائح\'!I:I,\'اذن اضافة الشرائح\'!C:C,A{row_num},\'اذن اضافة الشرائح\'!H:H,C{row_num})'
+            else:
+                additions_formula = f"=SUMIF('اذن اضافة الشرائح'!C:C,A{row_num},'اذن اضافة الشرائح'!I:I)"
+            
+            inventory_sheet.cell(row=row_num, column=4).value = additions_formula
             inventory_sheet.cell(row=row_num, column=4).border = border
             inventory_sheet.cell(row=row_num, column=4).alignment = alignment
             inventory_sheet.cell(row=row_num, column=4).number_format = '#,##0'
+            
+            # Column 5: إجمالي الصرف - SUMIFS based on item name, block number, and thickness
+            if block_number and thickness:
+                disbursements_formula = f'=SUMIFS(\'اذن صرف الشرائح\'!G:G,\'اذن صرف الشرائح\'!D:D,A{row_num},\'اذن صرف الشرائح\'!E:E,B{row_num},\'اذن صرف الشرائح\'!F:F,C{row_num})'
+            elif block_number:
+                disbursements_formula = f'=SUMIFS(\'اذن صرف الشرائح\'!G:G,\'اذن صرف الشرائح\'!D:D,A{row_num},\'اذن صرف الشرائح\'!E:E,B{row_num})'
+            elif thickness:
+                disbursements_formula = f'=SUMIFS(\'اذن صرف الشرائح\'!G:G,\'اذن صرف الشرائح\'!D:D,A{row_num},\'اذن صرف الشرائح\'!F:F,C{row_num})'
+            else:
+                disbursements_formula = f"=SUMIF('اذن صرف الشرائح'!D:D,A{row_num},'اذن صرف الشرائح'!G:G)"
+            
+            inventory_sheet.cell(row=row_num, column=5).value = disbursements_formula
+            inventory_sheet.cell(row=row_num, column=5).border = border
+            inventory_sheet.cell(row=row_num, column=5).alignment = alignment
+            inventory_sheet.cell(row=row_num, column=5).number_format = '#,##0'
+            
+            # Column 6: الرصيد الحالي (additions - disbursements)
+            balance_formula = f"=D{row_num}-E{row_num}"
+            inventory_sheet.cell(row=row_num, column=6).value = balance_formula
+            inventory_sheet.cell(row=row_num, column=6).border = border
+            inventory_sheet.cell(row=row_num, column=6).alignment = alignment
+            inventory_sheet.cell(row=row_num, column=6).number_format = '#,##0'
+            
+            row_num += 1
         
         # Save the workbook
         wb.save(file_path)
@@ -255,6 +296,129 @@ def add_slides_inventory_entry(file_path, item_name, quantity, unit_price, notes
         return next_entry_number
     except Exception as e:
         print(f"[ERROR] Failed to add slides inventory entry: {e}")
+        traceback.print_exc()
+        raise
+
+
+def add_slides_inventory_from_publishing(file_path, publishing_data):
+    """
+    Add slides inventory entries from publishing data (from slides_add_view)
+    With formulas for calculated fields
+    
+    Args:
+        file_path (str): Path to the Excel file
+        publishing_data (list): List of dictionaries containing publishing data
+        
+    Returns:
+        int: Number of entries added
+    """
+    try:
+        # Load workbook
+        wb = openpyxl.load_workbook(file_path)
+        add_sheet = wb["اذن اضافة الشرائح"]
+        
+        # Apply styles
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Default discount value
+        DEFAULT_DISCOUNT = 0.20
+        
+        entries_added = 0
+        for entry in publishing_data:
+            row_num = add_sheet.max_row + 1
+            
+            # Get values from entry
+            publishing_date = entry.get('publishing_date', datetime.now().strftime('%Y-%m-%d'))
+            block_number = entry.get('block_number', '')
+            material = entry.get('material', '')
+            machine_number = entry.get('machine_number', '')
+            entry_time = entry.get('entry_time', '')
+            exit_time = entry.get('exit_time', '')
+            thickness = entry.get('thickness', '')
+            quantity = int(entry.get('quantity', 0)) if entry.get('quantity') else 0
+            length = float(entry.get('length', 0)) if entry.get('length') else 0
+            height = float(entry.get('height', 0)) if entry.get('height') else 0
+            price_per_meter = float(entry.get('price_per_meter', 0)) if entry.get('price_per_meter') else 0
+            
+            # Column mapping (1-based):
+            # A(1): تاريخ النشر, B(2): رقم البلوك, C(3): النوع, D(4): رقم المكينه
+            # E(5): وقت الدخول, F(6): وقت الخروج, G(7): عدد الساعات (formula)
+            # H(8): السمك, I(9): العدد, J(10): الطول, K(11): الخصم (0.20)
+            # L(12): الطول بعد الخصم (formula), M(13): الارتفاع
+            # N(14): الكمية م2 (formula), O(15): سعر المتر, P(16): اجمالي السعر (formula)
+            
+            # Set static values
+            add_sheet.cell(row=row_num, column=1, value=publishing_date)  # تاريخ النشر
+            add_sheet.cell(row=row_num, column=2, value=block_number)     # رقم البلوك
+            add_sheet.cell(row=row_num, column=3, value=material)         # النوع
+            add_sheet.cell(row=row_num, column=4, value=machine_number)   # رقم المكينه
+            add_sheet.cell(row=row_num, column=5, value=entry_time)       # وقت الدخول
+            add_sheet.cell(row=row_num, column=6, value=exit_time)        # وقت الخروج
+            
+            # عدد الساعات - Formula: Calculate hours between entry and exit time
+            # For simplicity, store the calculated value from the view
+            hours_count = float(entry.get('hours_count', 0)) if entry.get('hours_count') else 0
+            add_sheet.cell(row=row_num, column=7, value=hours_count)      # عدد الساعات
+            
+            add_sheet.cell(row=row_num, column=8, value=thickness)        # السمك
+            add_sheet.cell(row=row_num, column=9, value=quantity)         # العدد
+            add_sheet.cell(row=row_num, column=10, value=length)          # الطول
+            add_sheet.cell(row=row_num, column=11, value=DEFAULT_DISCOUNT) # الخصم (0.20)
+            
+            # الطول بعد الخصم - Formula: الطول - الخصم (J - K)
+            length_after_formula = f"=J{row_num}-K{row_num}"
+            add_sheet.cell(row=row_num, column=12, value=length_after_formula)  # الطول بعد الخصم
+            
+            add_sheet.cell(row=row_num, column=13, value=height)          # الارتفاع
+            
+            # الكمية م2 - Formula: الطول بعد الخصم * الارتفاع * العدد (L * M * I)
+            area_formula = f"=L{row_num}*M{row_num}*I{row_num}"
+            add_sheet.cell(row=row_num, column=14, value=area_formula)    # الكمية م2
+            
+            add_sheet.cell(row=row_num, column=15, value=price_per_meter) # سعر المتر
+            
+            # اجمالي السعر - Formula: الكمية م2 * سعر المتر (N * O)
+            total_formula = f"=N{row_num}*O{row_num}"
+            add_sheet.cell(row=row_num, column=16, value=total_formula)   # اجمالي السعر
+            
+            # Apply styles to all cells in the row
+            for col_num in range(1, 17):
+                cell = add_sheet.cell(row=row_num, column=col_num)
+                cell.border = border
+                cell.alignment = alignment
+                
+                # Apply number formatting
+                if col_num in [7, 10, 11, 12, 13, 14, 15, 16]:  # Numeric columns
+                    cell.number_format = '#,##0.00'
+                elif col_num == 9:  # العدد - integer
+                    cell.number_format = '#,##0'
+            
+            entries_added += 1
+        
+        # Save the workbook
+        wb.save(file_path)
+        
+        # Update inventory sheet with formulas
+        convert_existing_slides_inventory_to_formulas(file_path)
+        
+        # Also save to blocks Excel file
+        try:
+            from utils.blocks_utils import export_slides_to_blocks_excel
+            export_slides_to_blocks_excel(publishing_data)
+            print(f"[DEBUG] Slides data also saved to blocks Excel file")
+        except Exception as blocks_error:
+            print(f"[WARNING] Could not save slides to blocks file: {blocks_error}")
+            # Don't fail the main operation if blocks file fails
+        
+        return entries_added
+    except Exception as e:
+        print(f"[ERROR] Failed to add slides inventory from publishing: {e}")
         traceback.print_exc()
         raise
 
@@ -375,9 +539,11 @@ def get_slides_inventory_summary(file_path):
         for row_num in range(2, inventory_sheet.max_row + 1):
             item_name = inventory_sheet.cell(row=row_num, column=1).value
             if item_name:  # Only process rows with item names
-                total_additions = inventory_sheet.cell(row=row_num, column=2).value or 0
-                total_disbursements = inventory_sheet.cell(row=row_num, column=3).value or 0
-                current_balance = inventory_sheet.cell(row=row_num, column=4).value or 0
+                block_number = inventory_sheet.cell(row=row_num, column=2).value or ""
+                thickness = inventory_sheet.cell(row=row_num, column=3).value or ""
+                total_additions = inventory_sheet.cell(row=row_num, column=4).value or 0
+                total_disbursements = inventory_sheet.cell(row=row_num, column=5).value or 0
+                current_balance = inventory_sheet.cell(row=row_num, column=6).value or 0
                 
                 # Convert to float and handle None values
                 try:
@@ -397,6 +563,8 @@ def get_slides_inventory_summary(file_path):
                 
                 item_data = {
                     'item_name': item_name,
+                    'block_number': block_number,
+                    'thickness': thickness,
                     'total_additions': total_additions,
                     'total_disbursements': total_disbursements,
                     'current_balance': current_balance
@@ -428,16 +596,19 @@ def get_available_slides_items_with_prices(file_path):
         add_sheet = wb["اذن اضافة الشرائح"]
         inventory_sheet = wb["مخزون الشرائح"]
         
-        # Get current inventory balances
+        # Get current inventory balances (now column 6 is balance)
         inventory_balances = {}
         for row_num in range(2, inventory_sheet.max_row + 1):
             item_name = inventory_sheet.cell(row=row_num, column=1).value
             if item_name:  # Only process rows with item names
-                balance = inventory_sheet.cell(row=row_num, column=4).value or 0
+                balance = inventory_sheet.cell(row=row_num, column=6).value or 0
                 try:
-                    inventory_balances[item_name] = float(balance)
+                    # Accumulate balance for same item name (different blocks/thicknesses)
+                    if item_name not in inventory_balances:
+                        inventory_balances[item_name] = 0
+                    inventory_balances[item_name] += float(balance)
                 except (ValueError, TypeError):
-                    inventory_balances[item_name] = 0
+                    pass
         
         # Get item prices from additions
         item_prices = {}
@@ -478,7 +649,7 @@ def get_available_slides_items_with_prices(file_path):
     except Exception as e:
         print(f"[ERROR] Error getting available slides items with prices: {e}")
         traceback.print_exc()
-        return []
+        return {}
 
 
 def initialize_slides_publishing_excel(file_path):
@@ -820,7 +991,43 @@ def add_slides_publishing_entry(file_path, publishing_data):
     try:
         # Load workbook
         wb = openpyxl.load_workbook(file_path)
-        publish_sheet = wb["اذن اضافه"]
+        
+        # Check if the sheet exists, if not create it
+        if "اذن اضافه" not in wb.sheetnames:
+            # Create the sheet with proper formatting
+            publish_sheet = wb.create_sheet("اذن اضافه", 0)
+            publish_sheet.sheet_view.rightToLeft = True
+            
+            # Define styles
+            header_font = Font(name='Arial', size=12, bold=True, color='FFFFFF')
+            header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+            header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            # Add headers
+            publish_headers = [
+                "تاريخ النشر", "رقم البلوك", "النوع", "رقم المكينه", "عدد", 
+                "الطول", "الارتفاع", "السمك", "م2", "سعر المتر", "اجمالي السعر", 
+                "وقت الدخول", "وقت الخروج", "عدد الساعات"
+            ]
+            for col_num, header in enumerate(publish_headers, 1):
+                cell = publish_sheet.cell(row=1, column=col_num, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = border
+            
+            # Set column widths
+            column_widths = [15, 12, 15, 12, 10, 12, 12, 12, 12, 15, 15, 15, 15, 15]
+            for col_num, width in enumerate(column_widths, 1):
+                publish_sheet.column_dimensions[get_column_letter(col_num)].width = width
+        else:
+            publish_sheet = wb["اذن اضافه"]
         
         # Add data rows
         for entry in publishing_data:

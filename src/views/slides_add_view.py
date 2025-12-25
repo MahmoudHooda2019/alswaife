@@ -647,13 +647,13 @@ class SlidesAddView:
             
             # Initialize Excel file if it doesn't exist
             if not os.path.exists(excel_file):
-                print(f"[DEBUG] Initializing new slides publishing Excel file")
-                from utils.slides_utils import initialize_slides_publishing_excel
-                initialize_slides_publishing_excel(excel_file)
+                print(f"[DEBUG] Initializing new slides inventory Excel file")
+                from utils.slides_utils import initialize_slides_inventory_excel
+                initialize_slides_inventory_excel(excel_file)
             
-            # Add publishing entries using utility function
-            from utils.slides_utils import add_slides_publishing_entry
-            add_slides_publishing_entry(excel_file, data)
+            # Add inventory entries using utility function
+            from utils.slides_utils import add_slides_inventory_from_publishing
+            add_slides_inventory_from_publishing(excel_file, data)
             
             # Reset rows after save
             for row in self.rows:
