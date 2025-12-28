@@ -182,18 +182,22 @@ class SlideRow:
             value="0.00"
         )
 
-        # Entry time
+        # Entry time - with auto-formatting
         self.entry_time = self._create_styled_textfield(
             "وقت الدخول",
-            width_medium,
-            icon=ft.Icons.ACCESS_TIME
+            220,
+            icon=ft.Icons.ACCESS_TIME,
+            hint_text="الساعة:الدقيقة ص/م يوم/شهر/سنة",
+            on_change=self._on_entry_time_change,
         )
 
-        # Exit time
+        # Exit time - with auto-formatting
         self.exit_time = self._create_styled_textfield(
             "وقت الخروج",
-            width_medium,
-            icon=ft.Icons.ACCESS_TIME
+            220,
+            icon=ft.Icons.ACCESS_TIME,
+            hint_text="الساعة:الدقيقة ص/م يوم/شهر/سنة",
+            on_change=self._on_exit_time_change,
         )
 
         # Hours count - read-only, calculated automatically
@@ -346,16 +350,223 @@ class SlideRow:
                 self.height_field.value = new_value
         
         self._calculate_values()
+
+    def _format_datetime_auto(self, value, field):
+        """
+        Auto-format datetime input as user types
+        Format: HH:MM ص/م DD/MM/YYYY
+        """
+        if not value:
+            return ""
+        
+        # Remove all non-digit characters except what we need
+        # Keep only digits and track position
+        digits_only = ''.join(c for c in value if c.isdigit())
+        
+        # Build formatted string based on number of digits
+        result = ""
+        
+        if len(digits_only) >= 1:
+            # Hour first digit
+            h1 = digits_only[0]
+            result = h1
+        
+        if len(digits_only) >= 2:
+            # Hour second digit
+            hour = int(digits_only[0:2])
+            if hour > 12:
+                hour = 12
+            result = f"{hour:02d}:"
+        
+        if len(digits_only) >= 3:
+            # Minute first digit
+            m1 = digits_only[2]
+            if int(m1) > 5:
+                m1 = "5"
+            result += m1
+        
+        if len(digits_only) >= 4:
+            # Minute second digit
+            minute = int(digits_only[2:4])
+            if minute > 59:
+                minute = 59
+            result = result[:-1] + f"{minute:02d}"
+            # Default to ص, user can change
+            result += " ص "
+        
+        if len(digits_only) >= 5:
+            # Day first digit
+            d1 = digits_only[4]
+            if int(d1) > 3:
+                d1 = "3"
+            result += d1
+        
+        if len(digits_only) >= 6:
+            # Day second digit
+            day = int(digits_only[4:6])
+            if day > 31:
+                day = 31
+            if day == 0:
+                day = 1
+            result = result[:-1] + f"{day:02d}/"
+        
+        if len(digits_only) >= 7:
+            # Month first digit
+            m1 = digits_only[6]
+            if int(m1) > 1:
+                m1 = "1"
+            result += m1
+        
+        if len(digits_only) >= 8:
+            # Month second digit
+            month = int(digits_only[6:8])
+            if month > 12:
+                month = 12
+            if month == 0:
+                month = 1
+            result = result[:-1] + f"{month:02d}/"
+        
+        if len(digits_only) >= 9:
+            # Year digits (up to 4)
+            year_digits = digits_only[8:12]
+            result += year_digits
+        
+        return result
+
+    def _on_entry_time_change(self, e=None):
+        """Handle entry time field changes with auto-formatting"""
+        if e and e.control:
+            current = e.control.value or ""
+            
+            # Check if user typed ص or م to change period
+            if 'ص' in current or 'م' in current:
+                # Extract the period and keep it
+                has_period = 'م' in current
+                # Remove the typed character and reformat
+                clean = current.replace('ص', '').replace('م', '')
+                formatted = self._format_datetime_auto(clean, e.control)
+                if ' ص ' in formatted or ' م ' in formatted:
+                    if has_period:
+                        formatted = formatted.replace(' ص ', ' م ')
+                e.control.value = formatted
+            else:
+                formatted = self._format_datetime_auto(current, e.control)
+                if formatted != current:
+                    e.control.value = formatted
+        
+        self._calculate_hours()
+        self.page.update()
+
+    def _on_exit_time_change(self, e=None):
+        """Handle exit time field changes with auto-formatting"""
+        if e and e.control:
+            current = e.control.value or ""
+            
+            # Check if user typed ص or م to change period
+            if 'ص' in current or 'م' in current:
+                # Extract the period and keep it
+                has_period = 'م' in current
+                # Remove the typed character and reformat
+                clean = current.replace('ص', '').replace('م', '')
+                formatted = self._format_datetime_auto(clean, e.control)
+                if ' ص ' in formatted or ' م ' in formatted:
+                    if has_period:
+                        formatted = formatted.replace(' ص ', ' م ')
+                e.control.value = formatted
+            else:
+                formatted = self._format_datetime_auto(current, e.control)
+                if formatted != current:
+                    e.control.value = formatted
+        
+        self._calculate_hours()
+        self.page.update()
+
+    def _parse_datetime(self, value):
+        """Parse datetime string in format 'HH:MM ص/م DD/MM/YYYY' and return datetime object"""
+        if not value:
+            return None
+        
+        try:
+            # Expected format: "08:30 ص 28/12/2025"
+            parts = value.strip().split(' ')
+            if len(parts) < 3:
+                return None
+            
+            time_part = parts[0]  # "08:30"
+            period = parts[1]     # "ص" or "م"
+            date_part = parts[2]  # "28/12/2025"
+            
+            # Parse time
+            time_parts = time_part.split(':')
+            if len(time_parts) != 2:
+                return None
+            
+            hour = int(time_parts[0])
+            minute = int(time_parts[1])
+            
+            # Convert to 24-hour format
+            if period == 'م' and hour != 12:
+                hour += 12
+            elif period == 'ص' and hour == 12:
+                hour = 0
+            
+            # Parse date
+            date_parts = date_part.split('/')
+            if len(date_parts) != 3:
+                return None
+            
+            day = int(date_parts[0])
+            month = int(date_parts[1])
+            year = int(date_parts[2])
+            
+            # Validate year has 4 digits
+            if year < 1000:
+                return None
+            
+            return datetime(year, month, day, hour, minute)
+        except (ValueError, IndexError):
+            return None
+
+    def _calculate_hours(self):
+        """Calculate hours between entry and exit datetime including date difference"""
+        try:
+            entry_dt = self._parse_datetime(self.entry_time.value)
+            exit_dt = self._parse_datetime(self.exit_time.value)
+            
+            if entry_dt and exit_dt:
+                # Calculate difference including date
+                diff = exit_dt - entry_dt
+                
+                # Get total seconds and convert to hours
+                total_seconds = diff.total_seconds()
+                
+                # Handle negative difference (exit before entry)
+                if total_seconds < 0:
+                    self.hours_count.value = "0.00"
+                    return
+                
+                # Convert to hours (including days difference)
+                hours = total_seconds / 3600.0
+                self.hours_count.value = f"{hours:.2f}"
+                return
+        except (ValueError, IndexError, TypeError):
+            pass
+        
+        self.hours_count.value = "0.00"
     
     def on_block_change(self, e):
         """Handle block number changes and replace Arabic characters with English equivalents"""
         val = self.block_number.value
         if val:
-            # Replace Arabic characters with their English counterparts
-            # 'ش' is 'a' on Arabic keyboard
-            # 'لا' (lam-alif) is 'b' on Arabic keyboard
-            # 'ب' is 'f' on Arabic keyboard (for الفضل)
-            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B').replace('ِ', 'A').replace('لآ', 'B').replace('f', 'F').replace('ث', 'F')
+            # تحويل الحروف إلى A, B, F
+            # A: ِ, ش, a
+            # B: لآ, لا, b
+            # F: f, [, ب
+            new_val = val.replace('ِ', 'A').replace('ش', 'A').replace('a', 'A')
+            new_val = new_val.replace('لآ', 'B').replace('لا', 'B').replace('b', 'B')
+            new_val = new_val.replace('f', 'F').replace('[', 'F').replace('ب', 'F')
+            new_val = new_val.upper()
+            
             if new_val != val:
                 self.block_number.value = new_val
                 # Only update if value changed
@@ -368,8 +579,11 @@ class SlideRow:
         """Reorder block number when focus leaves - move letter to beginning if at end"""
         val = self.block_number.value
         if val:
-            # First apply character replacements
-            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B').replace('ِ', 'A').replace('لآ', 'B').replace('f', 'F').replace('ث', 'F')
+            # تحويل الحروف إلى A, B, F
+            new_val = val.replace('ِ', 'A').replace('ش', 'A').replace('a', 'A')
+            new_val = new_val.replace('لآ', 'B').replace('لا', 'B').replace('b', 'B')
+            new_val = new_val.replace('f', 'F').replace('[', 'F').replace('ب', 'F')
+            new_val = new_val.upper()
             
             # Check if ends with letter(s) and starts with number - reorder to put letter first
             # Pattern: digits followed by letters at the end (e.g., "12B" -> "B12")
@@ -455,35 +669,6 @@ class SlideRow:
             # Calculate total price = area * price_per_meter
             total_price = area * price_per_meter
             self.total_price_field.value = f"{total_price:.2f}"
-            
-            # Calculate hours from entry and exit time if both are provided
-            if self.entry_time.value and self.exit_time.value:
-                try:
-                    # Parse time in HH:MM format
-                    entry_parts = self.entry_time.value.split(':')
-                    exit_parts = self.exit_time.value.split(':')
-                    
-                    if len(entry_parts) == 2 and len(exit_parts) == 2:
-                        entry_hour = int(entry_parts[0])
-                        entry_min = int(entry_parts[1])
-                        exit_hour = int(exit_parts[0])
-                        exit_min = int(exit_parts[1])
-                        
-                        entry_total_minutes = entry_hour * 60 + entry_min
-                        exit_total_minutes = exit_hour * 60 + exit_min
-                        
-                        # Calculate difference in minutes and convert to hours
-                        diff_minutes = exit_total_minutes - entry_total_minutes
-                        if diff_minutes < 0:
-                            # Handle overnight case
-                            diff_minutes += 24 * 60
-                        
-                        hours = diff_minutes / 60.0
-                        self.hours_count.value = f"{hours:.2f}"
-                    else:
-                        self.hours_count.value = "0.00"
-                except ValueError:
-                    self.hours_count.value = "0.00"
             
         except ValueError:
             # If any field contains non-numeric values, set calculated fields to 0

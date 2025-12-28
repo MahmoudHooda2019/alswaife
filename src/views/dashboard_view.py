@@ -123,10 +123,11 @@ class DashboardView:
                         self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.GREEN_700),
                         self.create_menu_card("إضافة بلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
                         self.create_menu_card("مشتري", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
-                        self.create_menu_card("المخزون", ft.Icons.INVENTORY, self.open_inventory, ft.Colors.INDIGO_700),
-                        self.create_menu_card("إضافة شرائح", ft.Icons.ADD, self.open_slides_add, ft.Colors.BLUE_700),
+                        self.create_menu_card("المخزون", ft.Icons.INVENTORY, self.open_inventory, ft.Colors.DEEP_PURPLE_700),
+                        self.create_menu_card("إضافة شرائح", ft.Icons.ADD, self.open_slides_add, ft.Colors.PINK_700),
                         self.create_menu_card("التقارير", ft.Icons.ASSESSMENT, self.open_reports, ft.Colors.TEAL_700),
                         self.create_menu_card("تحديث", ft.Icons.SYSTEM_UPDATE, self.open_update, ft.Colors.ORANGE_700),
+                        self.create_menu_card("مزامنة", ft.Icons.SYNC, self.open_sync, ft.Colors.LIGHT_BLUE_700),
                         self.create_menu_card("عنا", ft.Icons.INFO, self.show_about_dialog, ft.Colors.PURPLE_700),
                     ],
                     runs_count=2,
@@ -159,10 +160,11 @@ class DashboardView:
                         self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.GREEN_700),
                         self.create_menu_card("إضافة بلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
                         self.create_menu_card("مشتري", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
-                        self.create_menu_card("المخزون", ft.Icons.INVENTORY, self.open_inventory, ft.Colors.INDIGO_700),
-                        self.create_menu_card("إضافة شرائح", ft.Icons.ADD, self.open_slides_add, ft.Colors.BLUE_700),
+                        self.create_menu_card("المخزون", ft.Icons.INVENTORY, self.open_inventory, ft.Colors.DEEP_PURPLE_700),
+                        self.create_menu_card("إضافة شرائح", ft.Icons.ADD, self.open_slides_add, ft.Colors.PINK_700),
                         self.create_menu_card("التقارير", ft.Icons.ASSESSMENT, self.open_reports, ft.Colors.TEAL_700),
                         self.create_menu_card("تحديث", ft.Icons.SYSTEM_UPDATE, self.open_update, ft.Colors.ORANGE_700),
+                        self.create_menu_card("مزامنة", ft.Icons.SYNC, self.open_sync, ft.Colors.LIGHT_BLUE_700),
                         self.create_menu_card("عنا", ft.Icons.INFO, self.show_about_dialog, ft.Colors.PURPLE_700),
                     ],
                     runs_count=2,
@@ -979,15 +981,399 @@ class DashboardView:
         dlg.open = True
         self.page.update()
 
+    def open_sync(self, e):
+        """Open sync dialog for LAN data synchronization"""
+        from utils.sync_utils import get_local_ip
+        
+        def close_dlg(e):
+            dlg.open = False
+            self.page.update()
+        
+        local_ip = get_local_ip()
+        
+        # Card for sending data
+        send_card = ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Icon(ft.Icons.UPLOAD, size=45, color=ft.Colors.WHITE),
+                        ft.Text("إرسال البيانات", size=16, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER),
+                        ft.Text("إرسال لجهاز آخر", size=12, color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=10,
+                ),
+                padding=20,
+                alignment=ft.alignment.center,
+                bgcolor=ft.Colors.BLUE_700,
+                border_radius=15,
+                ink=True,
+                on_click=lambda e: self._open_send_dialog(close_dlg),
+                width=160,
+                height=150,
+            ),
+            elevation=8,
+        )
+        
+        # Card for receiving data
+        receive_card = ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Icon(ft.Icons.DOWNLOAD, size=45, color=ft.Colors.WHITE),
+                        ft.Text("استقبال البيانات", size=16, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER),
+                        ft.Text("استقبال من جهاز آخر", size=12, color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=10,
+                ),
+                padding=20,
+                alignment=ft.alignment.center,
+                bgcolor=ft.Colors.GREEN_700,
+                border_radius=15,
+                ink=True,
+                on_click=lambda e: self._open_receive_dialog(close_dlg),
+                width=160,
+                height=150,
+            ),
+            elevation=8,
+        )
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.SYNC, color=ft.Colors.LIGHT_BLUE_400, size=28),
+                    ft.Text("مزامنة البيانات", weight=ft.FontWeight.BOLD, color=ft.Colors.LIGHT_BLUE_200, size=18),
+                ],
+                spacing=10,
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Container(
+                            content=ft.Row(
+                                controls=[
+                                    ft.Icon(ft.Icons.WIFI, color=ft.Colors.CYAN_400, size=18),
+                                    ft.Text(f"عنوان IP الخاص بك: {local_ip}", size=14, color=ft.Colors.CYAN_300),
+                                ],
+                                alignment=ft.MainAxisAlignment.CENTER,
+                                spacing=8,
+                            ),
+                            bgcolor=ft.Colors.GREY_800,
+                            border_radius=10,
+                            padding=10,
+                        ),
+                        ft.Container(height=15),
+                        ft.Text("اختر العملية:", size=14, color=ft.Colors.GREY_400),
+                        ft.Container(height=10),
+                        ft.Row(
+                            controls=[send_card, receive_card],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            spacing=20,
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=10,
+            ),
+            actions=[
+                ft.TextButton(
+                    "إغلاق",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.CENTER,
+            bgcolor=ft.Colors.GREY_900,
+            shape=ft.RoundedRectangleBorder(radius=15),
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def _open_send_dialog(self, close_parent):
+        """فتح نافذة إرسال البيانات"""
+        close_parent(None)
+        
+        ip_field = ft.TextField(
+            label="عنوان IP للجهاز المستقبل",
+            hint_text="مثال: 192.168.1.100",
+            value="192.168.",
+            width=280,
+            border_radius=10,
+            filled=True,
+            bgcolor=ft.Colors.GREY_800,
+            border_color=ft.Colors.GREY_600,
+            focused_border_color=ft.Colors.BLUE_400,
+            prefix_icon=ft.Icons.COMPUTER,
+            rtl=False,
+            text_align=ft.TextAlign.LEFT,
+        )
+        
+        def close_dlg(e):
+            dlg.open = False
+            self.page.update()
+        
+        def start_send(e):
+            target_ip = ip_field.value.strip()
+            if not target_ip:
+                ip_field.error_text = "يرجى إدخال عنوان IP"
+                self.page.update()
+                return
+            close_dlg(e)
+            self._perform_send(target_ip)
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.UPLOAD, color=ft.Colors.BLUE_400, size=24),
+                    ft.Text("إرسال البيانات", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200, size=16),
+                ],
+                spacing=10,
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text("تأكد من أن الجهاز الآخر في وضع الاستقبال", size=13, color=ft.Colors.ORANGE_300),
+                        ft.Container(height=15),
+                        ip_field,
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=5,
+                ),
+                padding=10,
+                width=320,
+            ),
+            actions=[
+                ft.ElevatedButton(
+                    "إرسال",
+                    icon=ft.Icons.SEND,
+                    bgcolor=ft.Colors.BLUE_700,
+                    color=ft.Colors.WHITE,
+                    on_click=start_send,
+                ),
+                ft.TextButton(
+                    "إلغاء",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.GREY_900,
+            shape=ft.RoundedRectangleBorder(radius=15),
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def _open_receive_dialog(self, close_parent):
+        """فتح نافذة استقبال البيانات"""
+        from utils.sync_utils import get_local_ip, SyncServer
+        
+        close_parent(None)
+        
+        local_ip = get_local_ip()
+        self.sync_server = SyncServer()
+        
+        progress_bar = ft.ProgressBar(width=280, value=0, color=ft.Colors.GREEN_400, bgcolor=ft.Colors.GREY_700)
+        status_text = ft.Text("في انتظار الاتصال...", size=14, color=ft.Colors.WHITE)
+        progress_text = ft.Text("0%", size=12, color=ft.Colors.GREY_400)
+        
+        def close_dlg(e):
+            self.sync_server.stop()
+            dlg.open = False
+            self.page.update()
+        
+        def on_progress(percent):
+            progress_bar.value = percent / 100
+            progress_text.value = f"{int(percent)}%"
+            status_text.value = "جاري استقبال البيانات..."
+            self.page.update()
+        
+        def on_complete(success, message):
+            self.sync_server.stop()
+            dlg.open = False
+            self.page.update()
+            self._show_sync_result(message, success)
+        
+        def on_error(error):
+            self.sync_server.stop()
+            dlg.open = False
+            self.page.update()
+            self._show_sync_result(f"خطأ: {error}", False)
+        
+        self.sync_server.on_progress = on_progress
+        self.sync_server.on_complete = on_complete
+        self.sync_server.on_error = on_error
+        
+        success, result = self.sync_server.start()
+        
+        if not success:
+            self._show_sync_result(f"فشل في بدء الخادم: {result}", False)
+            return
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.GREEN_400, size=24),
+                    ft.Text("استقبال البيانات", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_200, size=16),
+                ],
+                spacing=10,
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Container(
+                            content=ft.Column(
+                                controls=[
+                                    ft.Text("أدخل هذا العنوان في الجهاز المرسل:", size=13, color=ft.Colors.GREY_400),
+                                    ft.Container(
+                                        content=ft.Text(local_ip, size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.CYAN_300, selectable=True),
+                                        bgcolor=ft.Colors.GREY_800,
+                                        border_radius=10,
+                                        padding=15,
+                                        alignment=ft.alignment.center,
+                                    ),
+                                ],
+                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                spacing=10,
+                            ),
+                            padding=10,
+                        ),
+                        ft.Divider(color=ft.Colors.GREY_700),
+                        ft.ProgressRing(width=30, height=30, color=ft.Colors.GREEN_400, stroke_width=3),
+                        status_text,
+                        progress_bar,
+                        progress_text,
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=10,
+                ),
+                padding=10,
+                width=320,
+            ),
+            actions=[
+                ft.TextButton(
+                    "إلغاء",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.RED_300)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.CENTER,
+            bgcolor=ft.Colors.GREY_900,
+            shape=ft.RoundedRectangleBorder(radius=15),
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def _perform_send(self, target_ip):
+        """تنفيذ عملية الإرسال"""
+        from utils.sync_utils import SyncClient
+        
+        progress_bar = ft.ProgressBar(width=280, value=0, color=ft.Colors.BLUE_400, bgcolor=ft.Colors.GREY_700)
+        status_text = ft.Text("جاري تجهيز البيانات...", size=14, color=ft.Colors.WHITE)
+        progress_text = ft.Text("0%", size=12, color=ft.Colors.GREY_400)
+        
+        progress_dlg = ft.AlertDialog(
+            modal=True,
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Icon(ft.Icons.UPLOAD, size=40, color=ft.Colors.BLUE_400),
+                        ft.Container(height=10),
+                        status_text,
+                        progress_bar,
+                        progress_text,
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=10,
+                ),
+                padding=30,
+                width=320,
+            ),
+            bgcolor=ft.Colors.GREY_900,
+            shape=ft.RoundedRectangleBorder(radius=15),
+        )
+        self.page.overlay.append(progress_dlg)
+        progress_dlg.open = True
+        self.page.update()
+        
+        client = SyncClient()
+        
+        def on_progress(percent):
+            progress_bar.value = percent / 100
+            progress_text.value = f"{int(percent)}%"
+            if percent < 30:
+                status_text.value = "جاري ضغط البيانات..."
+            else:
+                status_text.value = "جاري إرسال البيانات..."
+            self.page.update()
+        
+        def on_complete(success, message):
+            progress_dlg.open = False
+            self.page.update()
+            self._show_sync_result(message, success)
+        
+        def on_error(error):
+            progress_dlg.open = False
+            self.page.update()
+            self._show_sync_result(error, False)
+        
+        client.on_progress = on_progress
+        client.on_complete = on_complete
+        client.on_error = on_error
+        
+        client.send_data(target_ip)
+    
+    def _show_sync_result(self, message, success):
+        """Show sync result dialog"""
+        def close_dlg(e):
+            dlg.open = False
+            self.page.update()
+        
+        icon = ft.Icons.CHECK_CIRCLE if success else ft.Icons.ERROR
+        color = ft.Colors.GREEN_400 if success else ft.Colors.RED_400
+        title_color = ft.Colors.GREEN_300 if success else ft.Colors.RED_300
+        title_text = "نجاح" if success else "خطأ"
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                controls=[
+                    ft.Icon(icon, color=color, size=28),
+                    ft.Text(title_text, weight=ft.FontWeight.BOLD, color=title_color, size=16),
+                ],
+                spacing=10,
+            ),
+            content=ft.Text(message, size=14, color=ft.Colors.WHITE, rtl=True),
+            actions=[
+                ft.TextButton(
+                    "حسناً",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.LIGHT_BLUE_300)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.CENTER,
+            bgcolor=ft.Colors.GREY_900,
+            shape=ft.RoundedRectangleBorder(radius=15),
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
     def open_invoices(self, e):
         # Clear page and load InvoiceView directly without animation
         self.page.clean()
         
-        if hasattr(self, 'save_callback'):
-            app = InvoiceView(self.page, self.save_callback)
-            app.build_ui()
-        else:
-            self.page.add(ft.Text("Error: Save callback not found"))
+        # Use save_callback from dashboard_view module
+        app = InvoiceView(self.page, save_callback)
+        app.build_ui()
 
     def open_attendance(self, e):
         # Clear page and load AttendanceView directly without animation
@@ -1015,7 +1401,7 @@ class DashboardView:
         self.page.update()
 
     def open_inventory(self, e):
-        """Open inventory dialog with options to add or disburse"""
+        """Open inventory dialog with options to add or disburse - card style"""
         def close_dlg(e):
             dlg.open = False
             self.page.update()
@@ -1028,46 +1414,82 @@ class DashboardView:
             close_dlg(e)
             self.open_inventory_disburse(None)
         
+        # Card for adding to inventory
+        add_card = ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Icon(ft.Icons.ADD_SHOPPING_CART, size=40, color=ft.Colors.WHITE),
+                        ft.Text("إضافة للمخزون", size=15, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER),
+                        ft.Text("إضافة أصناف جديدة", size=11, color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=8,
+                    tight=True,
+                ),
+                padding=15,
+                alignment=ft.alignment.center,
+                bgcolor=ft.Colors.GREEN_700,
+                border_radius=15,
+                ink=True,
+                on_click=open_add,
+                width=150,
+                height=130,
+            ),
+            elevation=8,
+        )
+        
+        # Card for disbursing from inventory
+        disburse_card = ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Icon(ft.Icons.REMOVE_SHOPPING_CART, size=40, color=ft.Colors.WHITE),
+                        ft.Text("صرف من المخزون", size=15, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER),
+                        ft.Text("صرف أصناف موجودة", size=11, color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=8,
+                    tight=True,
+                ),
+                padding=15,
+                alignment=ft.alignment.center,
+                bgcolor=ft.Colors.RED_700,
+                border_radius=15,
+                ink=True,
+                on_click=open_disburse,
+                width=150,
+                height=130,
+            ),
+            elevation=8,
+        )
+        
         dlg = ft.AlertDialog(
             modal=True,
             title=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.INVENTORY, color=ft.Colors.INDIGO_400, size=28),
-                    ft.Text("المخزون", weight=ft.FontWeight.BOLD, color=ft.Colors.INDIGO_200, size=18),
+                    ft.Icon(ft.Icons.INVENTORY, color=ft.Colors.DEEP_PURPLE_400, size=28),
+                    ft.Text("المخزون", weight=ft.FontWeight.BOLD, color=ft.Colors.DEEP_PURPLE_200, size=18),
                 ],
                 spacing=10,
             ),
-            content=ft.Column(
-                controls=[
-                    ft.Text("اختر العملية المطلوبة:", size=14, color=ft.Colors.GREY_400),
-                    ft.Container(height=15),
-                    ft.Row(
-                        controls=[
-                            ft.ElevatedButton(
-                                "إضافة للمخزون",
-                                icon=ft.Icons.ADD_SHOPPING_CART,
-                                bgcolor=ft.Colors.GREEN_700,
-                                color=ft.Colors.WHITE,
-                                width=150,
-                                height=50,
-                                on_click=open_add,
-                            ),
-                            ft.ElevatedButton(
-                                "صرف من المخزون",
-                                icon=ft.Icons.REMOVE_SHOPPING_CART,
-                                bgcolor=ft.Colors.RED_700,
-                                color=ft.Colors.WHITE,
-                                width=150,
-                                height=50,
-                                on_click=open_disburse,
-                            ),
-                        ],
-                        alignment=ft.MainAxisAlignment.CENTER,
-                        spacing=20,
-                    ),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                tight=True,
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text("اختر العملية المطلوبة:", size=14, color=ft.Colors.GREY_400),
+                        ft.Container(height=15),
+                        ft.Row(
+                            controls=[add_card, disburse_card],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            spacing=20,
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    tight=True,
+                ),
+                padding=10,
             ),
             actions=[
                 ft.TextButton(
@@ -1156,7 +1578,8 @@ class DashboardView:
         self.page.title = "مصنع السويفي"
         self.page.update()
 
-    def show(self):
-        self.save_callback = save_callback
+    def show(self, callback=None):
+        if callback:
+            self.save_callback = callback
         self.reset_ui()
         self.page.add(self.main_container)

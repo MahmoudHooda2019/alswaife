@@ -146,22 +146,36 @@ def get_counter(db_path: str, key: str = "invoice") -> int:
 
 
 def increment_counter(db_path: str, key: str = "invoice") -> int:
+    """
+    Increment the counter and return the new value.
+    Takes into account the maximum existing invoice number.
+    """
     try:
         with get_db_connection(db_path) as conn:
             cur = conn.cursor()
             
-            cur.execute("SELECT value FROM counters WHERE key=?", (key,))
+            # First, get the maximum invoice number from the invoices table
+            cur.execute("SELECT MAX(CAST(invoice_number AS INTEGER)) FROM invoices WHERE invoice_number GLOB '[0-9]*'")
             row = cur.fetchone()
-            if row:
-                new_value = int(row[0]) + 1
+            max_invoice = int(row[0]) if row and row[0] else 0
+            
+            # Get current counter value
+            cur.execute("SELECT value FROM counters WHERE key=?", (key,))
+            counter_row = cur.fetchone()
+            current_counter = int(counter_row[0]) if counter_row else 1
+            
+            # New value should be max of (max_invoice, current_counter) + 1
+            new_value = max(max_invoice, current_counter) + 1
+            
+            # Update the counter in database
+            if counter_row:
                 cur.execute("UPDATE counters SET value=? WHERE key=?", (new_value, key))
             else:
-                new_value = 2
-                cur.execute("INSERT OR REPLACE INTO counters(key, value) VALUES(?, ?)", (key, new_value))
+                cur.execute("INSERT INTO counters(key, value) VALUES(?, ?)", (key, new_value))
             
             return new_value
     except Exception as e:
-        # Fallback to in-memory counter
+        log_error(f"Error incrementing counter: {e}")
         return 1
 
 

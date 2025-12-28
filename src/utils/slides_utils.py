@@ -9,6 +9,57 @@ from datetime import datetime
 from utils.log_utils import log_error, log_exception
 
 
+def convert_arabic_datetime_to_excel(datetime_str):
+    """
+    Convert Arabic datetime string (e.g., '12:30 ص 01/01/2025') to Excel datetime
+    
+    Args:
+        datetime_str (str): DateTime string in format 'HH:MM ص/م DD/MM/YYYY'
+        
+    Returns:
+        datetime: Python datetime object or None if parsing fails
+    """
+    if not datetime_str:
+        return None
+    
+    try:
+        # Expected format: "12:30 ص 01/01/2025"
+        parts = datetime_str.strip().split(' ')
+        if len(parts) < 3:
+            return None
+        
+        time_part = parts[0]  # "12:30"
+        period = parts[1]     # "ص" or "م"
+        date_part = parts[2]  # "01/01/2025"
+        
+        # Parse time
+        time_parts = time_part.split(':')
+        if len(time_parts) != 2:
+            return None
+        
+        hour = int(time_parts[0])
+        minute = int(time_parts[1])
+        
+        # Convert to 24-hour format
+        if period == 'م' and hour != 12:
+            hour += 12
+        elif period == 'ص' and hour == 12:
+            hour = 0
+        
+        # Parse date
+        date_parts = date_part.split('/')
+        if len(date_parts) != 3:
+            return None
+        
+        day = int(date_parts[0])
+        month = int(date_parts[1])
+        year = int(date_parts[2])
+        
+        return datetime(year, month, day, hour, minute)
+    except (ValueError, IndexError):
+        return None
+
+
 def initialize_slides_inventory_excel(file_path):
     """
     Initialize the slides inventory Excel file with proper formatting and formulas
@@ -344,6 +395,10 @@ def add_slides_inventory_from_publishing(file_path, publishing_data):
             height = float(entry.get('height', 0)) if entry.get('height') else 0
             price_per_meter = float(entry.get('price_per_meter', 0)) if entry.get('price_per_meter') else 0
             
+            # Convert datetime strings to Excel datetime format
+            entry_time_excel = convert_arabic_datetime_to_excel(entry_time)
+            exit_time_excel = convert_arabic_datetime_to_excel(exit_time)
+            
             # Column mapping (1-based):
             # A(1): تاريخ النشر, B(2): رقم البلوك, C(3): النوع, D(4): رقم المكينه
             # E(5): وقت الدخول, F(6): وقت الخروج, G(7): عدد الساعات (formula)
@@ -356,13 +411,27 @@ def add_slides_inventory_from_publishing(file_path, publishing_data):
             add_sheet.cell(row=row_num, column=2, value=block_number)     # رقم البلوك
             add_sheet.cell(row=row_num, column=3, value=material)         # النوع
             add_sheet.cell(row=row_num, column=4, value=machine_number)   # رقم المكينه
-            add_sheet.cell(row=row_num, column=5, value=entry_time)       # وقت الدخول
-            add_sheet.cell(row=row_num, column=6, value=exit_time)        # وقت الخروج
+            
+            # وقت الدخول - Store as Excel datetime
+            entry_cell = add_sheet.cell(row=row_num, column=5)
+            if entry_time_excel:
+                entry_cell.value = entry_time_excel
+                entry_cell.number_format = 'DD/MM/YYYY HH:MM'
+            else:
+                entry_cell.value = entry_time
+            
+            # وقت الخروج - Store as Excel datetime
+            exit_cell = add_sheet.cell(row=row_num, column=6)
+            if exit_time_excel:
+                exit_cell.value = exit_time_excel
+                exit_cell.number_format = 'DD/MM/YYYY HH:MM'
+            else:
+                exit_cell.value = exit_time
             
             # عدد الساعات - Formula: Calculate hours between entry and exit time
-            # For simplicity, store the calculated value from the view
-            hours_count = float(entry.get('hours_count', 0)) if entry.get('hours_count') else 0
-            add_sheet.cell(row=row_num, column=7, value=hours_count)      # عدد الساعات
+            # Formula: (F - E) * 24 to get hours
+            hours_formula = f"=IF(AND(E{row_num}<>\"\",F{row_num}<>\"\"),(F{row_num}-E{row_num})*24,0)"
+            add_sheet.cell(row=row_num, column=7, value=hours_formula)    # عدد الساعات
             
             add_sheet.cell(row=row_num, column=8, value=thickness)        # السمك
             add_sheet.cell(row=row_num, column=9, value=quantity)         # العدد

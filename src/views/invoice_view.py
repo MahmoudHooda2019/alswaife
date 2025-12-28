@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import os
 import flet as ft
 import json
@@ -185,11 +185,17 @@ class InvoiceRow:
     def on_block_change(self, e):
         val = self.block_var.value
         if val:
-            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('ِ', 'A').replace('لآ', 'B').replace('f', 'F').replace('[]', 'F').replace('ب', 'F')
+            # تحويل الحروف إلى A, B, F
+            # A: ِ, ش, a
+            # B: لآ, لا, b
+            # F: f, [, ب
+            new_val = val.replace('ِ', 'A').replace('ش', 'A').replace('a', 'A')
+            new_val = new_val.replace('لآ', 'B').replace('لا', 'B').replace('b', 'B')
+            new_val = new_val.replace('f', 'F').replace('[', 'F').replace('ب', 'F')
+            new_val = new_val.upper()
             
             if new_val != val:
                 self.block_var.value = new_val
-                # Only update if value changed
                 if hasattr(self, 'page') and self.page:
                     self.page.update()
 
@@ -197,7 +203,11 @@ class InvoiceRow:
         """Reorder block number when focus leaves - move letter to beginning if at end"""
         val = self.block_var.value
         if val:
-            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('ِ', 'A').replace('لآ', 'B').replace('f', 'F').replace('[]', 'F').replace('ب', 'F')
+            # تحويل الحروف إلى A, B, F
+            new_val = val.replace('ِ', 'A').replace('ش', 'A').replace('a', 'A')
+            new_val = new_val.replace('لآ', 'B').replace('لا', 'B').replace('b', 'B')
+            new_val = new_val.replace('f', 'F').replace('[', 'F').replace('ب', 'F')
+            new_val = new_val.upper()
             
             import re
             match = re.match(r'^(\d+)([A-Za-z]+)$', new_val)
@@ -478,7 +488,7 @@ class InvoiceView:
             try:
                 os.makedirs(self.documents_path)
             except OSError as e:
-                print(f"Warning: Could not create directory {self.documents_path}: {e}")
+                log_error(f"Could not create directory {self.documents_path}: {e}")
                 # Fallback to current directory
                 self.documents_path = "."
         self.db_path = os.path.join(self.documents_path, 'invoice.db')
@@ -487,7 +497,7 @@ class InvoiceView:
         try:
             init_db(self.db_path)
         except sqlite3.Error as e:
-            print(f"Error initializing database: {e}")
+            log_error(f"Error initializing database: {e}")
             # Try fallback location
             fallback_db_path = os.path.join(".", "invoice.db")
             init_db(fallback_db_path)
@@ -517,7 +527,6 @@ class InvoiceView:
         # Client selection with inline autocomplete (ghost text style like IDE)
         self.client_suggestions = self.load_clients()
         self.current_suggestion = ""  # Store current autocomplete suggestion
-        print(f"[DEBUG] Client suggestions loaded: {len(self.client_suggestions)} - {self.client_suggestions}")
         
         # Suffix text for showing autocomplete suggestion
         self.client_suffix_text = ft.Text(
@@ -614,13 +623,11 @@ class InvoiceView:
         documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
         
         self.invoices_root = os.path.join(documents_path, 'الفواتير')
-        print(f"[DEBUG] load_clients - invoices_root: {self.invoices_root}")
         if not os.path.exists(self.invoices_root):
             try:
                 os.makedirs(self.invoices_root)
-                print(f"[DEBUG] Created invoices directory")
             except OSError as e:
-                print(f"[DEBUG] Error creating directory: {e}")
+                log_error(f"Error creating invoices directory: {e}")
                 pass
                 
         clients = []
@@ -628,75 +635,88 @@ class InvoiceView:
             try:
                 with os.scandir(self.invoices_root) as entries:
                     clients = [entry.name for entry in entries if entry.is_dir()]
-                print(f"[DEBUG] Found clients: {clients}")
             except OSError as e:
-                print(f"[DEBUG] Error scanning directory: {e}")
+                log_error(f"Error scanning invoices directory: {e}")
                 for item in os.listdir(self.invoices_root):
                     if os.path.isdir(os.path.join(self.invoices_root, item)):
                         clients.append(item)
-        else:
-            print(f"[DEBUG] invoices_root does not exist")
         return sorted(clients)
 
     def find_best_match(self, search_text):
         """Find the best matching client name for autocomplete"""
-        print(f"[DEBUG] find_best_match called with: '{search_text}'")
         if not search_text:
             return ""
         
         search_lower = search_text.lower().strip()
-        print(f"[DEBUG] Searching in {len(self.client_suggestions)} clients")
         
         # Find first client that starts with the search text
         for client in self.client_suggestions:
             client_lower = client.lower()
-            print(f"[DEBUG] Comparing '{search_lower}' with '{client_lower}'")
             if client_lower.startswith(search_lower):
-                print(f"[DEBUG] Found match: '{client}'")
                 return client
         
         # Also try to find clients that contain the search text
         for client in self.client_suggestions:
             if search_lower in client.lower():
-                print(f"[DEBUG] Found partial match: '{client}'")
                 return client
                 
-        print(f"[DEBUG] No match found")
         return ""
+
+    def convert_english_to_arabic(self, text):
+        """تحويل الحروف الإنجليزية إلى العربية (بناءً على تخطيط لوحة المفاتيح)"""
+        # خريطة تحويل الحروف الإنجليزية إلى العربية
+        eng_to_ar = {
+            'q': 'ض', 'w': 'ص', 'e': 'ث', 'r': 'ق', 't': 'ف', 'y': 'غ', 'u': 'ع', 'i': 'ه', 'o': 'خ', 'p': 'ح', '[': 'ج', ']': 'د',
+            'a': 'ش', 's': 'س', 'd': 'ي', 'f': 'ب', 'g': 'ل', 'h': 'ا', 'j': 'ت', 'k': 'ن', 'l': 'م', ';': 'ك', "'": 'ط',
+            'z': 'ئ', 'x': 'ء', 'c': 'ؤ', 'v': 'ر', 'b': 'لا', 'n': 'ى', 'm': 'ة', ',': 'و', '.': 'ز', '/': 'ظ',
+            'Q': 'َ', 'W': 'ً', 'E': 'ُ', 'R': 'ٌ', 'T': 'لإ', 'Y': 'إ', 'U': ''', 'I': '÷', 'O': '×', 'P': '؛', '{': '<', '}': '>',
+            'A': 'ِ', 'S': 'ٍ', 'D': ']', 'F': '[', 'G': 'لأ', 'H': 'أ', 'J': 'ـ', 'K': '،', 'L': '/', ':': ':', '"': '"',
+            'Z': '~', 'X': 'ْ', 'C': '}', 'V': '{', 'B': 'لآ', 'N': 'آ', 'M': ''', '<': ',', '>': '.', '?': '؟',
+            '`': 'ذ', '~': 'ّ',
+        }
+        
+        result = ""
+        for char in text:
+            if char in eng_to_ar:
+                result += eng_to_ar[char]
+            else:
+                result += char
+        return result
 
     def on_client_text_change(self, e):
         """Update inline autocomplete suggestion when user types"""
         current_text = self.ent_client.value or ""
+        
+        # تحويل الحروف الإنجليزية إلى العربية
+        converted_text = self.convert_english_to_arabic(current_text)
+        
+        # تحديث النص إذا تم التحويل
+        if converted_text != current_text:
+            self.ent_client.value = converted_text
+            current_text = converted_text
+        
         # Don't strip - keep the text as is for proper matching with names containing spaces
         search_text = current_text.lstrip()  # Only remove leading spaces
-        print(f"[DEBUG] on_client_text_change - current_text: '{current_text}' - search_text: '{search_text}'")
         
         if search_text:
             # Find best match
             best_match = self.find_best_match(search_text)
-            print(f"[DEBUG] best_match: '{best_match}'")
             
             if best_match and best_match.lower() != search_text.lower():
                 # Show the full suggestion name as suffix
-                print(f"[DEBUG] Setting suffix to: '{best_match}'")
                 self.client_suffix_text.value = best_match
                 self.current_suggestion = best_match
-                print(f"[DEBUG] current_suggestion set to: '{self.current_suggestion}'")
             else:
-                print(f"[DEBUG] No suggestion - clearing suffix")
                 self.client_suffix_text.value = ""
                 self.current_suggestion = ""
         else:
-            print(f"[DEBUG] Empty text - clearing suffix")
             self.client_suffix_text.value = ""
             self.current_suggestion = ""
         
-        print(f"[DEBUG] Calling page.update()")
         self.page.update()
 
     def on_client_submit(self, e):
         """Handle Tab or Enter - accept the autocomplete suggestion"""
-        print(f"[DEBUG] on_client_submit called - current_suggestion: '{self.current_suggestion}'")
         if self.current_suggestion:
             self.ent_client.value = self.current_suggestion
             self.client_suffix_text.value = ""
@@ -746,11 +766,11 @@ class InvoiceView:
                 return products
         except (IOError, json.JSONDecodeError) as e:
             # Log error but don't crash
-            print(f"Warning: Could not load products file: {e}")
+            log_error(f"Could not load products file: {e}")
             return {}
         except Exception as e:
             # Handle any other unexpected errors
-            print(f"Unexpected error loading products: {e}")
+            log_error(f"Unexpected error loading products: {e}")
             return {}
 
     def add_row(self, e=None):
@@ -1049,7 +1069,7 @@ class InvoiceView:
                         try:
                             remove_invoice_from_ledger(old_client_folder, op_num)
                         except Exception as ledger_ex:
-                            print(f"Error removing old ledger entry: {ledger_ex}")
+                            log_error(f"Error removing old ledger entry: {ledger_ex}")
                     # Note: If client name is the same, update_invoice_in_ledger will handle
                     # removing and re-adding the invoice entry internally
             
@@ -1058,7 +1078,7 @@ class InvoiceView:
                 try:
                     delete_existing_invoice_file(old_file_path)
                 except Exception as file_ex:
-                    print(f"Error deleting old invoice file: {file_ex}")
+                    log_error(f"Error deleting old invoice file: {file_ex}")
             
             # Save the invoice Excel file directly
             from utils.invoice_utils import save_invoice
@@ -1134,15 +1154,9 @@ class InvoiceView:
                         )
                         
                         if not success:
-                            import logging
-                            logger = logging.getLogger('src.utils.excel_utils')
-                            logger.error(f"❌ CRITICAL: Could not update invoice in ledger: {error}")
-                            print(f"Warning: Could not update invoice in ledger: {error}")
+                            log_error(f"Could not update invoice in ledger: {error}")
                     except Exception as ledger_ex:
-                        import logging
-                        logger = logging.getLogger('src.utils.excel_utils')
-                        logger.error(f"❌ CRITICAL EXCEPTION: {ledger_ex}", exc_info=True)
-                        print(f"Error updating invoice in ledger: {ledger_ex}")
+                        log_exception(f"Error updating invoice in ledger: {ledger_ex}")
                 else:
                     # For new invoices, use the original save_callback to handle ledger update
                     # Calculate items for original callback
@@ -1155,7 +1169,7 @@ class InvoiceView:
                     # Call the original save callback which will handle ledger update
                     self.save_callback(full_path, op_num, client, driver, date_str, phone, items_for_callback)
             except Exception as db_ex:
-                print(f"Error saving invoice to database: {db_ex}")
+                log_error(f"Error saving invoice to database: {db_ex}")
                 # Continue with the process even if database save fails
             
             # Disburse slides from inventory if invoice contains slide products
@@ -1164,7 +1178,7 @@ class InvoiceView:
                     op_num, date_str, items_data, client
                 )
             except Exception as slides_ex:
-                print(f"[ERROR] Error disbursing slides: {slides_ex}")
+                log_error(f"Error disbursing slides: {slides_ex}")
                 # Continue with the process even if slides disbursement fails
             
             # Store the current invoice path for payment updates
@@ -1178,44 +1192,32 @@ class InvoiceView:
                     payment_amount = float(payment_str)
                     # Update payment in invoice file
                     payment_success = update_payment_in_invoice(full_path, payment_amount)
-                    if payment_success:
-                        print(f"Successfully sent payment ({payment_amount}) to invoice")
-                    else:
-                        print(f"Failed to send payment to invoice")
+                    if not payment_success:
+                        log_error(f"Failed to send payment to invoice")
                     
                     # Also update payment in client ledger
                     ledger_success = update_payment_in_ledger(client_dir, op_num, payment_amount)
-                    if ledger_success:
-                        print(f"Successfully sent payment ({payment_amount}) to client ledger")
-                    else:
-                        print(f"Failed to send payment to client ledger")
+                    if not ledger_success:
+                        log_error(f"Failed to send payment to client ledger")
                 except ValueError:
-                    print(f"Invalid payment value: {payment_str}")
+                    log_error(f"Invalid payment value: {payment_str}")
                 except Exception as payment_ex:
-                    print(f"Error sending payment: {payment_ex}")
+                    log_error(f"Error sending payment: {payment_ex}")
             
             # Add income record to purchases/income ledger (always record invoice)
-            print(f"[DEBUG] Starting income record save...")
-            print(f"[DEBUG] documents_path: {self.documents_path}")
             try:
                 purchases_folder = os.path.join(self.documents_path, "ايرادات ومصروفات")
-                print(f"[DEBUG] purchases_folder: {purchases_folder}")
                 os.makedirs(purchases_folder, exist_ok=True)
                 purchases_file = os.path.join(purchases_folder, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
-                print(f"[DEBUG] Saving income to: {purchases_file}")
                 income_record = {
                     'date': date_str,
                     'invoice_number': op_num,
                     'client': client if client else "بدون اسم",
                     'amount': payment_amount if payment_amount > 0 else total_amount,
                 }
-                print(f"[DEBUG] income_record: {income_record}")
                 result = add_income_record(purchases_file, income_record)
-                print(f"[SUCCESS] Added income record for invoice {op_num} to {result}")
             except Exception as income_ex:
-                import traceback
-                print(f"[ERROR] Error adding income record: {income_ex}")
-                traceback.print_exc()
+                log_exception(f"Error adding income record: {income_ex}")
             
             def open_file(e):
                 # Use our universal function to open the file
@@ -1394,14 +1396,14 @@ class InvoiceView:
                         try:
                             remove_invoice_from_ledger(old_client_folder, op_num)
                         except Exception as ledger_ex:
-                            print(f"Error removing old ledger entry: {ledger_ex}")
+                            log_error(f"Error removing old ledger entry: {ledger_ex}")
             
             # Delete the old invoice file if it exists
             if old_file_path and old_file_path != full_path:
                 try:
                     delete_existing_invoice_file(old_file_path)
                 except Exception as file_ex:
-                    print(f"Error deleting old invoice file: {file_ex}")
+                    log_error(f"Error deleting old invoice file: {file_ex}")
             
             # Save the revenue invoice Excel file directly
             from utils.invoice_utils import save_invoice
@@ -1436,7 +1438,7 @@ class InvoiceView:
                 # For revenue invoices, no ledger update is needed, but if this was a conversion
                 # from a regular invoice to revenue, we already handled the ledger removal above
             except Exception as db_ex:
-                print(f"Error saving revenue invoice to database: {db_ex}")
+                log_error(f"Error saving revenue invoice to database: {db_ex}")
                 # Continue with the process even if database save fails
             
             # Disburse slides from inventory if invoice contains slide products
@@ -1445,7 +1447,7 @@ class InvoiceView:
                     op_num, date_str, items_data, client
                 )
             except Exception as slides_ex:
-                print(f"[ERROR] Error disbursing slides for revenue invoice: {slides_ex}")
+                log_error(f"Error disbursing slides for revenue invoice: {slides_ex}")
                 # Continue with the process even if slides disbursement fails
             
             # Store the current invoice path for payment updates
@@ -1458,35 +1460,27 @@ class InvoiceView:
                 try:
                     payment_amount = float(payment_str)
                     payment_success = update_payment_in_invoice(full_path, payment_amount)
-                    if payment_success:
-                        print(f"Successfully sent payment ({payment_amount}) to revenue invoice")
-                    else:
-                        print(f"Failed to send payment to revenue invoice")
+                    if not payment_success:
+                        log_error(f"Failed to send payment to revenue invoice")
                 except ValueError:
-                    print(f"Invalid payment value: {payment_str}")
+                    log_error(f"Invalid payment value: {payment_str}")
                 except Exception as payment_ex:
-                    print(f"Error sending payment: {payment_ex}")
+                    log_error(f"Error sending payment: {payment_ex}")
             
             # Add income record to income/expenses ledger
-            print(f"[DEBUG] Starting income record save for revenue invoice...")
             try:
                 purchases_folder = os.path.join(self.documents_path, "ايرادات ومصروفات")
                 os.makedirs(purchases_folder, exist_ok=True)
                 purchases_file = os.path.join(purchases_folder, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
-                print(f"[DEBUG] Saving income to: {purchases_file}")
                 income_record = {
                     'date': date_str,
                     'invoice_number': op_num,
                     'client': client if client else "بدون اسم",
                     'amount': payment_amount if payment_amount > 0 else total_amount,
                 }
-                print(f"[DEBUG] income_record: {income_record}")
                 result = add_income_record(purchases_file, income_record)
-                print(f"[SUCCESS] Added income record for revenue invoice {op_num} to {result}")
             except Exception as income_ex:
-                import traceback
-                print(f"[ERROR] Error adding income record: {income_ex}")
-                traceback.print_exc()
+                log_exception(f"Error adding income record: {income_ex}")
             
             def open_file(e):
                 try:
@@ -1509,7 +1503,7 @@ class InvoiceView:
                     else:
                         subprocess.call(('xdg-open', full_path))
                 except Exception as ex:
-                    print(f"Error opening file: {ex}")
+                    log_error(f"Error opening file: {ex}")
 
             def open_folder(e):
                 # Use our universal function to open the folder
@@ -1641,7 +1635,7 @@ class InvoiceView:
                 self.page.update()
             
         except Exception as ex:
-            print(f"Error loading invoice data: {ex}")
+            log_error(f"Error loading invoice data: {ex}")
             dlg = ft.AlertDialog(
                 title=ft.Text("خطأ"),
                 content=ft.Text(f"حدث خطأ أثناء تحميل بيانات الفاتورة:\n{ex}"))
@@ -1717,11 +1711,11 @@ class InvoiceView:
                     except:
                         continue
                 
-                # If all else fails, print available attributes for debugging
+                # If all else fails, log for debugging
                 if not success:
-                    print("Available page attributes:", [attr for attr in dir(self.page) if not attr.startswith('_')][:20])
+                    log_error("Could not minimize window - no compatible attribute found")
         except Exception as ex:
-            print(f"Error minimizing window: {ex}")
+            log_error(f"Error minimizing window: {ex}")
         self.page.update()
 
     def close_window(self, e):
@@ -1729,7 +1723,7 @@ class InvoiceView:
         try:
              self.page.window.close()
         except Exception as ex:
-            print(f"Error closing window: {ex}")
+            log_error(f"Error closing window: {ex}")
 
     def on_keyboard_event(self, e: ft.KeyboardEvent):
         """Handle keyboard events"""
@@ -1756,31 +1750,63 @@ class InvoiceView:
         
         self.page.clean()
         dashboard = DashboardView(self.page)
-        
-        # Get save_callback from main
-        try:
-            from main import save_callback
-            dashboard.show(save_callback)
-        except:
-            dashboard.show(None)
+        dashboard.show()
 
     def build_ui(self):
-        # Create AppBar with menu
+        # Create AppBar with grouped buttons (no menu)
         self.page.appbar = ft.AppBar(
             leading=ft.IconButton(ft.Icons.ARROW_BACK, on_click=self.go_back, tooltip="العودة"),
             title=ft.Text("مصنع السويفي - ادارة الفواتير"),
             bgcolor=ft.Colors.SURFACE,
             actions=[
-                ft.IconButton(ft.Icons.ZOOM_IN, on_click=self.zoom_in, tooltip="تكبير"),
-                ft.IconButton(ft.Icons.ZOOM_OUT, on_click=self.zoom_out, tooltip="تصغير"),
-                ft.PopupMenuButton(
-                    items=[
-                        ft.PopupMenuItem(text="حفظ إلى Excel", on_click=self.save_excel),
-                        ft.PopupMenuItem(text="عملية جديدة", on_click=self.reset_form),
-                        ft.PopupMenuItem(text="تصغير", on_click=self.minimize_window),
-                        ft.PopupMenuItem(text="إغلاق", on_click=self.close_window)
-                    ]
-                )
+                # Zoom buttons group
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.IconButton(
+                                ft.Icons.ZOOM_IN, 
+                                on_click=self.zoom_in, 
+                                tooltip="تكبير",
+                                icon_color=ft.Colors.BLUE_300,
+                            ),
+                            ft.IconButton(
+                                ft.Icons.ZOOM_OUT, 
+                                on_click=self.zoom_out, 
+                                tooltip="تصغير",
+                                icon_color=ft.Colors.BLUE_300,
+                            ),
+                        ],
+                        spacing=0,
+                    ),
+                    bgcolor=ft.Colors.GREY_800,
+                    border_radius=8,
+                    padding=ft.padding.symmetric(horizontal=5),
+                    margin=ft.margin.only(left=10),
+                ),
+                # Save and New operation buttons group
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.IconButton(
+                                ft.Icons.SAVE, 
+                                on_click=self.save_excel, 
+                                tooltip="حفظ إلى Excel",
+                                icon_color=ft.Colors.GREEN_400,
+                            ),
+                            ft.IconButton(
+                                ft.Icons.ADD_CIRCLE_OUTLINE, 
+                                on_click=self.reset_form, 
+                                tooltip="عملية جديدة",
+                                icon_color=ft.Colors.ORANGE_400,
+                            ),
+                        ],
+                        spacing=0,
+                    ),
+                    bgcolor=ft.Colors.GREY_800,
+                    border_radius=8,
+                    padding=ft.padding.symmetric(horizontal=5),
+                    margin=ft.margin.only(left=10, right=15),
+                ),
             ]
         )
         
@@ -1860,7 +1886,7 @@ def open_path(path, select_in_folder=False):
     """
     try:
         if not os.path.exists(path):
-            print(f"Path not found: {path}")
+            log_error(f"Path not found: {path}")
             return False
         
         system = platform.system()
@@ -1895,5 +1921,5 @@ def open_path(path, select_in_folder=False):
         return True
         
     except Exception as ex:
-        print(f"Error opening path '{path}': {ex}")
+        log_error(f"Error opening path '{path}': {ex}")
         return False
