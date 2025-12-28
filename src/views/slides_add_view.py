@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from utils.path_utils import resource_path
 from utils.slides_utils import initialize_slides_inventory_excel, add_slides_inventory_entry, convert_existing_slides_inventory_to_formulas
+from utils.log_utils import log_error, log_exception
 
 
 class SlideRow:
@@ -92,6 +93,7 @@ class SlideRow:
             "رقم البلوك",
             width_small,
             on_change=self.on_block_change,
+            on_blur=self.on_block_blur,
             icon=ft.Icons.NUMBERS
         )
 
@@ -352,7 +354,8 @@ class SlideRow:
             # Replace Arabic characters with their English counterparts
             # 'ش' is 'a' on Arabic keyboard
             # 'لا' (lam-alif) is 'b' on Arabic keyboard
-            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B').replace('ِ', 'A').replace('لآ', 'B')
+            # 'ب' is 'f' on Arabic keyboard (for الفضل)
+            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B').replace('ِ', 'A').replace('لآ', 'B').replace('f', 'F').replace('ث', 'F')
             if new_val != val:
                 self.block_number.value = new_val
                 # Only update if value changed
@@ -360,6 +363,27 @@ class SlideRow:
                     self.page.update()
         # Always trigger calculations after any change
         self._calculate_values()
+
+    def on_block_blur(self, e):
+        """Reorder block number when focus leaves - move letter to beginning if at end"""
+        val = self.block_number.value
+        if val:
+            # First apply character replacements
+            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B').replace('ِ', 'A').replace('لآ', 'B').replace('f', 'F').replace('ث', 'F')
+            
+            # Check if ends with letter(s) and starts with number - reorder to put letter first
+            # Pattern: digits followed by letters at the end (e.g., "12B" -> "B12")
+            import re
+            match = re.match(r'^(\d+)([A-Za-z]+)$', new_val)
+            if match:
+                numbers = match.group(1)
+                letters = match.group(2).upper()
+                new_val = letters + numbers
+            
+            if new_val != val:
+                self.block_number.value = new_val
+                if hasattr(self, 'page') and self.page:
+                    self.page.update()
 
     def _on_material_change(self, e=None):
         """Handle material change and update price per meter"""
@@ -412,7 +436,7 @@ class SlideRow:
                         return 0
             return 0
         except Exception as e:
-            print(f"[ERROR] Error getting price from JSON: {e}")
+            log_error(f"Error getting price from JSON: {e}")
             return 0
 
     def _calculate_values(self):
@@ -647,7 +671,6 @@ class SlidesAddView:
             
             # Initialize Excel file if it doesn't exist
             if not os.path.exists(excel_file):
-                print(f"[DEBUG] Initializing new slides inventory Excel file")
                 from utils.slides_utils import initialize_slides_inventory_excel
                 initialize_slides_inventory_excel(excel_file)
             
@@ -770,7 +793,7 @@ class SlidesAddView:
 
 def main():
     def on_back():
-        print("Back button clicked")
+        pass
     
     ft.app(target=lambda page: SlidesAddView(page, on_back).build_ui())
 

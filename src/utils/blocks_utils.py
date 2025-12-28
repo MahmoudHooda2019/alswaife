@@ -5,6 +5,8 @@ import openpyxl
 from openpyxl.styles import Border, Side, Alignment, PatternFill, Font
 from openpyxl.utils import get_column_letter
 
+from utils.log_utils import log_error, log_exception
+
 # Table column definitions
 TABLE1_COLUMNS = [
     "رقم النقله", "عدد النقله", "التاريخ", "المحجر", 
@@ -34,6 +36,19 @@ TABLE3_WIDTH = [12, 10, 10, 10, 12, 10, 12, 14, 12, 14]
 
 # Starting column for slides table (directly after TABLE1, no gap)
 SLIDES_START_COL = len(TABLE1_COLUMNS) + 1  # +1 to start right after blocks table
+
+# Starting column for الفضل table (after slides table)
+FADL_START_COL = SLIDES_START_COL + len(TABLE2_COLUMNS) + 1  # +1 for gap column
+
+# الفضل table columns (same structure as slides)
+TABLE_FADL_COLUMNS = [
+    "تاريخ النشر", "رقم البلوك", "النوع", "رقم المكينه",
+    "وقت الدخول", "وقت الخروج", "عدد الساعات",
+    "السمك", "العدد", "الطول", "الخصم", "الطول بعد",
+    "الارتفاع", "الكمية م2", "سعر المتر", "اجمالي السعر"
+]
+
+TABLE_FADL_WIDTH = [12, 12, 12, 10, 12, 12, 12, 8, 8, 10, 8, 12, 10, 12, 12, 14]
 
 # Productivity rates based on thickness
 PRODUCTIVITY_RATES = {
@@ -95,6 +110,7 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
     إضافة بيانات الشرائح إلى ملف موجود
     الشرائح A تُسجل في الصف الأول للبلوك
     الشرائح B تُسجل في الصف الثاني للبلوك
+    الشرائح F تُسجل في شيت الفضل
     """
     try:
         workbook = openpyxl.load_workbook(filepath)
@@ -127,10 +143,35 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
             "FFB3BA",  # Light Red-Pink
         ]
         
+        # الفضل table colors (different shade)
+        fadl_colors = [
+            "FFE4C9",  # Light Peach
+            "C9E4FF",  # Light Sky Blue
+            "E4C9FF",  # Light Violet
+            "C9FFE4",  # Light Mint
+            "FFE4E4",  # Light Rose
+            "E4FFE4",  # Light Green
+            "E4E4FF",  # Light Periwinkle
+            "FFF0C9",  # Light Gold
+            "F0C9FF",  # Light Orchid
+            "C9FFF0",  # Light Cyan
+            "FFC9E4",  # Light Pink
+            "E4FFC9",  # Light Lime
+            "C9E4E4",  # Light Teal
+            "E4C9E4",  # Light Mauve
+            "FFE4F0",  # Light Blush
+            "F0FFE4",  # Light Honeydew
+        ]
+        
         header_fill = PatternFill(start_color="7030A0", end_color="7030A0", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True, size=12)
         title_fill = PatternFill(start_color="9933FF", end_color="9933FF", fill_type="solid")
         title_font = Font(color="FFFFFF", bold=True, size=14)
+        
+        # الفضل header styles (different color)
+        fadl_header_fill = PatternFill(start_color="C65911", end_color="C65911", fill_type="solid")
+        fadl_title_fill = PatternFill(start_color="ED7D31", end_color="ED7D31", fill_type="solid")
+        
         gap_fill = PatternFill(start_color="A6A6A6", end_color="A6A6A6", fill_type="solid")
         
         # Check if slides headers exist, if not add them
@@ -157,6 +198,30 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
             for i, width in enumerate(TABLE2_WIDTH):
                 worksheet.column_dimensions[get_column_letter(SLIDES_START_COL + i)].width = width
         
+        # Check if الفضل headers exist, if not add them
+        fadl_title_cell = worksheet.cell(row=1, column=FADL_START_COL)
+        if not fadl_title_cell.value:
+            # Add الفضل title
+            worksheet.merge_cells(start_row=1, start_column=FADL_START_COL, 
+                                end_row=1, end_column=FADL_START_COL + len(TABLE_FADL_COLUMNS) - 1)
+            title_cell = worksheet.cell(row=1, column=FADL_START_COL, value="الفضل")
+            title_cell.font = title_font
+            title_cell.fill = fadl_title_fill
+            title_cell.alignment = center_alignment
+            title_cell.border = thin_border
+            
+            # Add الفضل headers
+            for idx, col in enumerate(TABLE_FADL_COLUMNS):
+                cell = worksheet.cell(row=2, column=FADL_START_COL + idx, value=col)
+                cell.font = header_font
+                cell.fill = fadl_header_fill
+                cell.alignment = center_alignment
+                cell.border = thin_border
+            
+            # Set column widths for الفضل
+            for i, width in enumerate(TABLE_FADL_WIDTH):
+                worksheet.column_dimensions[get_column_letter(FADL_START_COL + i)].width = width
+        
         # Build a map of block numbers to their row positions
         # Column 5 (E) contains block numbers in the blocks table
         block_row_map = {}  # {block_number: first_row_of_block}
@@ -170,8 +235,19 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
         # Default discount
         DEFAULT_DISCOUNT = 0.20
         
-        # Add slides data
+        # Separate slides data into A/B and F
+        ab_slides = []
+        f_slides = []
+        
         for slide_data in slides_data:
+            slide_block_number = str(slide_data.get('block_number', '')).strip().upper()
+            if slide_block_number.startswith('F'):
+                f_slides.append(slide_data)
+            else:
+                ab_slides.append(slide_data)
+        
+        # Add A/B slides data to الشرائح table
+        for slide_data in ab_slides:
             # Get slide block number (e.g., "A11" or "B11")
             slide_block_number = str(slide_data.get('block_number', '')).strip().upper()
             
@@ -195,7 +271,6 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
             
             # Find the block row
             if base_block_number not in block_row_map:
-                print(f"[WARNING] Block {base_block_number} not found in blocks table")
                 continue
             
             block_first_row = block_row_map[base_block_number]
@@ -250,21 +325,84 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
                 elif col_idx == 8:
                     cell.number_format = '#,##0'
         
+        # Add F slides data to الفضل table
+        # Find the next available row for الفضل data
+        fadl_next_row = 3  # Start after headers
+        for row in range(3, worksheet.max_row + 1):
+            fadl_cell = worksheet.cell(row=row, column=FADL_START_COL)
+            if fadl_cell.value:
+                fadl_next_row = row + 1
+        
+        for slide_data in f_slides:
+            slide_block_number = str(slide_data.get('block_number', '')).strip().upper()
+            
+            if not slide_block_number:
+                continue
+            
+            excel_row = fadl_next_row
+            fadl_next_row += 1
+            
+            # Get values
+            publishing_date = slide_data.get('publishing_date', '')
+            material = slide_data.get('material', '')
+            machine_number = slide_data.get('machine_number', '')
+            entry_time = slide_data.get('entry_time', '')
+            exit_time = slide_data.get('exit_time', '')
+            hours_count = float(slide_data.get('hours_count', 0)) if slide_data.get('hours_count') else 0
+            thickness = slide_data.get('thickness', '')
+            quantity = int(slide_data.get('quantity', 0)) if slide_data.get('quantity') else 0
+            length = float(slide_data.get('length', 0)) if slide_data.get('length') else 0
+            height = float(slide_data.get('height', 0)) if slide_data.get('height') else 0
+            price_per_meter = float(slide_data.get('price_per_meter', 0)) if slide_data.get('price_per_meter') else 0
+            
+            # Column data for الفضل
+            col_data = [
+                (publishing_date, False),
+                (slide_block_number, False),  # Keep full block number (F11)
+                (material, False),
+                (machine_number, False),
+                (entry_time, False),
+                (exit_time, False),
+                (hours_count, False),
+                (thickness, False),
+                (quantity, False),
+                (length, False),
+                (DEFAULT_DISCOUNT, False),
+                (f"={get_column_letter(FADL_START_COL + 9)}{excel_row}-{get_column_letter(FADL_START_COL + 10)}{excel_row}", True),  # الطول بعد الخصم
+                (height, False),
+                (f"={get_column_letter(FADL_START_COL + 11)}{excel_row}*{get_column_letter(FADL_START_COL + 12)}{excel_row}*{get_column_letter(FADL_START_COL + 8)}{excel_row}", True),  # الكمية م2
+                (price_per_meter, False),
+                (f"={get_column_letter(FADL_START_COL + 13)}{excel_row}*{get_column_letter(FADL_START_COL + 14)}{excel_row}", True),  # اجمالي السعر
+            ]
+            
+            for col_idx, (value, is_formula) in enumerate(col_data):
+                col_num = FADL_START_COL + col_idx
+                
+                cell = worksheet.cell(row=excel_row, column=col_num, value=value)
+                cell.border = thin_border
+                cell.alignment = center_alignment
+                cell.fill = PatternFill(start_color=fadl_colors[col_idx], 
+                                       end_color=fadl_colors[col_idx], fill_type="solid")
+                
+                # Number format for numeric columns
+                if col_idx in [6, 9, 10, 11, 12, 13, 14, 15]:
+                    cell.number_format = '#,##0.00'
+                elif col_idx == 8:
+                    cell.number_format = '#,##0'
+        
         workbook.save(filepath)
         return True
         
     except PermissionError as e:
-        print(f"File is locked: {e}")
+        log_error(f"File is locked: {e}")
         return False
     except Exception as e:
-        print(f"Error adding slides data: {e}")
-        import traceback
-        traceback.print_exc()
+        log_exception(f"Error adding slides data: {e}")
         return False
 
 
 def create_new_excel_file_with_slides(filepath: str, blocks_rows: List[Dict], slides_rows: List[Dict]):
-    """إنشاء ملف جديد مع جدولي البلوكات والشرائح"""
+    """إنشاء ملف جديد مع جدولي البلوكات والشرائح والفضل"""
     from openpyxl import Workbook as OpenpyxlWorkbook
     
     workbook = OpenpyxlWorkbook()
@@ -288,6 +426,10 @@ def create_new_excel_file_with_slides(filepath: str, blocks_rows: List[Dict], sl
     # Header styles for slides
     slides_header_fill = PatternFill(start_color="7030A0", end_color="7030A0", fill_type="solid")
     slides_title_fill = PatternFill(start_color="9933FF", end_color="9933FF", fill_type="solid")
+    
+    # Header styles for الفضل
+    fadl_header_fill = PatternFill(start_color="C65911", end_color="C65911", fill_type="solid")
+    fadl_title_fill = PatternFill(start_color="ED7D31", end_color="ED7D31", fill_type="solid")
     
     gap_fill = PatternFill(start_color="A6A6A6", end_color="A6A6A6", fill_type="solid")
     
@@ -336,6 +478,28 @@ def create_new_excel_file_with_slides(filepath: str, blocks_rows: List[Dict], sl
     for i, width in enumerate(TABLE2_WIDTH):
         worksheet.column_dimensions[get_column_letter(SLIDES_START_COL + i)].width = width
     
+    # === الفضل TABLE ===
+    # Write الفضل title
+    worksheet.merge_cells(start_row=1, start_column=FADL_START_COL, 
+                         end_row=1, end_column=FADL_START_COL + len(TABLE_FADL_COLUMNS) - 1)
+    title_cell = worksheet.cell(row=1, column=FADL_START_COL, value="الفضل")
+    title_cell.font = title_font
+    title_cell.fill = fadl_title_fill
+    title_cell.alignment = center_alignment
+    title_cell.border = thin_border
+    
+    # Write الفضل headers
+    for idx, col in enumerate(TABLE_FADL_COLUMNS):
+        cell = worksheet.cell(row=2, column=FADL_START_COL + idx, value=col)
+        cell.font = header_font
+        cell.fill = fadl_header_fill
+        cell.alignment = center_alignment
+        cell.border = thin_border
+    
+    # Set الفضل column widths
+    for i, width in enumerate(TABLE_FADL_WIDTH):
+        worksheet.column_dimensions[get_column_letter(FADL_START_COL + i)].width = width
+    
     # Freeze panes
     worksheet.freeze_panes = 'A3'
     
@@ -348,7 +512,7 @@ def create_new_excel_file_with_slides(filepath: str, blocks_rows: List[Dict], sl
         
         return True
     except PermissionError as e:
-        print(f"File is locked: {e}")
+        log_error(f"File is locked: {e}")
         return False
 
 
@@ -551,13 +715,13 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
         workbook.save(filepath)
         
     except PermissionError as e:
-        print(f"File is locked: {e}")
+        log_error(f"File is locked: {e}")
         return False  # File is locked
     except Exception as e:
-        print(f"Error adding data: {e}")
+        log_error(f"Error adding data: {e}")
         # In case of severe error, can try to recreate, but cautiously
         # create_new_excel_file(filepath, new_rows)
-    return True 
+    return True
 
 def create_new_excel_file(filepath: str, rows: List[Dict]):
     """
@@ -801,7 +965,7 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         workbook.save(filepath)
         return True
     except PermissionError as e:
-        print(f"File is locked: {e}")
+        log_error(f"File is locked: {e}")
         return False
 
 
@@ -998,14 +1162,11 @@ def update_wastage_sheet(filepath: str):
         wastage_sheet.freeze_panes = 'A3'
         
         workbook.save(filepath)
-        print(f"[DEBUG] Wastage sheet updated with {len(wastage_data)} entries")
         return True
         
     except PermissionError as e:
-        print(f"File is locked: {e}")
+        log_error(f"File is locked: {e}")
         return False
     except Exception as e:
-        print(f"Error updating wastage sheet: {e}")
-        import traceback
-        traceback.print_exc()
+        log_exception(f"Error updating wastage sheet: {e}")
         return False

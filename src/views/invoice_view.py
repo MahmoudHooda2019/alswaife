@@ -5,7 +5,6 @@ import json
 import re
 import sqlite3
 from datetime import datetime
-import traceback
 import subprocess
 import platform
 import urllib.request
@@ -33,6 +32,7 @@ from utils.invoice_utils import update_client_ledger, remove_invoice_from_ledger
 from utils.path_utils import resource_path
 from utils.slides_utils import disburse_slides_from_invoice
 from utils.purchases_utils import add_income_record
+from utils.log_utils import log_error, log_exception
 
 
 def is_excel_running():
@@ -96,7 +96,8 @@ class InvoiceRow:
         self.block_var = ft.TextField(
             label="رقم البلوك", 
             width=self.default_widths['block'],
-            on_change=self.on_block_change
+            on_change=self.on_block_change,
+            on_blur=self.on_block_blur
         )
         self.thick_var = ft.Dropdown(
             label="السمك",
@@ -184,13 +185,29 @@ class InvoiceRow:
     def on_block_change(self, e):
         val = self.block_var.value
         if val:
-            # Replace Arabic characters with their English counterparts
-            # 'ش' is 'a' on Arabic keyboard
-            # 'لا' (lam-alif) is 'b' on Arabic keyboard
-            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B').replace('ِ', 'A').replace('لآ', 'B')
+            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('ِ', 'A').replace('لآ', 'B').replace('f', 'F').replace('[]', 'F').replace('ب', 'F')
+            
             if new_val != val:
                 self.block_var.value = new_val
                 # Only update if value changed
+                if hasattr(self, 'page') and self.page:
+                    self.page.update()
+
+    def on_block_blur(self, e):
+        """Reorder block number when focus leaves - move letter to beginning if at end"""
+        val = self.block_var.value
+        if val:
+            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('ِ', 'A').replace('لآ', 'B').replace('f', 'F').replace('[]', 'F').replace('ب', 'F')
+            
+            import re
+            match = re.match(r'^(\d+)([A-Za-z]+)$', new_val)
+            if match:
+                numbers = match.group(1)
+                letters = match.group(2).upper()
+                new_val = letters + numbers
+            
+            if new_val != val:
+                self.block_var.value = new_val
                 if hasattr(self, 'page') and self.page:
                     self.page.update()
 
@@ -497,19 +514,26 @@ class InvoiceView:
             
         self.date_var = ft.TextField(label="التاريخ", value=date_value, width=120)
         
-        # Client selection with autocomplete suggestions
+        # Client selection with inline autocomplete (ghost text style like IDE)
         self.client_suggestions = self.load_clients()
-        self.ent_client = ft.TextField(
-            label="اسم العميل",
-            on_change=self.on_client_text_change,
-            on_submit=self.on_client_submit,
-            width=200
+        self.current_suggestion = ""  # Store current autocomplete suggestion
+        print(f"[DEBUG] Client suggestions loaded: {len(self.client_suggestions)} - {self.client_suggestions}")
+        
+        # Suffix text for showing autocomplete suggestion
+        self.client_suffix_text = ft.Text(
+            "",
+            color=ft.Colors.GREY_500,
+            italic=True,
+            size=14,
         )
         
-        # Suggestions list container (hidden by default)
-        self.suggestions_list = ft.Column(
-            visible=False,
-            spacing=0
+        # Main client text field with suffix for autocomplete
+        self.ent_client = ft.TextField(
+            label="اسم العميل",
+            width=200,
+            on_change=self.on_client_text_change,
+            on_submit=self.on_client_submit,
+            suffix=self.client_suffix_text,
         )
 
         self.ent_driver = ft.TextField(label="اسم السائق", width=150)
@@ -590,71 +614,98 @@ class InvoiceView:
         documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
         
         self.invoices_root = os.path.join(documents_path, 'الفواتير')
+        print(f"[DEBUG] load_clients - invoices_root: {self.invoices_root}")
         if not os.path.exists(self.invoices_root):
             try:
                 os.makedirs(self.invoices_root)
-            except OSError:
+                print(f"[DEBUG] Created invoices directory")
+            except OSError as e:
+                print(f"[DEBUG] Error creating directory: {e}")
                 pass
                 
         clients = []
         if os.path.exists(self.invoices_root):
             try:
-                # Use scandir for better performance
                 with os.scandir(self.invoices_root) as entries:
                     clients = [entry.name for entry in entries if entry.is_dir()]
-            except OSError:
-                # Fallback method
+                print(f"[DEBUG] Found clients: {clients}")
+            except OSError as e:
+                print(f"[DEBUG] Error scanning directory: {e}")
                 for item in os.listdir(self.invoices_root):
                     if os.path.isdir(os.path.join(self.invoices_root, item)):
                         clients.append(item)
+        else:
+            print(f"[DEBUG] invoices_root does not exist")
         return sorted(clients)
 
-    def on_client_text_change(self, e):
-        """Show filtered suggestions when user types"""
-        search_text = self.ent_client.value.strip().lower() if self.ent_client.value is not None else ""
-        
+    def find_best_match(self, search_text):
+        """Find the best matching client name for autocomplete"""
+        print(f"[DEBUG] find_best_match called with: '{search_text}'")
         if not search_text:
-            self.suggestions_list.visible = False
-            self.suggestions_list.controls.clear()
-            self.page.update()
-            return
+            return ""
         
-        # Filter suggestions
-        filtered = [c for c in self.client_suggestions if search_text in c.lower()]
+        search_lower = search_text.lower().strip()
+        print(f"[DEBUG] Searching in {len(self.client_suggestions)} clients")
         
-        if filtered:
-            self.suggestions_list.controls.clear()
-            for client in filtered[:5]:  # Show max 5 suggestions
-                suggestion_btn = ft.TextButton(
-                    text=client,
-                    on_click=lambda e, c=client: self.select_suggestion(c),
-                    style=ft.ButtonStyle(
-                        padding=ft.padding.all(5),
-                    )
-                )
-                self.suggestions_list.controls.append(suggestion_btn)
-            self.suggestions_list.visible = True
+        # Find first client that starts with the search text
+        for client in self.client_suggestions:
+            client_lower = client.lower()
+            print(f"[DEBUG] Comparing '{search_lower}' with '{client_lower}'")
+            if client_lower.startswith(search_lower):
+                print(f"[DEBUG] Found match: '{client}'")
+                return client
+        
+        # Also try to find clients that contain the search text
+        for client in self.client_suggestions:
+            if search_lower in client.lower():
+                print(f"[DEBUG] Found partial match: '{client}'")
+                return client
+                
+        print(f"[DEBUG] No match found")
+        return ""
+
+    def on_client_text_change(self, e):
+        """Update inline autocomplete suggestion when user types"""
+        current_text = self.ent_client.value or ""
+        # Don't strip - keep the text as is for proper matching with names containing spaces
+        search_text = current_text.lstrip()  # Only remove leading spaces
+        print(f"[DEBUG] on_client_text_change - current_text: '{current_text}' - search_text: '{search_text}'")
+        
+        if search_text:
+            # Find best match
+            best_match = self.find_best_match(search_text)
+            print(f"[DEBUG] best_match: '{best_match}'")
+            
+            if best_match and best_match.lower() != search_text.lower():
+                # Show the full suggestion name as suffix
+                print(f"[DEBUG] Setting suffix to: '{best_match}'")
+                self.client_suffix_text.value = best_match
+                self.current_suggestion = best_match
+                print(f"[DEBUG] current_suggestion set to: '{self.current_suggestion}'")
+            else:
+                print(f"[DEBUG] No suggestion - clearing suffix")
+                self.client_suffix_text.value = ""
+                self.current_suggestion = ""
         else:
-            self.suggestions_list.visible = False
-            self.suggestions_list.controls.clear()
+            print(f"[DEBUG] Empty text - clearing suffix")
+            self.client_suffix_text.value = ""
+            self.current_suggestion = ""
         
+        print(f"[DEBUG] Calling page.update()")
         self.page.update()
 
-    def select_suggestion(self, client_name):
-        """Set the selected client name and hide suggestions"""
-        self.ent_client.value = client_name
-        self.suggestions_list.visible = False
-        self.suggestions_list.controls.clear()
-        self.page.update()
-        
-        # Load client data if it exists
-        self.load_client_data(client_name)
-    
     def on_client_submit(self, e):
-        """Handle client field submission"""
-        client_name = self.ent_client.value.strip() if self.ent_client.value is not None else ""
+        """Handle Tab or Enter - accept the autocomplete suggestion"""
+        print(f"[DEBUG] on_client_submit called - current_suggestion: '{self.current_suggestion}'")
+        if self.current_suggestion:
+            self.ent_client.value = self.current_suggestion
+            self.client_suffix_text.value = ""
+            self.current_suggestion = ""
+            self.page.update()
+        
+        # Load client data
+        client_name = self.ent_client.value.strip() if self.ent_client.value else ""
         if client_name:
-            # Load client data if it exists
             self.load_client_data(client_name)
     
     def load_client_data(self, client_name):
@@ -1741,7 +1792,7 @@ class InvoiceView:
                 ft.Column([ft.Icon(ft.Icons.CALENDAR_TODAY, color=ft.Colors.BLUE_300, size=20), self.date_var], 
                          spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 ft.Column([ft.Icon(ft.Icons.PERSON, color=ft.Colors.BLUE_300, size=20), 
-                          ft.Column([self.ent_client, self.suggestions_list], spacing=0)], 
+                          self.ent_client], 
                          spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 ft.Column([ft.Icon(ft.Icons.DRIVE_ETA, color=ft.Colors.BLUE_300, size=20), self.ent_driver], 
                          spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),

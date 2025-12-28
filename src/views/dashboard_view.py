@@ -10,6 +10,87 @@ from views.slides_add_view import SlidesAddView
 from utils.path_utils import resource_path
 from utils.reports_utils import parse_user_request_with_ai, execute_report
 from utils.update_utils import check_for_updates, download_update, install_update
+from utils.invoice_utils import save_invoice, update_client_ledger
+from utils.log_utils import log_error, log_exception
+
+
+def save_callback(filepath, op_num, client, driver, date_str, phone, items):
+    """
+    دالة رد الاتصال لحفظ بيانات الفاتورة إلى Excel.
+
+    Args:
+        filepath (str): المسار لحفظ ملف Excel
+        op_num (str): رقم العملية/الفاتورة
+        client (str): اسم العميل
+        driver (str): اسم السائق
+        date_str (str): سلسلة التاريخ
+        phone (str): رقم الهاتف
+        items (list): قائمة عناصر الفاتورة
+    """
+    # Extract only the first 8 elements for saving to Excel (excluding length_before and discount)
+    items_for_excel = []
+    for item in items:
+        # Take only the first 8 elements: description, block, thickness, material, count, length, height, price
+        item_excel = tuple(item[:8]) if len(item) >= 8 else item
+        items_for_excel.append(item_excel)
+
+    # Save the invoice
+    save_invoice(
+        filepath, op_num, client, driver, items_for_excel, date_str=date_str, phone=phone
+    )
+
+    # Skip ledger update for "ايراد" clients
+    if "ايراد" in client:
+        return
+
+    # Create/update client ledger
+    try:
+        # Calculate total amount from items
+        total_amount = 0
+        invoice_items_details = []
+
+        # Process items to get details for the ledger
+        for item in items_for_excel:
+            try:
+                desc = item[0] or ""
+                block = item[1] or ""
+                thickness = item[2] or ""
+                material = item[3] or ""
+                count = int(float(item[4]))
+                length = float(item[5])
+                height = float(item[6])
+                price_val = float(item[7])
+
+                # Calculate area and total for this item
+                area = count * length * height
+                total = area * price_val
+
+                # Add to total amount
+                total_amount += total
+
+                # Store item details for the ledger
+                invoice_items_details.append((desc, material, thickness, area, total))
+            except (ValueError, IndexError):
+                continue
+
+        # Get the client folder path (parent of the invoice folder)
+        client_folder = os.path.dirname(os.path.dirname(filepath))
+
+        # Update or create the client's ledger
+        success, error = update_client_ledger(
+            client_folder,
+            client,
+            date_str,
+            op_num,
+            total_amount,
+            driver,
+            invoice_items_details,
+        )
+
+        if not success:
+            log_error(f"Could not update client ledger: {error}")
+    except Exception as e:
+        log_exception(f"Error updating client ledger: {e}")
 
 class DashboardView:
     def __init__(self, page: ft.Page):
@@ -42,8 +123,7 @@ class DashboardView:
                         self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.GREEN_700),
                         self.create_menu_card("إضافة بلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
                         self.create_menu_card("مشتري", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
-                        self.create_menu_card("إضافة للمخزون", ft.Icons.ADD_SHOPPING_CART, self.open_inventory_add, ft.Colors.GREEN_700),
-                        self.create_menu_card("صرف من المخزون", ft.Icons.REMOVE_SHOPPING_CART, self.open_inventory_disburse, ft.Colors.RED_700),
+                        self.create_menu_card("المخزون", ft.Icons.INVENTORY, self.open_inventory, ft.Colors.INDIGO_700),
                         self.create_menu_card("إضافة شرائح", ft.Icons.ADD, self.open_slides_add, ft.Colors.BLUE_700),
                         self.create_menu_card("التقارير", ft.Icons.ASSESSMENT, self.open_reports, ft.Colors.TEAL_700),
                         self.create_menu_card("تحديث", ft.Icons.SYSTEM_UPDATE, self.open_update, ft.Colors.ORANGE_700),
@@ -79,8 +159,7 @@ class DashboardView:
                         self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.GREEN_700),
                         self.create_menu_card("إضافة بلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
                         self.create_menu_card("مشتري", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
-                        self.create_menu_card("إضافة للمخزون", ft.Icons.ADD_SHOPPING_CART, self.open_inventory_add, ft.Colors.GREEN_700),
-                        self.create_menu_card("صرف من المخزون", ft.Icons.REMOVE_SHOPPING_CART, self.open_inventory_disburse, ft.Colors.RED_700),
+                        self.create_menu_card("المخزون", ft.Icons.INVENTORY, self.open_inventory, ft.Colors.INDIGO_700),
                         self.create_menu_card("إضافة شرائح", ft.Icons.ADD, self.open_slides_add, ft.Colors.BLUE_700),
                         self.create_menu_card("التقارير", ft.Icons.ASSESSMENT, self.open_reports, ft.Colors.TEAL_700),
                         self.create_menu_card("تحديث", ft.Icons.SYSTEM_UPDATE, self.open_update, ft.Colors.ORANGE_700),
@@ -303,14 +382,15 @@ class DashboardView:
             query = {"report_type": report_type}
             self.execute_report_with_progress(query)
         
-        # Quick report buttons
-        quick_buttons = ft.Row(
+        # Quick report buttons - Row 1: Income & Expenses
+        quick_buttons_row1 = ft.Row(
             controls=[
                 ft.ElevatedButton(
                     "الإيرادات",
                     icon=ft.Icons.TRENDING_UP,
                     bgcolor=ft.Colors.GREEN_700,
                     color=ft.Colors.WHITE,
+                    width=120,
                     on_click=lambda e: quick_report("income"),
                 ),
                 ft.ElevatedButton(
@@ -318,8 +398,96 @@ class DashboardView:
                     icon=ft.Icons.TRENDING_DOWN,
                     bgcolor=ft.Colors.RED_700,
                     color=ft.Colors.WHITE,
+                    width=120,
                     on_click=lambda e: quick_report("expenses"),
                 ),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=10,
+        )
+        
+        # Quick report buttons - Row 2: Inventory
+        quick_buttons_row2 = ft.Row(
+            controls=[
+                ft.ElevatedButton(
+                    "المخزون",
+                    icon=ft.Icons.INVENTORY,
+                    bgcolor=ft.Colors.INDIGO_700,
+                    color=ft.Colors.WHITE,
+                    width=120,
+                    on_click=lambda e: quick_report("inventory"),
+                ),
+                ft.ElevatedButton(
+                    "الحضور",
+                    icon=ft.Icons.PERSON,
+                    bgcolor=ft.Colors.BLUE_700,
+                    color=ft.Colors.WHITE,
+                    width=120,
+                    on_click=lambda e: quick_report("attendance"),
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=10,
+        )
+        
+        # Quick report buttons - Row 3: Blocks & Slides
+        quick_buttons_row3 = ft.Row(
+            controls=[
+                ft.ElevatedButton(
+                    "البلوكات",
+                    icon=ft.Icons.VIEW_IN_AR,
+                    bgcolor=ft.Colors.AMBER_700,
+                    color=ft.Colors.WHITE,
+                    width=120,
+                    on_click=lambda e: quick_report("blocks"),
+                ),
+                ft.ElevatedButton(
+                    "الشرائح",
+                    icon=ft.Icons.LAYERS,
+                    bgcolor=ft.Colors.PURPLE_700,
+                    color=ft.Colors.WHITE,
+                    width=120,
+                    on_click=lambda e: quick_report("slides"),
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=10,
+        )
+        
+        # Machine number dropdown for machine production report
+        machine_dropdown = ft.Dropdown(
+            label="رقم الماكينة",
+            width=100,
+            options=[
+                ft.dropdown.Option("1", "1"),
+                ft.dropdown.Option("2", "2"),
+                ft.dropdown.Option("3", "3"),
+                ft.dropdown.Option("4", "4"),
+                ft.dropdown.Option("5", "5"),
+            ],
+            value="1",
+            border_radius=10,
+            filled=True,
+            bgcolor=ft.Colors.GREY_800,
+        )
+        
+        def machine_report(e):
+            close_dlg(None)
+            query = {"report_type": "machine_production", "machine_number": machine_dropdown.value}
+            self.execute_report_with_progress(query)
+        
+        # Quick report buttons - Row 4: Machine Production
+        quick_buttons_row4 = ft.Row(
+            controls=[
+                ft.ElevatedButton(
+                    "إنتاج الماكينة",
+                    icon=ft.Icons.PRECISION_MANUFACTURING,
+                    bgcolor=ft.Colors.CYAN_700,
+                    color=ft.Colors.WHITE,
+                    width=140,
+                    on_click=machine_report,
+                ),
+                machine_dropdown,
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=10,
@@ -347,10 +515,12 @@ class DashboardView:
                         request_field,
                         ft.Container(height=15),
                         ft.Text("أو اختر تقرير سريع:", size=12, color=ft.Colors.GREY_500),
-                        quick_buttons,
+                        quick_buttons_row1,
+                        quick_buttons_row2,
+                        quick_buttons_row3,
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=5,
+                    spacing=8,
                 ),
                 padding=10,
                 width=420,
@@ -844,6 +1014,76 @@ class DashboardView:
         purchases_view.build_ui()
         self.page.update()
 
+    def open_inventory(self, e):
+        """Open inventory dialog with options to add or disburse"""
+        def close_dlg(e):
+            dlg.open = False
+            self.page.update()
+        
+        def open_add(e):
+            close_dlg(e)
+            self.open_inventory_add(None)
+        
+        def open_disburse(e):
+            close_dlg(e)
+            self.open_inventory_disburse(None)
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.INVENTORY, color=ft.Colors.INDIGO_400, size=28),
+                    ft.Text("المخزون", weight=ft.FontWeight.BOLD, color=ft.Colors.INDIGO_200, size=18),
+                ],
+                spacing=10,
+            ),
+            content=ft.Column(
+                controls=[
+                    ft.Text("اختر العملية المطلوبة:", size=14, color=ft.Colors.GREY_400),
+                    ft.Container(height=15),
+                    ft.Row(
+                        controls=[
+                            ft.ElevatedButton(
+                                "إضافة للمخزون",
+                                icon=ft.Icons.ADD_SHOPPING_CART,
+                                bgcolor=ft.Colors.GREEN_700,
+                                color=ft.Colors.WHITE,
+                                width=150,
+                                height=50,
+                                on_click=open_add,
+                            ),
+                            ft.ElevatedButton(
+                                "صرف من المخزون",
+                                icon=ft.Icons.REMOVE_SHOPPING_CART,
+                                bgcolor=ft.Colors.RED_700,
+                                color=ft.Colors.WHITE,
+                                width=150,
+                                height=50,
+                                on_click=open_disburse,
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=20,
+                    ),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                tight=True,
+            ),
+            actions=[
+                ft.TextButton(
+                    "إغلاق",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.CENTER,
+            bgcolor=ft.Colors.GREY_900,
+            shape=ft.RoundedRectangleBorder(radius=15),
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
     def open_inventory_add(self, e):
         """Open add inventory dialog"""
 
@@ -916,7 +1156,7 @@ class DashboardView:
         self.page.title = "مصنع السويفي"
         self.page.update()
 
-    def show(self, save_callback):
+    def show(self):
         self.save_callback = save_callback
         self.reset_ui()
         self.page.add(self.main_container)

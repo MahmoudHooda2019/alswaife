@@ -1,11 +1,12 @@
 import os
 import json
 import openpyxl
-import traceback
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
 from datetime import datetime
+
+from utils.log_utils import log_error, log_exception
 
 
 def initialize_slides_inventory_excel(file_path):
@@ -97,8 +98,7 @@ def initialize_slides_inventory_excel(file_path):
         wb.save(file_path)
         return wb
     except Exception as e:
-        print(f"[ERROR] Failed to initialize slides Excel file: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to initialize slides Excel file: {e}")
         raise
 
 
@@ -219,8 +219,7 @@ def convert_existing_slides_inventory_to_formulas(file_path):
         # Save the workbook
         wb.save(file_path)
     except Exception as e:
-        print(f"[ERROR] Failed to convert slides to formulas: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to convert slides to formulas: {e}")
         raise
 
 
@@ -295,8 +294,7 @@ def add_slides_inventory_entry(file_path, item_name, quantity, unit_price, notes
         
         return next_entry_number
     except Exception as e:
-        print(f"[ERROR] Failed to add slides inventory entry: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to add slides inventory entry: {e}")
         raise
 
 
@@ -411,15 +409,13 @@ def add_slides_inventory_from_publishing(file_path, publishing_data):
         try:
             from utils.blocks_utils import export_slides_to_blocks_excel
             export_slides_to_blocks_excel(publishing_data)
-            print(f"[DEBUG] Slides data also saved to blocks Excel file")
         except Exception as blocks_error:
-            print(f"[WARNING] Could not save slides to blocks file: {blocks_error}")
+            log_error(f"Could not save slides to blocks file: {blocks_error}")
             # Don't fail the main operation if blocks file fails
         
         return entries_added
     except Exception as e:
-        print(f"[ERROR] Failed to add slides inventory from publishing: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to add slides inventory from publishing: {e}")
         raise
 
 
@@ -513,8 +509,7 @@ def disburse_slides_inventory_entry(
         
         return row_num
     except Exception as e:
-        print(f"[ERROR] Failed to add slides disbursement entry: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to add slides disbursement entry: {e}")
         raise
 
 
@@ -573,8 +568,7 @@ def get_slides_inventory_summary(file_path):
         
         return inventory_data
     except Exception as e:
-        print(f"[ERROR] Error reading slides inventory summary: {e}")
-        traceback.print_exc()
+        log_exception(f"Error reading slides inventory summary: {e}")
         return []
 
 
@@ -647,8 +641,7 @@ def get_available_slides_items_with_prices(file_path):
         
         return avg_prices
     except Exception as e:
-        print(f"[ERROR] Error getting available slides items with prices: {e}")
-        traceback.print_exc()
+        log_exception(f"Error getting available slides items with prices: {e}")
         return {}
 
 
@@ -707,8 +700,7 @@ def initialize_slides_publishing_excel(file_path):
         wb.save(file_path)
         return wb
     except Exception as e:
-        print(f"[ERROR] Failed to initialize slides publishing Excel file: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to initialize slides publishing Excel file: {e}")
         raise
 
 
@@ -771,8 +763,7 @@ def _remove_invoice_from_slides_disbursement(file_path, invoice_number):
             convert_existing_slides_inventory_to_formulas(file_path)
             
     except Exception as e:
-        print(f"[ERROR] Failed to remove invoice from slides disbursement: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to remove invoice from slides disbursement: {e}")
 
 
 def disburse_slides_from_invoice(invoice_number, invoice_date, items_data, client_name=""):
@@ -863,7 +854,7 @@ def disburse_slides_from_invoice(invoice_number, invoice_date, items_data, clien
                 })
                 
             except Exception as item_ex:
-                print(f"[ERROR] Error processing item for disbursement: {item_ex}")
+                log_error(f"Error processing item for disbursement: {item_ex}")
                 continue
         
         # If we have slide items, add them with merged cells
@@ -882,8 +873,7 @@ def disburse_slides_from_invoice(invoice_number, invoice_date, items_data, clien
             return True, "لا توجد شرائح في الفاتورة", []
             
     except Exception as e:
-        print(f"[ERROR] Error disbursing slides from invoice: {e}")
-        traceback.print_exc()
+        log_exception(f"Error disbursing slides from invoice: {e}")
         return False, f"خطأ في صرف الشرائح: {str(e)}", []
 
 
@@ -972,8 +962,7 @@ def _add_slides_disbursement_with_merge(file_path, invoice_number, invoice_date,
         convert_existing_slides_inventory_to_formulas(file_path)
         
     except Exception as e:
-        print(f"[ERROR] Failed to add slides disbursement with merge: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to add slides disbursement with merge: {e}")
         raise
 
 
@@ -1090,6 +1079,5 @@ def add_slides_publishing_entry(file_path, publishing_data):
         
         return len(publishing_data)
     except Exception as e:
-        print(f"[ERROR] Failed to add slides publishing entries: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to add slides publishing entries: {e}")
         raise

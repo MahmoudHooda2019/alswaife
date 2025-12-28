@@ -52,7 +52,7 @@ def create_new_attendance_file(filepath: str, employees_data: List[Dict]) -> Tup
     """Create a new attendance Excel file"""
     try:
         workbook = xlsxwriter.Workbook(filepath)
-        worksheet = workbook.add_worksheet("الحضور والانصراف")
+        worksheet = workbook.add_worksheet("سجل الحضور والانصراف")
         
         # RTL + Page settings
         worksheet.right_to_left()
@@ -157,6 +157,15 @@ def create_new_attendance_file(filepath: str, employees_data: List[Dict]) -> Tup
             'bg_color': '#E2EFDA'
         })
         
+        notes_fmt = workbook.add_format({
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter',
+            'font_name': 'Arial',
+            'font_size': 10,
+            'bg_color': '#FCE4D6'
+        })
+        
         arabic_digit_map = str.maketrans('0123456789', '٠١٢٣٤٥٦٧٨٩')
         
         day_definitions = [
@@ -208,7 +217,8 @@ def create_new_attendance_file(filepath: str, employees_data: List[Dict]) -> Tup
                         'name': name,
                         'date': emp.get('date', ''),
                         'advance': emp.get('advance', 0),
-                        'price': emp.get('price', 0)
+                        'price': emp.get('price', 0),
+                        'notes': emp.get('notes', '')
                     }
                     for key in shift_keys:
                         merged[name][key] = 0
@@ -224,6 +234,8 @@ def create_new_attendance_file(filepath: str, employees_data: List[Dict]) -> Tup
                     merged[name]['price'] = emp.get('price', 0)
                 if emp.get('date', '') and not merged[name].get('date'):
                     merged[name]['date'] = emp.get('date', '')
+                if emp.get('notes', ''):
+                    merged[name]['notes'] = emp.get('notes', '')
             return list(merged.values())
         
         def write_section(section_row: int, week_dates: List[str], records: List[Dict]) -> int:
@@ -242,10 +254,11 @@ def create_new_attendance_file(filepath: str, employees_data: List[Dict]) -> Tup
                 worksheet.merge_range(header_top_row, col, header_top_row, col + 1, day_label, header_day_fmt)
                 col += 2
             
-            # Total, Date, Advance headers (no separate price column header)
+            # Total, Date, Advance, Notes headers
             worksheet.merge_range(header_top_row, 15, header_top_row + 1, 15, 'الإجمالي', header_day_fmt)
             worksheet.merge_range(header_top_row, 16, header_top_row + 1, 16, 'التاريخ', header_day_fmt)
             worksheet.merge_range(header_top_row, 17, header_top_row + 1, 17, 'السلفة', header_day_fmt)
+            worksheet.merge_range(header_top_row, 18, header_top_row + 1, 18, 'الملاحظات', header_day_fmt)
             
             # Row: Shift labels
             col = 1
@@ -289,6 +302,9 @@ def create_new_attendance_file(filepath: str, employees_data: List[Dict]) -> Tup
                 else:
                     worksheet.write(current_row, 17, '', special_fmt)
                 
+                # Notes column
+                worksheet.write(current_row, 18, emp.get('notes', ''), notes_fmt)
+                
                 current_row += 1
             
             data_end_row = current_row - 1
@@ -320,7 +336,8 @@ def create_new_attendance_file(filepath: str, employees_data: List[Dict]) -> Tup
                     f"=SUM({xl_col_to_name(17)}{start_excel_row}:{xl_col_to_name(17)}{end_excel_row})",
                     weekly_total_fmt
                 )
-                # No overall price total column; only attendance, total, and advance are summed
+                # Notes column - empty for total row
+                worksheet.write(weekly_total_row, 18, '', weekly_total_label_fmt)
             else:
                 # No data rows; leave totals blank to avoid invalid formulas
                 for col_idx in range(1, 19):
@@ -377,7 +394,7 @@ def create_new_attendance_file(filepath: str, employees_data: List[Dict]) -> Tup
         worksheet.set_column(15, 15, 10)
         worksheet.set_column(16, 16, 12, None, {'hidden': True})
         worksheet.set_column(17, 17, 10)
-        worksheet.set_column(18, 18, 2, None, {'hidden': True})
+        worksheet.set_column(18, 18, 20)  # Notes column
         
         workbook.close()
         return (True, None)

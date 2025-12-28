@@ -1,10 +1,11 @@
 import os
 import openpyxl
-import traceback
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
 from datetime import datetime
+
+from utils.log_utils import log_error, log_exception
 
 
 def initialize_inventory_excel(file_path):
@@ -14,7 +15,6 @@ def initialize_inventory_excel(file_path):
     Args:
         file_path (str): Path to the Excel file
     """
-    print(f"[DEBUG] initialize_inventory_excel called with file: {file_path}")
     try:
         # Create workbook
         wb = Workbook()
@@ -87,11 +87,9 @@ def initialize_inventory_excel(file_path):
         
         # Save the workbook
         wb.save(file_path)
-        print(f"[DEBUG] Excel file initialized successfully")
         return wb
     except Exception as e:
-        print(f"[ERROR] Failed to initialize Excel file: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to initialize Excel file: {e}")
         raise
 
 
@@ -102,10 +100,8 @@ def convert_existing_inventory_to_formulas(file_path):
     Args:
         file_path (str): Path to the Excel file
     """
-    print(f"[DEBUG] convert_existing_inventory_to_formulas called with file: {file_path}")
     try:
         if not os.path.exists(file_path):
-            print(f"[DEBUG] File does not exist, creating new one")
             # If file doesn't exist, create a new one
             initialize_inventory_excel(file_path)
             return
@@ -130,8 +126,6 @@ def convert_existing_inventory_to_formulas(file_path):
             item_name = disburse_sheet.cell(row=row_num, column=3).value  # Item name column
             if item_name:
                 item_names.add(item_name)
-        
-        print(f"[DEBUG] Found {len(item_names)} unique items")
         
         # Clear existing data in inventory sheet (keep header)
         for row_num in range(2, inventory_sheet.max_row + 1):
@@ -179,10 +173,8 @@ def convert_existing_inventory_to_formulas(file_path):
         
         # Save the workbook
         wb.save(file_path)
-        print(f"[DEBUG] Formulas converted successfully")
     except Exception as e:
-        print(f"[ERROR] Failed to convert to formulas: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to convert to formulas: {e}")
         raise
 
 
@@ -201,7 +193,6 @@ def add_inventory_entry(file_path, item_name, quantity, unit_price, notes="", en
     Returns:
         int: Entry number
     """
-    print(f"[DEBUG] add_inventory_entry called")
     try:
         # Load workbook
         wb = openpyxl.load_workbook(file_path)
@@ -256,11 +247,9 @@ def add_inventory_entry(file_path, item_name, quantity, unit_price, notes="", en
         # Update inventory sheet with formulas
         convert_existing_inventory_to_formulas(file_path)
         
-        print(f"[DEBUG] Entry added successfully with number: {next_entry_number}")
         return next_entry_number
     except Exception as e:
-        print(f"[ERROR] Failed to add inventory entry: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to add inventory entry: {e}")
         raise
 
 
@@ -279,7 +268,6 @@ def disburse_inventory_entry(file_path, item_name, quantity, unit_price, notes="
     Returns:
         int: Disbursement entry number
     """
-    print(f"[DEBUG] disburse_inventory_entry called")
     try:
         # Load workbook
         wb = openpyxl.load_workbook(file_path)
@@ -334,11 +322,9 @@ def disburse_inventory_entry(file_path, item_name, quantity, unit_price, notes="
         # Update inventory sheet with formulas
         convert_existing_inventory_to_formulas(file_path)
         
-        print(f"[DEBUG] Disbursement entry added successfully with number: {next_entry_number}")
         return next_entry_number
     except Exception as e:
-        print(f"[ERROR] Failed to add disbursement entry: {e}")
-        traceback.print_exc()
+        log_exception(f"Failed to add disbursement entry: {e}")
         raise
 
 
@@ -352,9 +338,7 @@ def get_inventory_summary(file_path):
     Returns:
         list: List of dictionaries containing inventory data
     """
-    print(f"[DEBUG] get_inventory_summary called with file: {file_path}")
     if not os.path.exists(file_path):
-        print(f"[DEBUG] File does not exist")
         return []
     
     try:
@@ -393,11 +377,9 @@ def get_inventory_summary(file_path):
                 }
                 inventory_data.append(item_data)
         
-        print(f"[DEBUG] Retrieved {len(inventory_data)} inventory items")
         return inventory_data
     except Exception as e:
-        print(f"[ERROR] Error reading inventory summary: {e}")
-        traceback.print_exc()
+        log_exception(f"Error reading inventory summary: {e}")
         return []
 
 
@@ -411,9 +393,7 @@ def get_available_items_with_prices(file_path):
     Returns:
         dict: Dictionary with item names as keys and average unit prices as values
     """
-    print(f"[DEBUG] get_available_items_with_prices called with file: {file_path}")
     if not os.path.exists(file_path):
-        print(f"[DEBUG] File does not exist")
         return {}
     
     try:
@@ -469,9 +449,7 @@ def get_available_items_with_prices(file_path):
             else:
                 avg_prices[item_name] = 0
         
-        print(f"[DEBUG] Available items with prices: {avg_prices}")
         return avg_prices
     except Exception as e:
-        print(f"[ERROR] Error getting available items with prices: {e}")
-        traceback.print_exc()
+        log_exception(f"Error getting available items with prices: {e}")
         return {}

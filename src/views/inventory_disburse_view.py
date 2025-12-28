@@ -1,500 +1,495 @@
+"""
+Inventory Disburse View - UI for disbursing inventory items
+Styled similar to blocks and slides views
+"""
+
 import flet as ft
 import os
 import traceback
 from datetime import datetime
 from utils.path_utils import resource_path
-from utils.inventory_utils import initialize_inventory_excel, disburse_inventory_entry, get_inventory_summary, get_available_items_with_prices, convert_existing_inventory_to_formulas
+from utils.inventory_utils import (
+    initialize_inventory_excel,
+    disburse_inventory_entry,
+    get_inventory_summary,
+    get_available_items_with_prices,
+    convert_existing_inventory_to_formulas,
+)
+
+
+class InventoryDisburseRow:
+    """Row UI for inventory disbursement with styling similar to blocks view"""
+
+    def __init__(self, page: ft.Page, delete_callback, available_items: list, item_prices: dict):
+        self.page = page
+        self.delete_callback = delete_callback
+        self.available_items = available_items
+        self.item_prices = item_prices
+        self._build_controls()
+
+    def _create_styled_textfield(self, label, width, **kwargs):
+        """Create a consistently styled text field"""
+        bgcolor = kwargs.pop("bgcolor", ft.Colors.BLUE_GREY_900)
+        return ft.TextField(
+            label=label,
+            width=width,
+            border_radius=10,
+            filled=True,
+            bgcolor=bgcolor,
+            border_color=ft.Colors.GREY_700,
+            focused_border_color=ft.Colors.RED_400,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            text_style=ft.TextStyle(size=14, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+            cursor_color=ft.Colors.WHITE,
+            **kwargs,
+        )
+
+    def _build_controls(self):
+        """Build all UI controls"""
+        # Date field
+        self.date_field = self._create_styled_textfield(
+            "التاريخ",
+            140,
+            value=datetime.now().strftime("%d/%m/%Y"),
+            read_only=True,
+            icon=ft.Icons.CALENDAR_TODAY,
+        )
+
+        # Item dropdown
+        dropdown_options = [ft.dropdown.Option(item) for item in self.available_items] if self.available_items else []
+        self.item_dropdown = ft.Dropdown(
+            label="اسم الصنف",
+            width=210,
+            options=dropdown_options,
+            border_radius=10,
+            filled=True,
+            bgcolor=ft.Colors.BLUE_GREY_900,
+            border_color=ft.Colors.GREY_700,
+            focused_border_color=ft.Colors.RED_400,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            text_style=ft.TextStyle(size=14, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+            on_change=self._on_item_selected,
+        )
+
+        # Quantity
+        self.quantity_field = self._create_styled_textfield(
+            "العدد",
+            105,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*$"),
+            on_change=self._calculate_total,
+            icon=ft.Icons.NUMBERS,
+        )
+
+        # Unit price (read-only, auto-filled)
+        self.unit_price_field = self._create_styled_textfield(
+            "سعر الوحدة",
+            120,
+            read_only=True,
+            suffix_text="ج",
+        )
+
+        # Total price (calculated)
+        self.total_price_field = self._create_styled_textfield(
+            "الإجمالي", 120, read_only=True, value="0", suffix_text="ج"
+        )
+
+        # Notes
+        self.notes_field = self._create_styled_textfield(
+            "ملاحظات", 180, icon=ft.Icons.NOTES
+        )
+
+        # Delete button
+        self.delete_btn = ft.IconButton(
+            icon=ft.Icons.DELETE_OUTLINE,
+            icon_color=ft.Colors.RED_400,
+            tooltip="حذف الصف",
+            on_click=lambda e: self.delete_callback(self),
+            bgcolor=ft.Colors.GREY_800,
+            icon_size=20,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+        )
+
+        # Build the card
+        self.card = ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=[ft.Container(expand=True), self.delete_btn],
+                            alignment=ft.MainAxisAlignment.END,
+                        ),
+                        ft.Row(
+                            controls=[
+                                self.date_field,
+                                self.item_dropdown,
+                                self.quantity_field,
+                                self.unit_price_field,
+                                self.total_price_field,
+                                self.notes_field,
+                            ],
+                            spacing=15,
+                            wrap=True,
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                    ],
+                    spacing=10,
+                ),
+                padding=20,
+                gradient=ft.LinearGradient(
+                    begin=ft.alignment.top_left,
+                    end=ft.alignment.bottom_right,
+                    colors=[ft.Colors.GREY_900, ft.Colors.GREY_800],
+                ),
+                border_radius=15,
+                border=ft.border.all(1, ft.Colors.GREY_700),
+            ),
+            elevation=8,
+        )
+        self.row = self.card
+
+    def _on_item_selected(self, e=None):
+        """Handle item selection - auto-fill unit price"""
+        selected_item = self.item_dropdown.value
+        if selected_item and selected_item in self.item_prices:
+            price = round(self.item_prices[selected_item], 2)
+            self.unit_price_field.value = f"{price:.2f}"
+        else:
+            self.unit_price_field.value = "0"
+        self._calculate_total()
+        self.page.update()
+
+    def _calculate_total(self, e=None):
+        """Calculate total price"""
+        try:
+            quantity = float(self.quantity_field.value) if self.quantity_field.value else 0
+            unit_price = float(self.unit_price_field.value) if self.unit_price_field.value else 0
+            total = quantity * unit_price
+            self.total_price_field.value = f"{total:.2f}"
+        except ValueError:
+            self.total_price_field.value = "0"
+        self.page.update()
+
+    def to_dict(self):
+        """Convert row data to dictionary"""
+        return {
+            "date": self.date_field.value,
+            "item_name": self.item_dropdown.value,
+            "quantity": self.quantity_field.value,
+            "unit_price": self.unit_price_field.value,
+            "total_price": self.total_price_field.value,
+            "notes": self.notes_field.value,
+        }
+
+    def has_data(self):
+        """Check if row has meaningful data"""
+        return bool(self.item_dropdown.value and self.quantity_field.value)
+
+    def clear(self):
+        """Clear all fields"""
+        self.item_dropdown.value = None
+        self.quantity_field.value = ""
+        self.unit_price_field.value = ""
+        self.total_price_field.value = "0"
+        self.notes_field.value = ""
 
 
 class InventoryDisburseView:
-    """View for disbursing inventory items"""
-    
+    """View for disbursing inventory items with design similar to blocks section"""
+
     def __init__(self, page: ft.Page, on_back=None):
         self.page = page
         self.on_back = on_back
         self.page.title = "مصنع السويفي - صرف مخزون"
         self.page.rtl = True
         self.page.theme_mode = ft.ThemeMode.DARK
-        
-        # Initialize data storage
+
+        # Initialize paths
         self.documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
         self.inventory_path = os.path.join(self.documents_path, "مخزون الادوات")
         os.makedirs(self.inventory_path, exist_ok=True)
-        
-        print(f"[DEBUG] Documents path: {self.documents_path}")
-        print(f"[DEBUG] Inventory path: {self.inventory_path}")
-        
-        # Form fields
-        self.date_field = ft.TextField(
-            label="تاريخ الصرف",
-            value=datetime.now().strftime('%d/%m/%Y'),
-            width=150,
-            read_only=True
-        )
-        
-        # Get available items for dropdown
-        excel_file = os.path.join(self.inventory_path, "مخزون ادوات التشغيل.xlsx")
-        print(f"[DEBUG] Excel file path: {excel_file}")
-        available_items = self._get_available_items(excel_file)
-        print(f"[DEBUG] Available items count: {len(available_items)}")
-        print(f"[DEBUG] Available items: {available_items}")
-        
-        self.item_dropdown = ft.Dropdown(
-            label="اسم الصنف",
-            width=300,
-            options=[ft.dropdown.Option(item) for item in available_items] if available_items else [ft.dropdown.Option("لا توجد أصناف متوفرة")],
-            on_change=self.on_item_selected
-        )
-        
-        self.quantity_field = ft.TextField(
-            label="العدد",
-            width=150,
-            keyboard_type=ft.KeyboardType.NUMBER
-        )
-        
-        self.unit_price_field = ft.TextField(
-            label="ثمن الوحدة",
-            width=150,
-            keyboard_type=ft.KeyboardType.NUMBER,
-            read_only=True  # Will be populated automatically based on selection
-        )
-        
-        self.total_price_field = ft.TextField(
-            label="الإجمالي",
-            width=150,
-            read_only=True
-        )
-        
-        self.notes_field = ft.TextField(
-            label="ملاحظات",
-            width=300,
-            multiline=True,
-            min_lines=2,
-            max_lines=3
-        )
-        
-        # Bind events
-        self.quantity_field.on_change = self.calculate_total
 
-    def _get_available_items(self, excel_file):
-        """Helper method to get available items with proper error handling"""
-        print(f"[DEBUG] _get_available_items called with file: {excel_file}")
-        available_items = []
+        self.excel_file = os.path.join(self.inventory_path, "مخزون ادوات التشغيل.xlsx")
+        self.rows: list[InventoryDisburseRow] = []
+        self.rows_container = ft.Column(spacing=20, scroll=ft.ScrollMode.AUTO, expand=True)
+        
+        # Load available items and prices
+        self.available_items = []
+        self.item_prices = {}
+        self.inventory_balances = {}
+        self._load_inventory_data()
+
+    def _load_inventory_data(self):
+        """Load available items and their prices from inventory"""
         try:
-            if os.path.exists(excel_file):
-                print(f"[DEBUG] Excel file exists")
-                # Convert existing file to use formulas
+            if os.path.exists(self.excel_file):
                 try:
-                    convert_existing_inventory_to_formulas(excel_file)
-                    print(f"[DEBUG] Converted to formulas successfully")
-                except Exception as e:
-                    print(f"[ERROR] Failed to convert to formulas: {e}")
-                    traceback.print_exc()
+                    convert_existing_inventory_to_formulas(self.excel_file)
+                except:
+                    pass
                 
-                # Get inventory data with calculated values
-                try:
-                    inventory_data = get_inventory_summary(excel_file)
-                    print(f"[DEBUG] Inventory data retrieved, count: {len(inventory_data)}")
-                    print(f"[DEBUG] Inventory data: {inventory_data}")
-                    # Show all items, not just those with positive balance
-                    # This allows users to see all items and we'll validate quantities during save
-                    available_items = [item['item_name'] for item in inventory_data if item['item_name']]
-                    print(f"[DEBUG] Filtered available items: {available_items}")
-                except Exception as e:
-                    print(f"[ERROR] Failed to get inventory summary: {e}")
-                    traceback.print_exc()
-            else:
-                print(f"[DEBUG] Excel file does not exist")
+                # Get inventory summary for balances
+                inventory_data = get_inventory_summary(self.excel_file)
+                self.available_items = [item['item_name'] for item in inventory_data if item['item_name']]
+                self.inventory_balances = {item['item_name']: float(item['current_balance']) for item in inventory_data if item['item_name']}
+                
+                # Get prices
+                self.item_prices = get_available_items_with_prices(self.excel_file)
         except Exception as e:
-            print(f"[ERROR] Error in _get_available_items: {e}")
+            print(f"[ERROR] Failed to load inventory data: {e}")
             traceback.print_exc()
-        return available_items
-
-    def on_item_selected(self, e):
-        """Handle item selection from dropdown"""
-        selected_item = self.item_dropdown.value
-        print(f"[DEBUG] Item selected: {selected_item}")
-        if selected_item and selected_item != "لا توجد أصناف متوفرة":
-            # Get the unit price for the selected item
-            excel_file = os.path.join(self.inventory_path, "مخزون ادوات التشغيل.xlsx")
-            print(f"[DEBUG] Getting price for item: {selected_item}")
-            if os.path.exists(excel_file):
-                try:
-                    item_prices = get_available_items_with_prices(excel_file)
-                    print(f"[DEBUG] Item prices: {item_prices}")
-                    if selected_item in item_prices:
-                        price = round(item_prices[selected_item], 2)
-                        self.unit_price_field.value = str(price)
-                        print(f"[DEBUG] Set unit price: {price}")
-                    else:
-                        print(f"[DEBUG] Item {selected_item} not found in prices")
-                        self.unit_price_field.value = "0"
-                except Exception as e:
-                    print(f"[ERROR] Error getting item prices: {e}")
-                    traceback.print_exc()
-                    self.unit_price_field.value = "0"
-            else:
-                print(f"[DEBUG] Excel file not found for price lookup")
-        else:
-            print(f"[DEBUG] No valid item selected")
-            self.unit_price_field.value = ""
-        self.page.update()
-
-    def calculate_total(self, e):
-        """Calculate total price based on quantity and unit price"""
-        print(f"[DEBUG] Calculating total")
-        try:
-            quantity = float(self.quantity_field.value) if self.quantity_field.value else 0
-            unit_price = float(self.unit_price_field.value) if self.unit_price_field.value else 0
-            total = quantity * unit_price
-            self.total_price_field.value = str(total)
-            print(f"[DEBUG] Quantity: {quantity}, Unit Price: {unit_price}, Total: {total}")
-        except ValueError as e:
-            print(f"[ERROR] Value error in calculate_total: {e}")
-            self.total_price_field.value = "0"
-        except Exception as e:
-            print(f"[ERROR] Unexpected error in calculate_total: {e}")
-            traceback.print_exc()
-            self.total_price_field.value = "0"
-        self.page.update()
-
-    def go_back(self, e):
-        """Navigate back to main dashboard"""
-        print(f"[DEBUG] Going back")
-        if self.on_back:
-            self.on_back()
-        else:
-            # If no back callback, go back to main dashboard
-            from views.dashboard_view import DashboardView
-            self.page.clean()
-            self.page.appbar = None
-            dashboard = DashboardView(self.page)
-            dashboard.show(getattr(self.page, '_save_callback', None))
 
     def build_ui(self):
-        """Build the inventory disbursement UI"""
-        print(f"[DEBUG] Building UI")
-        # Header with save button in AppBar
-        self.page.appbar = ft.AppBar(
+        """Build the inventory disburse UI"""
+        app_bar = ft.AppBar(
             leading=ft.IconButton(
-                icon=ft.Icons.ARROW_BACK,
-                on_click=self.go_back,
-                tooltip="العودة"
+                icon=ft.Icons.ARROW_BACK, on_click=self.go_back, tooltip="العودة"
             ),
-            title=ft.Text("صرف مخزون", size=20, weight=ft.FontWeight.BOLD),
-            bgcolor=ft.Colors.BLUE_GREY_900,
-            actions=[
-                ft.FilledButton(
-                    "حفظ",
-                    icon=ft.Icons.SAVE,
-                    on_click=self.save_inventory,
-                    style=ft.ButtonStyle(
-                        bgcolor=ft.Colors.RED_700,
-                        color=ft.Colors.WHITE,
-                    )
-                ),
-            ]
-        )
-        
-        # Refresh dropdown with current available items
-        self.refresh_item_dropdown()
-        
-        # Form section with improved layout
-        form_section = ft.Container(
-            content=ft.Column(
+            title=ft.Row(
                 controls=[
-                    # Date field
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Icon(ft.Icons.CALENDAR_TODAY, color=ft.Colors.BLUE_300),
-                                self.date_field,
-                            ],
-                            spacing=10,
-                            alignment=ft.MainAxisAlignment.CENTER
-                        ),
-                        padding=10,
-                        border=ft.border.all(1, ft.Colors.GREY_700),
-                        border_radius=10,
-                        width=300
-                    ),
-                    
-                    # Item dropdown field
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Icon(ft.Icons.INVENTORY_2, color=ft.Colors.ORANGE_300),
-                                self.item_dropdown,
-                            ],
-                            spacing=10,
-                            alignment=ft.MainAxisAlignment.CENTER
-                        ),
-                        padding=10,
-                        border=ft.border.all(1, ft.Colors.GREY_700),
-                        border_radius=10,
-                        width=500
-                    ),
-                    
-                    # Quantity and unit price fields in one row
-                    ft.Row(
-                        controls=[
-                            ft.Container(
-                                content=ft.Row(
-                                    controls=[
-                                        ft.Icon(ft.Icons.NUMBERS, color=ft.Colors.PURPLE_300),
-                                        self.quantity_field,
-                                    ],
-                                    spacing=10,
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                ),
-                                padding=10,
-                                border=ft.border.all(1, ft.Colors.GREY_700),
-                                border_radius=10,
-                            ),
-                            ft.Container(
-                                content=ft.Row(
-                                    controls=[
-                                        ft.Icon(ft.Icons.PRICE_CHANGE, color=ft.Colors.YELLOW_300),
-                                        self.unit_price_field,
-                                    ],
-                                    spacing=10,
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                ),
-                                padding=10,
-                                border=ft.border.all(1, ft.Colors.GREY_700),
-                                border_radius=10,
-                            ),
-                        ],
-                        spacing=20,
-                        alignment=ft.MainAxisAlignment.CENTER
-                    ),
-                    
-                    # Total price field
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Icon(ft.Icons.ATTACH_MONEY, color=ft.Colors.GREEN_300),
-                                self.total_price_field,
-                            ],
-                            spacing=10,
-                            alignment=ft.MainAxisAlignment.CENTER
-                        ),
-                        padding=10,
-                        border=ft.border.all(1, ft.Colors.GREY_700),
-                        border_radius=10,
-                        width=300
-                    ),
-                    
-                    # Notes field
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Icon(ft.Icons.NOTES, color=ft.Colors.CYAN_300),
-                                self.notes_field,
-                            ],
-                            spacing=10,
-                            alignment=ft.MainAxisAlignment.CENTER
-                        ),
-                        padding=10,
-                        border=ft.border.all(1, ft.Colors.GREY_700),
-                        border_radius=10,
-                        width=500
+                    ft.Icon(ft.Icons.REMOVE_SHOPPING_CART, size=24, color=ft.Colors.RED_200),
+                    ft.Text(
+                        "صرف من المخزون",
+                        size=20,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.RED_200,
                     ),
                 ],
-                spacing=20,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                spacing=10,
             ),
-            padding=20,
-            bgcolor=ft.Colors.GREY_900,
-            border_radius=15,
-            margin=ft.margin.only(bottom=10)
-        )
-        
-        # Main layout
-        main_layout = ft.Column(
-            controls=[
-                form_section,
+            actions=[
+                ft.IconButton(
+                    icon=ft.Icons.REFRESH, on_click=self.refresh_data, tooltip="تحديث البيانات"
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.ADD, on_click=self.add_row, tooltip="إضافة صف جديد"
+                ),
+                ft.Container(
+                    content=ft.IconButton(
+                        icon=ft.Icons.SAVE, on_click=self.save_to_excel, tooltip="حفظ البيانات"
+                    ),
+                    margin=ft.margin.only(left=40, right=15),
+                ),
             ],
+            bgcolor=ft.Colors.GREY_900,
+        )
+
+        self.page.appbar = app_bar
+
+        # Info banner showing available items count
+        info_banner = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.INFO_OUTLINE, color=ft.Colors.BLUE_300, size=18),
+                    ft.Text(
+                        f"عدد الأصناف المتاحة: {len(self.available_items)}",
+                        size=14,
+                        color=ft.Colors.BLUE_300,
+                    ),
+                ],
+                spacing=10,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
+            padding=10,
+            bgcolor=ft.Colors.BLUE_GREY_900,
+            border_radius=10,
+            margin=ft.margin.only(bottom=10),
+        )
+
+        main_column = ft.Column(
+            controls=[info_banner, self.rows_container],
             spacing=15,
             scroll=ft.ScrollMode.AUTO,
             expand=True,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
-        
-        self.page.clean()
-        self.page.add(main_layout)
+
+        self.page.add(main_column)
+        self.add_row()
         self.page.update()
 
-    def refresh_item_dropdown(self):
-        """Refresh the item dropdown with current available items"""
-        print(f"[DEBUG] Refreshing item dropdown")
-        excel_file = os.path.join(self.inventory_path, "مخزون ادوات التشغيل.xlsx")
-        available_items = self._get_available_items(excel_file)
-        print(f"[DEBUG] Refresh - Available items count: {len(available_items)}")
-        print(f"[DEBUG] Refresh - Available items: {available_items}")
-        
-        # Update dropdown options
-        if available_items:
-            self.item_dropdown.options = [ft.dropdown.Option(item) for item in available_items]
-            self.item_dropdown.value = None  # Clear selection
-        else:
-            self.item_dropdown.options = [ft.dropdown.Option("لا توجد أصناف في المخزون")]
-            self.item_dropdown.value = "لا توجد أصناف في المخزون"
-        print(f"[DEBUG] Dropdown options updated")
+    def go_back(self, e=None):
+        """Navigate back"""
+        if self.on_back:
+            self.on_back()
+
+    def refresh_data(self, e=None):
+        """Refresh inventory data"""
+        self._load_inventory_data()
+        # Update existing rows with new data
+        for row in self.rows:
+            row.available_items = self.available_items
+            row.item_prices = self.item_prices
+            row.item_dropdown.options = [ft.dropdown.Option(item) for item in self.available_items]
+        self.page.update()
+        self._show_dialog("تم التحديث", f"تم تحديث البيانات - {len(self.available_items)} صنف متاح", ft.Colors.GREEN_400)
+
+    def add_row(self, e=None):
+        """Add a new inventory disburse row"""
+        row = InventoryDisburseRow(
+            page=self.page,
+            delete_callback=self.delete_row,
+            available_items=self.available_items,
+            item_prices=self.item_prices,
+        )
+        self.rows.append(row)
+        self.rows_container.controls.append(row.row)
         self.page.update()
 
-    def save_inventory(self, e):
-        """Save inventory disbursement record to Excel file"""
-        print(f"[DEBUG] Saving inventory")
-        # Validate required fields
-        if not self.item_dropdown.value or self.item_dropdown.value in ["لا توجد أصناف متوفرة", "لا توجد أصناف في المخزون"]:
-            print(f"[DEBUG] No item selected")
-            self.show_dialog("خطأ", "يرجى اختيار صنف من القائمة", ft.Colors.RED_400)
+    def delete_row(self, row_obj):
+        """Delete a specific row"""
+        if row_obj in self.rows:
+            self.rows.remove(row_obj)
+            self.rows_container.controls.remove(row_obj.row)
+            self.page.update()
+
+    def save_to_excel(self, e=None):
+        """Save disbursement data to Excel file"""
+        if not any(row.has_data() for row in self.rows):
+            self._show_dialog("تحذير", "لا توجد بيانات لحفظها", ft.Colors.ORANGE_400)
             return
-            
-        if not self.quantity_field.value:
-            print(f"[DEBUG] No quantity entered")
-            self.show_dialog("خطأ", "يرجى إدخال عدد الصنف", ft.Colors.RED_400)
-            return
-            
-        # Validate quantity doesn't exceed available balance
-        excel_file = os.path.join(self.inventory_path, "مخزون ادوات التشغيل.xlsx")
-        if os.path.exists(excel_file):
-            try:
-                inventory_data = get_inventory_summary(excel_file)
-                print(f"[DEBUG] Inventory data for validation: {inventory_data}")
-                item_found = False
-                for item in inventory_data:
-                    if item['item_name'] == self.item_dropdown.value:
-                        item_found = True
-                        available_balance = float(item['current_balance'])
-                        requested_quantity = float(self.quantity_field.value)
-                        
-                        # Check if item has any balance
-                        if available_balance <= 0:
-                            print(f"[DEBUG] Item has no available balance: {available_balance}")
-                            self.show_dialog("خطأ", f"الصنف المحدد ({self.item_dropdown.value}) ليس له رصيد متوفر", ft.Colors.RED_400)
-                            return
-                        
-                        # Check if requested quantity exceeds available balance
-                        if requested_quantity > available_balance:
-                            print(f"[DEBUG] Insufficient balance - Requested: {requested_quantity}, Available: {available_balance}")
-                            self.show_dialog("خطأ", f"الكمية المطلوبة ({requested_quantity}) تتجاوز الرصيد المتاح ({available_balance})", ft.Colors.RED_400)
-                            return
-                        break
+
+        # Validate all rows first
+        for row in self.rows:
+            if row.has_data():
+                data = row.to_dict()
+                item_name = data["item_name"]
                 
-                # If item not found in inventory data
-                if not item_found:
-                    print(f"[DEBUG] Item not found in inventory data")
-                    self.show_dialog("خطأ", f"الصنف المحدد ({self.item_dropdown.value}) غير موجود في المخزون", ft.Colors.RED_400)
+                # Check if item exists
+                if item_name not in self.inventory_balances:
+                    self._show_dialog("خطأ", f"الصنف '{item_name}' غير موجود في المخزون", ft.Colors.RED_400)
                     return
-            except Exception as e:
-                print(f"[ERROR] Error validating inventory: {e}")
-                traceback.print_exc()
-                self.show_dialog("خطأ", "حدث خطأ أثناء التحقق من الرصيد", ft.Colors.RED_400)
-                return
-        
-        # Save to Excel file using the utility function
-        try:
-            # Initialize Excel file if it doesn't exist
-            if not os.path.exists(excel_file):
-                print(f"[DEBUG] Initializing new Excel file")
-                initialize_inventory_excel(excel_file)
-            else:
-                # Convert existing file to use formulas
+                
+                # Check balance
                 try:
-                    convert_existing_inventory_to_formulas(excel_file)
-                except:
-                    pass  # If conversion fails, continue with existing data
-            
-            # Add disbursement entry using utility function
-            print(f"[DEBUG] Adding disbursement entry")
-            entry_number = disburse_inventory_entry(
-                file_path=excel_file,
-                item_name=self.item_dropdown.value,
-                quantity=self.quantity_field.value,
-                unit_price=self.unit_price_field.value,
-                notes=self.notes_field.value,
-                disburse_date=self.date_field.value
-            )
-            print(f"[DEBUG] Entry added with number: {entry_number}")
-            
-            # Clear form
-            self.item_dropdown.value = None
-            self.quantity_field.value = ""
-            self.unit_price_field.value = ""
-            self.total_price_field.value = ""
-            self.notes_field.value = ""
-            
-            # Refresh dropdown
-            self.refresh_item_dropdown()
-            
-            self.page.update()
-            self.show_success_dialog(excel_file)
-            
-        except PermissionError as e:
-            print(f"[ERROR] Permission error: {e}")
-            self.show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
-        except Exception as e:
-            print(f"[ERROR] Unexpected error saving inventory: {e}")
-            traceback.print_exc()
-            self.show_dialog("خطأ", f"حدث خطأ أثناء حفظ البيانات: {str(e)}", ft.Colors.RED_400)
+                    requested_qty = float(data["quantity"])
+                    available_balance = self.inventory_balances.get(item_name, 0)
+                    
+                    if available_balance <= 0:
+                        self._show_dialog("خطأ", f"الصنف '{item_name}' ليس له رصيد متوفر", ft.Colors.RED_400)
+                        return
+                    
+                    if requested_qty > available_balance:
+                        self._show_dialog(
+                            "خطأ",
+                            f"الكمية المطلوبة ({requested_qty}) تتجاوز الرصيد المتاح ({available_balance}) للصنف '{item_name}'",
+                            ft.Colors.RED_400
+                        )
+                        return
+                except ValueError:
+                    self._show_dialog("خطأ", "يرجى إدخال كمية صحيحة", ft.Colors.RED_400)
+                    return
 
-    def show_success_dialog(self, file_path):
-        """Show success dialog with file path"""
-        print(f"[DEBUG] Showing success dialog")
-        def close_dlg(e):
+        try:
+            if not os.path.exists(self.excel_file):
+                initialize_inventory_excel(self.excel_file)
+            else:
+                try:
+                    convert_existing_inventory_to_formulas(self.excel_file)
+                except:
+                    pass
+
+            saved_count = 0
+            for row in self.rows:
+                if row.has_data():
+                    data = row.to_dict()
+                    disburse_inventory_entry(
+                        file_path=self.excel_file,
+                        item_name=data["item_name"],
+                        quantity=data["quantity"],
+                        unit_price=data["unit_price"],
+                        notes=data["notes"],
+                        disburse_date=data["date"],
+                    )
+                    row.clear()
+                    saved_count += 1
+
+            # Reload inventory data after saving
+            self._load_inventory_data()
+            self._show_success_dialog(self.excel_file, saved_count)
+
+        except PermissionError:
+            self._show_dialog(
+                "خطأ",
+                "الملف مفتوح في Excel. أغلقه وحاول مرة أخرى.",
+                ft.Colors.RED_400,
+            )
+        except Exception as e:
+            self._show_dialog("خطأ", f"حدث خطأ: {str(e)}", ft.Colors.RED_400)
+
+    def _show_dialog(self, title: str, message: str, title_color=ft.Colors.BLUE_300):
+        """Show a styled dialog"""
+        def close_dlg(e=None):
             dlg.open = False
             self.page.update()
-            
-        def open_file(e):
-            dlg.open = False
-            self.page.update()
-            os.startfile(file_path)
-            
-        def open_folder(e):
-            dlg.open = False
-            self.page.update()
-            os.startfile(os.path.dirname(file_path))
-            
+
         dlg = ft.AlertDialog(
-            title=ft.Text("تم الحفظ بنجاح", color=ft.Colors.GREEN_400),
-            content=ft.Text("تم حفظ بيانات الصرف إلى ملف Excel"),
+            title=ft.Text(title, color=title_color, weight=ft.FontWeight.BOLD),
+            content=ft.Text(message, size=16, rtl=True),
             actions=[
                 ft.TextButton(
-                    "فتح الملف",
-                    on_click=open_file,
-                    icon=ft.Icons.FILE_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.GREEN_300)
+                    "إغلاق", on_click=close_dlg, style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
                 ),
-                ft.TextButton(
-                    "فتح المجلد",
-                    on_click=open_folder,
-                    icon=ft.Icons.FOLDER_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
-                ),
-                ft.TextButton("حسناً", on_click=close_dlg)
             ],
-            actions_alignment=ft.MainAxisAlignment.END
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.BLUE_GREY_900,
         )
         self.page.overlay.append(dlg)
         dlg.open = True
         self.page.update()
 
-    def show_dialog(self, title, message, color):
-        """Show a dialog with a message"""
-        print(f"[DEBUG] Showing dialog: {title} - {message}")
-        def close_dlg(e):
+    def _show_success_dialog(self, filepath: str, count: int):
+        """Show success dialog"""
+        def close_dlg(e=None):
             dlg.open = False
             self.page.update()
-            
+
+        def open_file(e=None):
+            close_dlg()
+            try:
+                os.startfile(filepath)
+            except:
+                pass
+
+        def open_folder(e=None):
+            close_dlg()
+            try:
+                os.startfile(os.path.dirname(filepath))
+            except:
+                pass
+
         dlg = ft.AlertDialog(
-            title=ft.Text(title, color=color),
-            content=ft.Text(message),
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=30),
+                    ft.Text(
+                        "تم الحفظ بنجاح",
+                        color=ft.Colors.GREEN_300,
+                        weight=ft.FontWeight.BOLD,
+                    ),
+                ],
+                rtl=True,
+                spacing=10,
+            ),
+            content=ft.Text(f"تم صرف {count} صنف من المخزون", size=14, rtl=True),
             actions=[
-                ft.TextButton("حسناً", on_click=close_dlg)
+                ft.TextButton(
+                    "فتح الملف",
+                    on_click=open_file,
+                    icon=ft.Icons.FILE_OPEN,
+                    style=ft.ButtonStyle(color=ft.Colors.GREEN_300),
+                ),
+                ft.TextButton(
+                    "فتح المجلد",
+                    on_click=open_folder,
+                    icon=ft.Icons.FOLDER_OPEN,
+                    style=ft.ButtonStyle(color=ft.Colors.BLUE_300),
+                ),
+                ft.TextButton(
+                    "إغلاق", on_click=close_dlg, style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                ),
             ],
-            actions_alignment=ft.MainAxisAlignment.END
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.BLUE_GREY_900,
         )
         self.page.overlay.append(dlg)
         dlg.open = True

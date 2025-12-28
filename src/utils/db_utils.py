@@ -3,6 +3,8 @@ from typing import Optional
 from contextlib import contextmanager
 import os
 
+from utils.log_utils import log_error, log_exception
+
 
 @contextmanager
 def get_db_connection(db_path: str):
@@ -277,7 +279,7 @@ def save_invoice_to_db(db_path: str, invoice_number: str, client_name: str, driv
                     continue
             
     except Exception as e:
-        print(f"Error saving invoice to database: {e}")
+        log_exception(f"Error saving invoice to database: {e}")
         raise e
 
 
@@ -325,7 +327,7 @@ def load_invoice_from_db(db_path: str, invoice_number: str) -> Optional[dict]:
             }
             
     except Exception as e:
-        print(f"Error loading invoice from database: {e}")
+        log_exception(f"Error loading invoice from database: {e}")
         return None
 
 
@@ -350,5 +352,5 @@ def invoice_exists(db_path: str, invoice_number: str) -> bool:
             return result is not None
             
     except Exception as e:
-        print(f"Error checking if invoice exists: {e}")
+        log_exception(f"Error checking if invoice exists: {e}")
         return False

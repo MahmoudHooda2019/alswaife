@@ -8,6 +8,7 @@ from datetime import datetime
 import platform
 import subprocess
 from utils.attendance_utils import create_or_update_attendance, load_attendance_data
+from utils.purchases_utils import add_income_record, export_purchases_to_excel
 from tkinter import filedialog
 import tkinter as tk
 from utils.path_utils import resource_path
@@ -325,7 +326,7 @@ class AttendanceView:
         attendance_path = os.path.join(alswaife_path, "حضور وانصراف")
         
         try:
-            filename = "attendance.xlsx"
+            filename = "سجل الحضور والانصراف.xlsx"
             filepath = os.path.join(attendance_path, filename)
             
             # Normalize current date for comparison
@@ -541,7 +542,7 @@ class AttendanceView:
             return
         
         try:
-            filename = "attendance.xlsx"
+            filename = "سجل الحضور والانصراف.xlsx"
             filepath = os.path.join(attendance_path, filename)
         except Exception as ex:
             self.show_message(f"خطأ في إنشاء اسم الملف: {ex}", error=True)
@@ -664,12 +665,102 @@ class AttendanceView:
         
         if success:
             self.current_file = filepath
+            
+            # Record attendance expenses to the expenses sheet
+            self.record_attendance_expenses(employees_data, current_date)
+            
             self.show_message(f"تم الحفظ بنجاح: {os.path.basename(filepath)}", filepath=filepath)
         else:
             if error == "file_locked":
                 self.show_message("الملف مفتوح في برنامج آخر، الرجاء إغلاقه", error=True)
             else:
                 self.show_message(f"خطأ في الحفظ: {error}", error=True)
+    
+    def record_attendance_expenses(self, employees_data, current_date):
+        """Record attendance costs as expenses in the expenses sheet"""
+        try:
+            # Calculate total attendance cost and count for this date
+            total_cost = 0
+            present_count = 0
+            shift_key = self.get_shift_key()
+            
+            for emp in employees_data:
+                if shift_key:
+                    cost = emp.get(shift_key, 0)
+                    if cost:
+                        total_cost += float(cost)
+                        present_count += 1
+            
+            if total_cost > 0:
+                # Get the expenses file path
+                documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
+                expenses_filepath = os.path.join(
+                    documents_path, "ايرادات ومصروفات", "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx"
+                )
+                
+                # Create expense record with shift name including "الوردية"
+                shift_name = self.shift_dropdown.value if self.shift_dropdown else ""
+                item_name = f"حضور وانصراف - الوردية {shift_name}"
+                
+                expense_record = {
+                    'quantity': present_count,
+                    'item_name': item_name,
+                    'total_price': total_cost,
+                    'date': current_date
+                }
+                
+                # Update or add expense record
+                self.update_or_add_expense(expenses_filepath, expense_record)
+                print(f"[DEBUG] Recorded attendance expense: {total_cost} for {present_count} employees on {current_date}")
+        except Exception as e:
+            print(f"[ERROR] Failed to record attendance expense: {e}")
+    
+    def update_or_add_expense(self, filepath, record):
+        """Update existing expense record or add new one based on item_name and date"""
+        try:
+            import openpyxl
+            from openpyxl.styles import Border, Side, Alignment, PatternFill
+            
+            if not os.path.exists(filepath):
+                # File doesn't exist, create new
+                export_purchases_to_excel([record], filepath)
+                return
+            
+            workbook = openpyxl.load_workbook(filepath)
+            
+            if 'المصروفات' not in workbook.sheetnames:
+                workbook.close()
+                export_purchases_to_excel([record], filepath)
+                return
+            
+            worksheet = workbook['المصروفات']
+            
+            # Search for existing record with same item_name and date
+            found_row = None
+            for row in range(3, worksheet.max_row + 1):
+                item_name = worksheet.cell(row=row, column=2).value
+                date_val = worksheet.cell(row=row, column=4).value
+                
+                if item_name == record['item_name'] and str(date_val) == str(record['date']):
+                    found_row = row
+                    break
+            
+            if found_row:
+                # Update existing record
+                worksheet.cell(row=found_row, column=1, value=record['quantity'])
+                worksheet.cell(row=found_row, column=3, value=record['total_price'])
+                workbook.save(filepath)
+                workbook.close()
+                print(f"[DEBUG] Updated existing expense record at row {found_row}")
+            else:
+                workbook.close()
+                # Add new record
+                export_purchases_to_excel([record], filepath)
+                print(f"[DEBUG] Added new expense record")
+        except Exception as e:
+            print(f"[ERROR] update_or_add_expense failed: {e}")
+            # Fallback to adding new record
+            export_purchases_to_excel([record], filepath)
     
     def show_message(self, message, error=False, filepath=None):
         """Show status message with dialog notification"""

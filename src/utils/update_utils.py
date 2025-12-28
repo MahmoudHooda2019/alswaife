@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 from typing import Optional, Tuple
 
+from utils.log_utils import log_error
+
 # GitHub repository info
 GITHUB_REPO = "MahmoudHooda2019/alswaife"
 GITHUB_RAW_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/src/version.py"
@@ -45,14 +47,14 @@ def get_latest_version() -> Tuple[Optional[str], Optional[str]]:
             version = match.group(1)
             return version, GITHUB_DOWNLOAD_URL
 
-        print("[ERROR] Could not find __version__ in version.py")
+        log_error("Could not find __version__ in version.py")
         return None, None
 
     except requests.RequestException as e:
-        print(f"[ERROR] Failed to check for updates: {e}")
+        log_error(f"Failed to check for updates: {e}")
         return None, None
     except Exception as e:
-        print(f"[ERROR] Unexpected error checking updates: {e}")
+        log_error(f"Unexpected error checking updates: {e}")
         return None, None
 
 
@@ -89,7 +91,7 @@ def compare_versions(current: str, latest: str) -> bool:
         return latest_parts > current_parts
     
     except Exception as e:
-        print(f"[ERROR] Version comparison failed: {e}")
+        log_error(f"Version comparison failed: {e}")
         return False
 
 
@@ -137,10 +139,10 @@ def download_update(download_url: str, progress_callback=None) -> Optional[str]:
         return download_path
     
     except requests.RequestException as e:
-        print(f"[ERROR] Failed to download update: {e}")
+        log_error(f"Failed to download update: {e}")
         return None
     except Exception as e:
-        print(f"[ERROR] Unexpected error downloading update: {e}")
+        log_error(f"Unexpected error downloading update: {e}")
         return None
 
 
@@ -151,7 +153,7 @@ def install_update(setup_path: str) -> bool:
     """
     try:
         if not os.path.exists(setup_path):
-            print(f"[ERROR] Setup file not found: {setup_path}")
+            log_error(f"Setup file not found: {setup_path}")
             return False
         
         # Run the installer
@@ -159,5 +161,5 @@ def install_update(setup_path: str) -> bool:
         return True
     
     except Exception as e:
-        print(f"[ERROR] Failed to run installer: {e}")
+        log_error(f"Failed to run installer: {e}")
         return False

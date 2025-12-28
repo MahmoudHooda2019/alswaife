@@ -4,9 +4,9 @@ from pickle import TRUE
 import flet as ft
 from openpyxl import load_workbook
 import xlsxwriter
-import traceback
 
 from utils.blocks_utils import export_simple_blocks_excel
+from utils.log_utils import log_error, log_exception
 
 class BlockRow:
     """Row UI for block entry with improved styling"""
@@ -565,7 +565,7 @@ class BlocksView:
             self._show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
         except Exception as e:
             self._show_dialog("خطأ", f"حدث خطأ أثناء حفظ الملف:\n{str(e)}", ft.Colors.RED_400)
-            traceback.print_exc()
+            log_exception(f"Error saving blocks file: {e}")
 
     def _show_dialog(self, title: str, message: str, title_color=ft.Colors.BLUE_300):
         """Show a styled dialog"""
