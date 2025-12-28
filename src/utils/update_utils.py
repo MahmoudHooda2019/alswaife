@@ -14,7 +14,7 @@ from utils.log_utils import log_error
 # GitHub repository info
 GITHUB_REPO = "MahmoudHooda2019/alswaife"
 GITHUB_RAW_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/src/version.py"
-GITHUB_DOWNLOAD_URL = f"https://github.com/{GITHUB_REPO}/releases/latest/download/AlSawifeFactory-setup.exe"
+GITHUB_DOWNLOAD_URL = "https://github.com/MahmoudHooda2019/alswaife/raw/refs/heads/main/AlSawifeFactory-setup.exe"
 SETUP_FILENAME = "AlSawifeFactory-setup.exe"
 
 
@@ -110,10 +110,14 @@ def check_for_updates() -> Tuple[bool, str, str, Optional[str]]:
     return update_available, current, latest, download_url
 
 
-def download_update(download_url: str, progress_callback=None) -> Optional[str]:
+def download_update(download_url: str, progress_callback=None, cancel_check=None) -> Optional[str]:
     """
     Download the update file.
-    Returns: path to downloaded file or None if failed
+    Args:
+        download_url: URL to download from
+        progress_callback: Function to call with progress percentage
+        cancel_check: Function that returns True if download should be cancelled
+    Returns: path to downloaded file or None if failed/cancelled
     """
     try:
         # Create temp directory for download
@@ -129,6 +133,14 @@ def download_update(download_url: str, progress_callback=None) -> Optional[str]:
         
         with open(download_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
+                # Check if cancelled
+                if cancel_check and cancel_check():
+                    f.close()
+                    # Delete partial file
+                    if os.path.exists(download_path):
+                        os.remove(download_path)
+                    return None
+                
                 if chunk:
                     f.write(chunk)
                     downloaded += len(chunk)

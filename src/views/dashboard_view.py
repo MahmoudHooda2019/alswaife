@@ -853,10 +853,25 @@ class DashboardView:
         """Download and install the update"""
         import threading
         
+        # Cancel flag
+        self.download_cancelled = False
+        
+        def cancel_download(e):
+            self.download_cancelled = True
+            status_text.value = "جاري الإلغاء..."
+            cancel_btn.disabled = True
+            self.page.update()
+        
         # Progress bar and text
         progress_bar = ft.ProgressBar(width=200, color=ft.Colors.ORANGE_400, bgcolor=ft.Colors.GREY_700)
         progress_text = ft.Text("0%", size=12, color=ft.Colors.WHITE)
         status_text = ft.Text("جاري التحميل...", size=14, color=ft.Colors.WHITE)
+        cancel_btn = ft.TextButton(
+            "إلغاء",
+            icon=ft.Icons.CANCEL,
+            on_click=cancel_download,
+            style=ft.ButtonStyle(color=ft.Colors.RED_400)
+        )
         
         progress_dlg = ft.AlertDialog(
             modal=True,
@@ -866,6 +881,7 @@ class DashboardView:
                     status_text,
                     progress_bar,
                     progress_text,
+                    cancel_btn,
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=8,
@@ -883,12 +899,22 @@ class DashboardView:
             progress_text.value = f"{int(percent)}%"
             self.page.update()
         
+        def check_cancelled():
+            return self.download_cancelled
+        
         def download():
             try:
-                setup_path = download_update(download_url, update_progress)
+                setup_path = download_update(download_url, update_progress, check_cancelled)
+                
+                if self.download_cancelled:
+                    progress_dlg.open = False
+                    self.page.update()
+                    self.show_download_cancelled_dialog()
+                    return
                 
                 if setup_path:
                     status_text.value = "جاري تشغيل المثبت..."
+                    cancel_btn.visible = False
                     self.page.update()
                     
                     if install_update(setup_path):
@@ -902,7 +928,8 @@ class DashboardView:
                 else:
                     progress_dlg.open = False
                     self.page.update()
-                    self.show_update_error("فشل في تحميل التحديث")
+                    if not self.download_cancelled:
+                        self.show_update_error("فشل في تحميل التحديث")
             except Exception as ex:
                 progress_dlg.open = False
                 self.page.update()
@@ -910,6 +937,34 @@ class DashboardView:
         
         thread = threading.Thread(target=download)
         thread.start()
+    
+    def show_download_cancelled_dialog(self):
+        """Show dialog when download is cancelled"""
+        def close_dlg(e):
+            dlg.open = False
+            self.page.update()
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.CANCEL, color=ft.Colors.ORANGE_400, size=24),
+                    ft.Text("تم الإلغاء", weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_300, size=16, rtl=True),
+                ],
+                spacing=8,
+                rtl=True,
+            ),
+            content=ft.Text("تم إلغاء تحميل التحديث", size=14, color=ft.Colors.WHITE, rtl=True),
+            actions=[
+                ft.TextButton("حسناً", on_click=close_dlg, style=ft.ButtonStyle(color=ft.Colors.BLUE_400)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.GREY_900,
+            shape=ft.RoundedRectangleBorder(radius=10),
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
 
     def show_install_success_dialog(self):
         """Show dialog after installer starts"""
