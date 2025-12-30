@@ -330,7 +330,7 @@ def disburse_inventory_entry(file_path, item_name, quantity, unit_price, notes="
 
 def get_inventory_summary(file_path):
     """
-    Get inventory summary data by evaluating formulas
+    Get inventory summary data by calculating from additions and disbursements sheets
     
     Args:
         file_path (str): Path to the Excel file
@@ -342,40 +342,50 @@ def get_inventory_summary(file_path):
         return []
     
     try:
-        wb = openpyxl.load_workbook(file_path, data_only=True)  # data_only=True to get calculated values
-        inventory_sheet = wb["المخزون"]
+        wb = openpyxl.load_workbook(file_path)
+        add_sheet = wb["اذن الاضافه"]
+        disburse_sheet = wb["اذن الصرف"]
+        
+        # Calculate additions per item
+        additions_by_item = {}
+        for row_num in range(2, add_sheet.max_row + 1):
+            item_name = add_sheet.cell(row=row_num, column=3).value
+            quantity = add_sheet.cell(row=row_num, column=4).value or 0
+            if item_name:
+                try:
+                    quantity = float(quantity)
+                except (ValueError, TypeError):
+                    quantity = 0
+                additions_by_item[item_name] = additions_by_item.get(item_name, 0) + quantity
+        
+        # Calculate disbursements per item
+        disbursements_by_item = {}
+        for row_num in range(2, disburse_sheet.max_row + 1):
+            item_name = disburse_sheet.cell(row=row_num, column=3).value
+            quantity = disburse_sheet.cell(row=row_num, column=4).value or 0
+            if item_name:
+                try:
+                    quantity = float(quantity)
+                except (ValueError, TypeError):
+                    quantity = 0
+                disbursements_by_item[item_name] = disbursements_by_item.get(item_name, 0) + quantity
+        
+        # Get all unique item names
+        all_items = set(additions_by_item.keys()) | set(disbursements_by_item.keys())
         
         inventory_data = []
-        for row_num in range(2, inventory_sheet.max_row + 1):
-            item_name = inventory_sheet.cell(row=row_num, column=1).value
-            if item_name:  # Only process rows with item names
-                total_additions = inventory_sheet.cell(row=row_num, column=2).value or 0
-                total_disbursements = inventory_sheet.cell(row=row_num, column=3).value or 0
-                current_balance = inventory_sheet.cell(row=row_num, column=4).value or 0
-                
-                # Convert to float and handle None values
-                try:
-                    total_additions = float(total_additions)
-                except (ValueError, TypeError):
-                    total_additions = 0
-                    
-                try:
-                    total_disbursements = float(total_disbursements)
-                except (ValueError, TypeError):
-                    total_disbursements = 0
-                    
-                try:
-                    current_balance = float(current_balance)
-                except (ValueError, TypeError):
-                    current_balance = 0
-                
-                item_data = {
-                    'item_name': item_name,
-                    'total_additions': total_additions,
-                    'total_disbursements': total_disbursements,
-                    'current_balance': current_balance
-                }
-                inventory_data.append(item_data)
+        for item_name in sorted(all_items):
+            total_additions = additions_by_item.get(item_name, 0)
+            total_disbursements = disbursements_by_item.get(item_name, 0)
+            current_balance = total_additions - total_disbursements
+            
+            item_data = {
+                'item_name': item_name,
+                'total_additions': total_additions,
+                'total_disbursements': total_disbursements,
+                'current_balance': current_balance
+            }
+            inventory_data.append(item_data)
         
         return inventory_data
     except Exception as e:
@@ -397,47 +407,63 @@ def get_available_items_with_prices(file_path):
         return {}
     
     try:
-        wb = openpyxl.load_workbook(file_path, data_only=True)  # data_only=True to get calculated values
+        wb = openpyxl.load_workbook(file_path)
         add_sheet = wb["اذن الاضافه"]
-        inventory_sheet = wb["المخزون"]
+        disburse_sheet = wb["اذن الصرف"]
         
-        # Get current inventory balances
-        inventory_balances = {}
-        for row_num in range(2, inventory_sheet.max_row + 1):
-            item_name = inventory_sheet.cell(row=row_num, column=1).value
-            if item_name:  # Only process rows with item names
-                balance = inventory_sheet.cell(row=row_num, column=4).value or 0
+        # Calculate additions per item
+        additions_by_item = {}
+        for row_num in range(2, add_sheet.max_row + 1):
+            item_name = add_sheet.cell(row=row_num, column=3).value
+            quantity = add_sheet.cell(row=row_num, column=4).value or 0
+            if item_name:
                 try:
-                    inventory_balances[item_name] = float(balance)
+                    quantity = float(quantity)
                 except (ValueError, TypeError):
-                    inventory_balances[item_name] = 0
+                    quantity = 0
+                additions_by_item[item_name] = additions_by_item.get(item_name, 0) + quantity
         
-        print(f"[DEBUG] Inventory balances: {inventory_balances}")
+        # Calculate disbursements per item
+        disbursements_by_item = {}
+        for row_num in range(2, disburse_sheet.max_row + 1):
+            item_name = disburse_sheet.cell(row=row_num, column=3).value
+            quantity = disburse_sheet.cell(row=row_num, column=4).value or 0
+            if item_name:
+                try:
+                    quantity = float(quantity)
+                except (ValueError, TypeError):
+                    quantity = 0
+                disbursements_by_item[item_name] = disbursements_by_item.get(item_name, 0) + quantity
+        
+        # Calculate current balances
+        inventory_balances = {}
+        all_items = set(additions_by_item.keys()) | set(disbursements_by_item.keys())
+        for item_name in all_items:
+            balance = additions_by_item.get(item_name, 0) - disbursements_by_item.get(item_name, 0)
+            inventory_balances[item_name] = balance
         
         # Get item prices from additions
         item_prices = {}
         item_quantities = {}
         
-        # Skip header row (row 1)
         for row_num in range(2, add_sheet.max_row + 1):
-            item_name = add_sheet.cell(row=row_num, column=3).value  # Item name column
-            quantity = add_sheet.cell(row=row_num, column=4).value or 0  # Quantity column
-            unit_price = add_sheet.cell(row=row_num, column=5).value or 0  # Unit price column
+            item_name = add_sheet.cell(row=row_num, column=3).value
+            quantity = add_sheet.cell(row=row_num, column=4).value or 0
+            unit_price = add_sheet.cell(row=row_num, column=5).value or 0
             
             try:
                 quantity = float(quantity)
                 unit_price = float(unit_price)
             except (ValueError, TypeError):
-                continue  # Skip invalid rows
+                continue
             
             if item_name and quantity > 0:
-                # Only include items that have positive balance in inventory
+                # Only include items that have positive balance
                 if inventory_balances.get(item_name, 0) > 0:
                     if item_name not in item_prices:
                         item_prices[item_name] = 0
                         item_quantities[item_name] = 0
                     
-                    # Accumulate weighted prices
                     item_prices[item_name] += unit_price * quantity
                     item_quantities[item_name] += quantity
         

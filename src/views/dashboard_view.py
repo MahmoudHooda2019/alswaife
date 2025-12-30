@@ -7,6 +7,7 @@ from views.purchases_view import PurchasesView
 from views.inventory_add_view import InventoryAddView
 from views.inventory_disburse_view import InventoryDisburseView
 from views.slides_add_view import SlidesAddView
+from views.reports_view import ReportsView
 from utils.path_utils import resource_path
 from utils.reports_utils import parse_user_request_with_ai, execute_report
 from utils.update_utils import check_for_updates, download_update, install_update
@@ -349,7 +350,13 @@ class DashboardView:
         self.page.update()
 
     def open_reports(self, e):
-        """Open reports dialog with AI-powered natural language input"""
+        """Open the enhanced reports view"""
+        self.page.clean()
+        reports_view = ReportsView(self.page, on_back=self.show)
+        reports_view.build_ui()
+
+    def open_reports_legacy(self, e):
+        """Open reports dialog with AI-powered natural language input (legacy)"""
         
         # Text field for user request
         request_field = ft.TextField(
@@ -1037,64 +1044,134 @@ class DashboardView:
         self.page.update()
 
     def open_sync(self, e):
-        """Open sync dialog for LAN data synchronization"""
-        from utils.sync_utils import get_local_ip
+        """Open sync dialog - search for devices and compare"""
+        from utils.sync_utils import get_local_ip, discover_devices, CompareServer, COMPARE_PORT
+        import threading
+        
+        local_ip = get_local_ip()
+        self.discovered_devices = []
+        self.compare_server = None
+        
+        # عناصر الواجهة
+        devices_list = ft.Column(spacing=5, scroll=ft.ScrollMode.AUTO)
+        status_text = ft.Text("جاري البحث عن الأجهزة...", size=13, color=ft.Colors.ORANGE_300)
+        search_progress = ft.ProgressRing(width=20, height=20, color=ft.Colors.CYAN_400, stroke_width=2)
+        refresh_btn = ft.IconButton(
+            icon=ft.Icons.REFRESH,
+            icon_color=ft.Colors.CYAN_400,
+            tooltip="إعادة البحث",
+            visible=False,
+        )
         
         def close_dlg(e):
+            # إيقاف خادم المقارنة عند الإغلاق
+            if self.compare_server:
+                self.compare_server.stop()
             dlg.open = False
             self.page.update()
         
-        local_ip = get_local_ip()
+        def on_device_click(device_ip):
+            """عند اختيار جهاز - بدء المقارنة"""
+            close_dlg(None)
+            self._perform_compare(device_ip)
         
-        # Card for sending data
-        send_card = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
+        def create_device_item(ip):
+            """إنشاء عنصر جهاز في القائمة"""
+            return ft.Container(
+                content=ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.UPLOAD, size=45, color=ft.Colors.WHITE),
-                        ft.Text("إرسال البيانات", size=16, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER),
-                        ft.Text("إرسال لجهاز آخر", size=12, color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
+                        ft.Icon(ft.Icons.COMPUTER, color=ft.Colors.CYAN_400, size=24),
+                        ft.Column(
+                            controls=[
+                                ft.Text(ip, size=14, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
+                                ft.Text("جهاز متاح للمزامنة", size=11, color=ft.Colors.GREY_400),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                        ft.Icon(ft.Icons.ARROW_FORWARD_IOS, color=ft.Colors.GREY_500, size=16),
                     ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=10,
+                    alignment=ft.MainAxisAlignment.START,
+                    spacing=15,
                 ),
-                padding=20,
-                alignment=ft.alignment.center,
-                bgcolor=ft.Colors.BLUE_700,
-                border_radius=15,
+                bgcolor=ft.Colors.GREY_800,
+                border_radius=10,
+                padding=15,
                 ink=True,
-                on_click=lambda e: self._open_send_dialog(close_dlg),
-                width=160,
-                height=150,
-            ),
-            elevation=8,
-        )
+                on_click=lambda e, ip=ip: on_device_click(ip),
+            )
         
-        # Card for receiving data
-        receive_card = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Icon(ft.Icons.DOWNLOAD, size=45, color=ft.Colors.WHITE),
-                        ft.Text("استقبال البيانات", size=16, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER),
-                        ft.Text("استقبال من جهاز آخر", size=12, color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=10,
-                ),
-                padding=20,
-                alignment=ft.alignment.center,
-                bgcolor=ft.Colors.GREEN_700,
-                border_radius=15,
-                ink=True,
-                on_click=lambda e: self._open_receive_dialog(close_dlg),
-                width=160,
-                height=150,
-            ),
-            elevation=8,
-        )
+        def update_devices_list(devices):
+            """تحديث قائمة الأجهزة"""
+            devices_list.controls.clear()
+            if devices:
+                for ip in devices:
+                    devices_list.controls.append(create_device_item(ip))
+                status_text.value = f"تم العثور على {len(devices)} جهاز"
+                status_text.color = ft.Colors.GREEN_300
+            else:
+                devices_list.controls.append(
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                ft.Icon(ft.Icons.DEVICES_OTHER, color=ft.Colors.GREY_600, size=40),
+                                ft.Text("لم يتم العثور على أجهزة", size=13, color=ft.Colors.GREY_500),
+                                ft.Text("تأكد من تشغيل التطبيق على الجهاز الآخر", size=11, color=ft.Colors.GREY_600),
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=5,
+                        ),
+                        padding=20,
+                        alignment=ft.alignment.center,
+                    )
+                )
+                status_text.value = "لم يتم العثور على أجهزة"
+                status_text.color = ft.Colors.ORANGE_300
+            
+            search_progress.visible = False
+            refresh_btn.visible = True
+            self.page.update()
+        
+        def search_devices():
+            """البحث عن الأجهزة في الشبكة"""
+            search_progress.visible = True
+            refresh_btn.visible = False
+            status_text.value = "جاري البحث عن الأجهزة..."
+            status_text.color = ft.Colors.ORANGE_300
+            devices_list.controls.clear()
+            devices_list.controls.append(
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.ProgressRing(width=30, height=30, color=ft.Colors.CYAN_400, stroke_width=3),
+                            ft.Text("جاري فحص الشبكة...", size=12, color=ft.Colors.GREY_400),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=10,
+                    ),
+                    padding=30,
+                    alignment=ft.alignment.center,
+                )
+            )
+            self.page.update()
+            
+            def do_search():
+                devices = discover_devices(port=COMPARE_PORT, timeout=3)
+                self.discovered_devices = devices
+                update_devices_list(devices)
+            
+            thread = threading.Thread(target=do_search)
+            thread.daemon = True
+            thread.start()
+        
+        def on_refresh(e):
+            search_devices()
+        
+        refresh_btn.on_click = on_refresh
+        
+        # بدء خادم المقارنة للسماح للأجهزة الأخرى بالاتصال
+        self.compare_server = CompareServer()
+        self.compare_server.start()
         
         dlg = ft.AlertDialog(
             modal=True,
@@ -1108,6 +1185,7 @@ class DashboardView:
             content=ft.Container(
                 content=ft.Column(
                     controls=[
+                        # معلومات الجهاز الحالي
                         ft.Container(
                             content=ft.Row(
                                 controls=[
@@ -1121,18 +1199,40 @@ class DashboardView:
                             border_radius=10,
                             padding=10,
                         ),
-                        ft.Container(height=15),
-                        ft.Text("اختر العملية:", size=14, color=ft.Colors.GREY_400),
                         ft.Container(height=10),
+                        # شريط الحالة
                         ft.Row(
-                            controls=[send_card, receive_card],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=20,
+                            controls=[
+                                search_progress,
+                                status_text,
+                                ft.Container(expand=True),
+                                refresh_btn,
+                            ],
+                            alignment=ft.MainAxisAlignment.START,
+                            spacing=10,
+                        ),
+                        ft.Divider(color=ft.Colors.GREY_700),
+                        # قائمة الأجهزة
+                        ft.Container(
+                            content=devices_list,
+                            height=250,
+                            border=ft.border.all(1, ft.Colors.GREY_700),
+                            border_radius=10,
+                            padding=10,
+                        ),
+                        ft.Container(height=5),
+                        ft.Text(
+                            "اختر جهازاً للمقارنة وإرسال الفروقات",
+                            size=11,
+                            color=ft.Colors.GREY_500,
+                            text_align=ft.TextAlign.CENTER,
                         ),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=5,
                 ),
                 padding=10,
+                width=380,
             ),
             actions=[
                 ft.TextButton(
@@ -1148,71 +1248,273 @@ class DashboardView:
         self.page.overlay.append(dlg)
         dlg.open = True
         self.page.update()
-
-    def _open_send_dialog(self, close_parent):
-        """فتح نافذة إرسال البيانات"""
-        close_parent(None)
         
-        ip_field = ft.TextField(
-            label="عنوان IP للجهاز المستقبل",
-            hint_text="مثال: 192.168.1.100",
-            value="192.168.",
-            width=280,
-            border_radius=10,
-            filled=True,
-            bgcolor=ft.Colors.GREY_800,
-            border_color=ft.Colors.GREY_600,
-            focused_border_color=ft.Colors.BLUE_400,
-            prefix_icon=ft.Icons.COMPUTER,
-            rtl=False,
-            text_align=ft.TextAlign.LEFT,
+        # بدء البحث تلقائياً
+        search_devices()
+
+    def _perform_compare(self, target_ip):
+        """تنفيذ عملية المقارنة وعرض الفروقات"""
+        from utils.sync_utils import CompareClient
+        
+        # عرض نافذة التحميل
+        loading_dlg = ft.AlertDialog(
+            modal=True,
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.ProgressRing(width=40, height=40, color=ft.Colors.ORANGE_400, stroke_width=4),
+                        ft.Container(height=10),
+                        ft.Text("جاري المقارنة...", size=14, color=ft.Colors.WHITE),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=10,
+                ),
+                padding=30,
+                width=200,
+            ),
+            bgcolor=ft.Colors.GREY_900,
+            shape=ft.RoundedRectangleBorder(radius=15),
         )
+        self.page.overlay.append(loading_dlg)
+        loading_dlg.open = True
+        self.page.update()
+        
+        client = CompareClient()
+        
+        def on_compare_complete(differences, remote_ip):
+            loading_dlg.open = False
+            self.page.update()
+            self._show_differences_dialog(differences, remote_ip)
+        
+        def on_error(error):
+            loading_dlg.open = False
+            self.page.update()
+            self._show_sync_result(f"خطأ: {error}", False)
+        
+        client.on_compare_complete = on_compare_complete
+        client.on_error = on_error
+        
+        client.get_remote_files_info(target_ip)
+
+    def _show_differences_dialog(self, differences, target_ip):
+        """عرض نافذة الفروقات مع إمكانية الإرسال"""
+        from utils.sync_utils import CompareClient
+        from datetime import datetime
+        
+        if not differences:
+            self._show_sync_result("لا توجد فروقات - البيانات متطابقة!", True)
+            return
+        
+        # قائمة الملفات المحددة للإرسال
+        selected_files = set()
+        
+        def format_size(size):
+            if size < 1024:
+                return f"{size} B"
+            elif size < 1024 * 1024:
+                return f"{size / 1024:.1f} KB"
+            else:
+                return f"{size / (1024 * 1024):.1f} MB"
+        
+        def format_time(timestamp):
+            if timestamp == 0:
+                return "-"
+            return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M")
+        
+        def get_status_color(status):
+            if status == 'local_only':
+                return ft.Colors.BLUE_400
+            elif status == 'remote_only':
+                return ft.Colors.GREEN_400
+            elif status == 'local_newer':
+                return ft.Colors.ORANGE_400
+            else:
+                return ft.Colors.PURPLE_400
+        
+        def get_status_icon(status):
+            if status == 'local_only':
+                return ft.Icons.ADD_CIRCLE
+            elif status == 'remote_only':
+                return ft.Icons.DOWNLOAD
+            elif status == 'local_newer':
+                return ft.Icons.ARROW_UPWARD
+            else:
+                return ft.Icons.ARROW_DOWNWARD
+        
+        # إنشاء عناصر القائمة
+        list_items = []
+        checkboxes = {}
+        
+        def on_checkbox_change(e, file_path):
+            if e.control.value:
+                selected_files.add(file_path)
+            else:
+                selected_files.discard(file_path)
+            update_send_button()
+        
+        def update_send_button():
+            send_btn.disabled = len(selected_files) == 0
+            send_btn.text = f"إرسال ({len(selected_files)})" if selected_files else "إرسال"
+            self.page.update()
+        
+        def select_all(e):
+            for path, cb in checkboxes.items():
+                # فقط الملفات المحلية يمكن إرسالها
+                diff = next((d for d in differences if d['path'] == path), None)
+                if diff and diff['status'] in ['local_only', 'local_newer']:
+                    cb.value = True
+                    selected_files.add(path)
+            update_send_button()
+        
+        def deselect_all(e):
+            for cb in checkboxes.values():
+                cb.value = False
+            selected_files.clear()
+            update_send_button()
+        
+        for diff in differences:
+            # فقط الملفات المحلية أو الأحدث محلياً يمكن إرسالها
+            can_send = diff['status'] in ['local_only', 'local_newer']
+            
+            cb = ft.Checkbox(
+                value=False,
+                disabled=not can_send,
+                on_change=lambda e, p=diff['path']: on_checkbox_change(e, p),
+            )
+            checkboxes[diff['path']] = cb
+            
+            item = ft.Container(
+                content=ft.Row(
+                    controls=[
+                        cb,
+                        ft.Icon(get_status_icon(diff['status']), color=get_status_color(diff['status']), size=20),
+                        ft.Column(
+                            controls=[
+                                ft.Text(diff['path'], size=12, color=ft.Colors.WHITE, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                ft.Text(diff['status_text'], size=10, color=get_status_color(diff['status'])),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                        ft.Column(
+                            controls=[
+                                ft.Text(f"محلي: {format_size(diff['local_size'])}", size=9, color=ft.Colors.GREY_400),
+                                ft.Text(f"بعيد: {format_size(diff['remote_size'])}", size=9, color=ft.Colors.GREY_400),
+                            ],
+                            spacing=2,
+                            horizontal_alignment=ft.CrossAxisAlignment.END,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                    spacing=10,
+                ),
+                bgcolor=ft.Colors.GREY_800,
+                border_radius=8,
+                padding=10,
+                margin=ft.margin.only(bottom=5),
+            )
+            list_items.append(item)
         
         def close_dlg(e):
             dlg.open = False
             self.page.update()
         
-        def start_send(e):
-            target_ip = ip_field.value.strip()
-            if not target_ip:
-                ip_field.error_text = "يرجى إدخال عنوان IP"
-                self.page.update()
+        def send_selected(e):
+            if not selected_files:
                 return
             close_dlg(e)
-            self._perform_send(target_ip)
+            self._send_selected_files(target_ip, list(selected_files))
+        
+        send_btn = ft.ElevatedButton(
+            "إرسال",
+            icon=ft.Icons.SEND,
+            bgcolor=ft.Colors.ORANGE_700,
+            color=ft.Colors.WHITE,
+            disabled=True,
+            on_click=send_selected,
+        )
+        
+        # إحصائيات
+        local_only = len([d for d in differences if d['status'] == 'local_only'])
+        remote_only = len([d for d in differences if d['status'] == 'remote_only'])
+        local_newer = len([d for d in differences if d['status'] == 'local_newer'])
+        remote_newer = len([d for d in differences if d['status'] == 'remote_newer'])
+        
+        stats_row = ft.Row(
+            controls=[
+                ft.Container(
+                    content=ft.Text(f"محلي فقط: {local_only}", size=10, color=ft.Colors.BLUE_300),
+                    bgcolor=ft.Colors.BLUE_900,
+                    border_radius=5,
+                    padding=5,
+                ),
+                ft.Container(
+                    content=ft.Text(f"بعيد فقط: {remote_only}", size=10, color=ft.Colors.GREEN_300),
+                    bgcolor=ft.Colors.GREEN_900,
+                    border_radius=5,
+                    padding=5,
+                ),
+                ft.Container(
+                    content=ft.Text(f"محلي أحدث: {local_newer}", size=10, color=ft.Colors.ORANGE_300),
+                    bgcolor=ft.Colors.ORANGE_900,
+                    border_radius=5,
+                    padding=5,
+                ),
+                ft.Container(
+                    content=ft.Text(f"بعيد أحدث: {remote_newer}", size=10, color=ft.Colors.PURPLE_300),
+                    bgcolor=ft.Colors.PURPLE_900,
+                    border_radius=5,
+                    padding=5,
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=5,
+            wrap=True,
+        )
         
         dlg = ft.AlertDialog(
             modal=True,
             title=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.UPLOAD, color=ft.Colors.BLUE_400, size=24),
-                    ft.Text("إرسال البيانات", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200, size=16),
+                    ft.Icon(ft.Icons.COMPARE_ARROWS, color=ft.Colors.ORANGE_400, size=24),
+                    ft.Text(f"الفروقات ({len(differences)} ملف)", weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_200, size=16),
                 ],
                 spacing=10,
             ),
             content=ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Text("تأكد من أن الجهاز الآخر في وضع الاستقبال", size=13, color=ft.Colors.ORANGE_300),
-                        ft.Container(height=15),
-                        ip_field,
+                        stats_row,
+                        ft.Divider(color=ft.Colors.GREY_700),
+                        ft.Row(
+                            controls=[
+                                ft.TextButton("تحديد الكل", on_click=select_all, style=ft.ButtonStyle(color=ft.Colors.CYAN_300)),
+                                ft.TextButton("إلغاء التحديد", on_click=deselect_all, style=ft.ButtonStyle(color=ft.Colors.GREY_400)),
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                        ft.Container(
+                            content=ft.Column(
+                                controls=list_items,
+                                scroll=ft.ScrollMode.AUTO,
+                                spacing=0,
+                            ),
+                            height=300,
+                            border=ft.border.all(1, ft.Colors.GREY_700),
+                            border_radius=10,
+                            padding=10,
+                        ),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=5,
+                    spacing=10,
                 ),
                 padding=10,
-                width=320,
+                width=450,
             ),
             actions=[
-                ft.ElevatedButton(
-                    "إرسال",
-                    icon=ft.Icons.SEND,
-                    bgcolor=ft.Colors.BLUE_700,
-                    color=ft.Colors.WHITE,
-                    on_click=start_send,
-                ),
+                send_btn,
                 ft.TextButton(
-                    "إلغاء",
+                    "إغلاق",
                     on_click=close_dlg,
                     style=ft.ButtonStyle(color=ft.Colors.GREY_400)
                 ),
@@ -1225,114 +1527,12 @@ class DashboardView:
         dlg.open = True
         self.page.update()
 
-    def _open_receive_dialog(self, close_parent):
-        """فتح نافذة استقبال البيانات"""
-        from utils.sync_utils import get_local_ip, SyncServer
+    def _send_selected_files(self, target_ip, file_paths):
+        """إرسال الملفات المحددة"""
+        from utils.sync_utils import CompareClient
         
-        close_parent(None)
-        
-        local_ip = get_local_ip()
-        self.sync_server = SyncServer()
-        
-        progress_bar = ft.ProgressBar(width=280, value=0, color=ft.Colors.GREEN_400, bgcolor=ft.Colors.GREY_700)
-        status_text = ft.Text("في انتظار الاتصال...", size=14, color=ft.Colors.WHITE)
-        progress_text = ft.Text("0%", size=12, color=ft.Colors.GREY_400)
-        
-        def close_dlg(e):
-            self.sync_server.stop()
-            dlg.open = False
-            self.page.update()
-        
-        def on_progress(percent):
-            progress_bar.value = percent / 100
-            progress_text.value = f"{int(percent)}%"
-            status_text.value = "جاري استقبال البيانات..."
-            self.page.update()
-        
-        def on_complete(success, message):
-            self.sync_server.stop()
-            dlg.open = False
-            self.page.update()
-            self._show_sync_result(message, success)
-        
-        def on_error(error):
-            self.sync_server.stop()
-            dlg.open = False
-            self.page.update()
-            self._show_sync_result(f"خطأ: {error}", False)
-        
-        self.sync_server.on_progress = on_progress
-        self.sync_server.on_complete = on_complete
-        self.sync_server.on_error = on_error
-        
-        success, result = self.sync_server.start()
-        
-        if not success:
-            self._show_sync_result(f"فشل في بدء الخادم: {result}", False)
-            return
-        
-        dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.GREEN_400, size=24),
-                    ft.Text("استقبال البيانات", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_200, size=16),
-                ],
-                spacing=10,
-            ),
-            content=ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Container(
-                            content=ft.Column(
-                                controls=[
-                                    ft.Text("أدخل هذا العنوان في الجهاز المرسل:", size=13, color=ft.Colors.GREY_400),
-                                    ft.Container(
-                                        content=ft.Text(local_ip, size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.CYAN_300, selectable=True),
-                                        bgcolor=ft.Colors.GREY_800,
-                                        border_radius=10,
-                                        padding=15,
-                                        alignment=ft.alignment.center,
-                                    ),
-                                ],
-                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                                spacing=10,
-                            ),
-                            padding=10,
-                        ),
-                        ft.Divider(color=ft.Colors.GREY_700),
-                        ft.ProgressRing(width=30, height=30, color=ft.Colors.GREEN_400, stroke_width=3),
-                        status_text,
-                        progress_bar,
-                        progress_text,
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=10,
-                ),
-                padding=10,
-                width=320,
-            ),
-            actions=[
-                ft.TextButton(
-                    "إلغاء",
-                    on_click=close_dlg,
-                    style=ft.ButtonStyle(color=ft.Colors.RED_300)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.CENTER,
-            bgcolor=ft.Colors.GREY_900,
-            shape=ft.RoundedRectangleBorder(radius=15),
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
-
-    def _perform_send(self, target_ip):
-        """تنفيذ عملية الإرسال"""
-        from utils.sync_utils import SyncClient
-        
-        progress_bar = ft.ProgressBar(width=280, value=0, color=ft.Colors.BLUE_400, bgcolor=ft.Colors.GREY_700)
-        status_text = ft.Text("جاري تجهيز البيانات...", size=14, color=ft.Colors.WHITE)
+        progress_bar = ft.ProgressBar(width=280, value=0, color=ft.Colors.ORANGE_400, bgcolor=ft.Colors.GREY_700)
+        status_text = ft.Text("جاري تجهيز الملفات...", size=14, color=ft.Colors.WHITE)
         progress_text = ft.Text("0%", size=12, color=ft.Colors.GREY_400)
         
         progress_dlg = ft.AlertDialog(
@@ -1340,11 +1540,12 @@ class DashboardView:
             content=ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Icon(ft.Icons.UPLOAD, size=40, color=ft.Colors.BLUE_400),
+                        ft.Icon(ft.Icons.UPLOAD, size=40, color=ft.Colors.ORANGE_400),
                         ft.Container(height=10),
                         status_text,
                         progress_bar,
                         progress_text,
+                        ft.Text(f"إرسال {len(file_paths)} ملف", size=11, color=ft.Colors.GREY_500),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=10,
@@ -1359,15 +1560,15 @@ class DashboardView:
         progress_dlg.open = True
         self.page.update()
         
-        client = SyncClient()
+        client = CompareClient()
         
         def on_progress(percent):
             progress_bar.value = percent / 100
             progress_text.value = f"{int(percent)}%"
             if percent < 30:
-                status_text.value = "جاري ضغط البيانات..."
+                status_text.value = "جاري ضغط الملفات..."
             else:
-                status_text.value = "جاري إرسال البيانات..."
+                status_text.value = "جاري إرسال الملفات..."
             self.page.update()
         
         def on_complete(success, message):
@@ -1380,12 +1581,12 @@ class DashboardView:
             self.page.update()
             self._show_sync_result(error, False)
         
-        client.on_progress = on_progress
-        client.on_complete = on_complete
+        client.on_send_progress = on_progress
+        client.on_send_complete = on_complete
         client.on_error = on_error
         
-        client.send_data(target_ip)
-    
+        client.send_selected_files(target_ip, file_paths)
+
     def _show_sync_result(self, message, success):
         """Show sync result dialog"""
         def close_dlg(e):

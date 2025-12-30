@@ -68,6 +68,11 @@ class AttendanceView:
             ),
             actions=[
                 ft.IconButton(
+                    icon=ft.Icons.FILE_OPEN,
+                    on_click=self.open_attendance_file,
+                    tooltip="فتح ملف الحضور"
+                ),
+                ft.IconButton(
                     icon=ft.Icons.ADD,
                     on_click=self.add_new_employee,
                     tooltip="إضافة موظف جديد"
@@ -1064,3 +1069,22 @@ class AttendanceView:
                 dashboard.show(save_callback)
             except:
                 dashboard.show(None)
+    
+    def open_attendance_file(self, e):
+        """Open the attendance Excel file directly"""
+        documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
+        attendance_path = os.path.join(documents_path, "حضور وانصراف")
+        filepath = os.path.join(attendance_path, "سجل الحضور والانصراف.xlsx")
+        
+        if os.path.exists(filepath):
+            try:
+                if platform.system() == 'Windows':
+                    os.startfile(filepath)
+                elif platform.system() == 'Darwin':
+                    subprocess.call(['open', filepath])
+                else:
+                    subprocess.call(['xdg-open', filepath])
+            except Exception as ex:
+                self.show_message(f"فشل في فتح الملف: {ex}", error=True)
+        else:
+            self.show_message("ملف الحضور غير موجود، قم بحفظ البيانات أولاً", error=True)

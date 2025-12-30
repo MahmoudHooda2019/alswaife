@@ -20,11 +20,12 @@ from utils.inventory_utils import (
 class InventoryDisburseRow:
     """Row UI for inventory disbursement with styling similar to blocks view"""
 
-    def __init__(self, page: ft.Page, delete_callback, available_items: list, item_prices: dict):
+    def __init__(self, page: ft.Page, delete_callback, available_items: list, item_prices: dict, inventory_balances: dict = None):
         self.page = page
         self.delete_callback = delete_callback
         self.available_items = available_items
         self.item_prices = item_prices
+        self.inventory_balances = inventory_balances or {}
         self._build_controls()
 
     def _create_styled_textfield(self, label, width, **kwargs):
@@ -149,13 +150,25 @@ class InventoryDisburseRow:
         self.row = self.card
 
     def _on_item_selected(self, e=None):
-        """Handle item selection - auto-fill unit price"""
+        """Handle item selection - auto-fill unit price and update quantity hint"""
         selected_item = self.item_dropdown.value
         if selected_item and selected_item in self.item_prices:
             price = round(self.item_prices[selected_item], 2)
             self.unit_price_field.value = f"{price:.2f}"
         else:
             self.unit_price_field.value = "0"
+        
+        # Update quantity hint with available balance
+        if selected_item and selected_item in self.inventory_balances:
+            balance = self.inventory_balances[selected_item]
+            # Format balance without decimals if it's a whole number
+            if balance == int(balance):
+                self.quantity_field.hint_text = f"{int(balance)}"
+            else:
+                self.quantity_field.hint_text = f"{balance:.2f}"
+        else:
+            self.quantity_field.hint_text = None
+        
         self._calculate_total()
         self.page.update()
 
@@ -319,6 +332,7 @@ class InventoryDisburseView:
         for row in self.rows:
             row.available_items = self.available_items
             row.item_prices = self.item_prices
+            row.inventory_balances = self.inventory_balances
             row.item_dropdown.options = [ft.dropdown.Option(item) for item in self.available_items]
         self.page.update()
         self._show_dialog("تم التحديث", f"تم تحديث البيانات - {len(self.available_items)} صنف متاح", ft.Colors.GREEN_400)
@@ -330,6 +344,7 @@ class InventoryDisburseView:
             delete_callback=self.delete_row,
             available_items=self.available_items,
             item_prices=self.item_prices,
+            inventory_balances=self.inventory_balances,
         )
         self.rows.append(row)
         self.rows_container.controls.append(row.row)
