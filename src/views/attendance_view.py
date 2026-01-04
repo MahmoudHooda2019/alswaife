@@ -9,8 +9,6 @@ import platform
 import subprocess
 from utils.attendance_utils import create_or_update_attendance, load_attendance_data
 from utils.purchases_utils import add_income_record, export_purchases_to_excel
-from tkinter import filedialog
-import tkinter as tk
 from utils.utils import resource_path, is_excel_running, get_current_date
 import json
 from typing import Optional

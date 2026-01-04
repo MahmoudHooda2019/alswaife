@@ -11,12 +11,19 @@ from datetime import datetime
 
 def resource_path(relative_path):
     """Get absolute path to resource, works for dev and for PyInstaller"""
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
-    except Exception:
+    # Check if running as PyInstaller bundle
+    if getattr(sys, 'frozen', False):
+        # Running as compiled exe
+        # First check _MEIPASS (for onefile mode)
+        if hasattr(sys, '_MEIPASS'):
+            base_path = sys._MEIPASS
+        else:
+            # For onedir mode, use the exe directory
+            base_path = os.path.dirname(sys.executable)
+    else:
+        # Running in development
         base_path = os.path.abspath(".")
-
+    
     return os.path.join(base_path, relative_path)
 
 

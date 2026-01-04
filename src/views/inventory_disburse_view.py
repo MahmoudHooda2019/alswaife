@@ -445,10 +445,17 @@ class InventoryDisburseView:
         def close_dlg(e=None):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
+            self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
 
         def continue_save(e=None):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
             self._do_save()
 
         dlg = ft.AlertDialog(
@@ -478,6 +485,11 @@ class InventoryDisburseView:
         def close_dlg(e=None):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
+            self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
 
         dlg = ft.AlertDialog(
             title=ft.Text(title, color=title_color, weight=ft.FontWeight.BOLD),
@@ -499,6 +511,11 @@ class InventoryDisburseView:
         def close_dlg(e=None):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
+            self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
 
         def open_file(e=None):
             close_dlg()

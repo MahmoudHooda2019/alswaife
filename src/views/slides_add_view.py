@@ -874,6 +874,9 @@ class SlidesAddView:
         def close_dlg(e=None):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
+            self.page.update()
 
         def continue_save(e=None):
             dlg.open = False
@@ -934,6 +937,9 @@ class SlidesAddView:
         def close_dlg(e=None):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
+            self.page.update()
 
         dlg = ft.AlertDialog(
             title=ft.Text(title, color=title_color, weight=ft.FontWeight.BOLD),
@@ -958,6 +964,9 @@ class SlidesAddView:
         """Show success dialog with file actions"""
         def close_dlg(e=None):
             dlg.open = False
+            self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
             self.page.update()
 
         def open_file(e=None):

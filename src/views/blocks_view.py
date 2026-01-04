@@ -1,12 +1,8 @@
 import os
-from datetime import datetime
-from pickle import TRUE
 import flet as ft
-from openpyxl import load_workbook
-import xlsxwriter
 
 from utils.blocks_utils import export_simple_blocks_excel
-from utils.log_utils import log_error, log_exception
+from utils.log_utils import log_exception
 from utils.utils import is_excel_running, get_current_date
 
 class BlockRow:

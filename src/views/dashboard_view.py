@@ -8,7 +8,6 @@ from views.inventory_add_view import InventoryAddView
 from views.inventory_disburse_view import InventoryDisburseView
 from views.slides_add_view import SlidesAddView
 from views.reports_view import ReportsView
-from utils.reports_utils import execute_report
 from utils.update_utils import check_for_updates, download_update, install_update
 from utils.invoice_utils import save_invoice, update_client_ledger
 from utils.log_utils import log_error, log_exception
@@ -208,6 +207,9 @@ class DashboardView:
         def close_dlg(e):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
+            self.page.update()
         
         dlg = ft.AlertDialog(
             title=ft.Text("تنبيه"),
@@ -225,6 +227,9 @@ class DashboardView:
         """Show about dialog with developer information"""
         def close_dlg(e):
             dlg.open = False
+            self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
             self.page.update()
         
         dlg = ft.AlertDialog(
@@ -401,6 +406,9 @@ class DashboardView:
         def close_dlg(e):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
+            self.page.update()
         
         def start_download(e):
             close_dlg(e)
@@ -460,6 +468,9 @@ class DashboardView:
         """Show dialog when no update is available"""
         def close_dlg(e):
             dlg.open = False
+            self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
             self.page.update()
         
         dlg = ft.AlertDialog(
@@ -590,6 +601,9 @@ class DashboardView:
         def close_dlg(e):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
+            self.page.update()
         
         dlg = ft.AlertDialog(
             modal=True,
@@ -617,6 +631,9 @@ class DashboardView:
         """Show dialog after installer starts"""
         def close_dlg(e):
             dlg.open = False
+            self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
             self.page.update()
         
         def close_app(e):
@@ -662,6 +679,9 @@ class DashboardView:
         """Show update error dialog"""
         def close_dlg(e):
             dlg.open = False
+            self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
             self.page.update()
         
         dlg = ft.AlertDialog(
@@ -1058,6 +1078,9 @@ class DashboardView:
         def close_dlg(e):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
+            self.page.update()
         
         def send_selected(e):
             if not selected_files:
@@ -1232,6 +1255,9 @@ class DashboardView:
         def close_dlg(e):
             dlg.open = False
             self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
+            self.page.update()
         
         icon = ft.Icons.CHECK_CIRCLE if success else ft.Icons.ERROR
         color = ft.Colors.GREEN_400 if success else ft.Colors.RED_400
@@ -1300,6 +1326,9 @@ class DashboardView:
         """Open inventory dialog with options to add or disburse - card style"""
         def close_dlg(e):
             dlg.open = False
+            self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
             self.page.update()
         
         def open_add(e):
@@ -1406,9 +1435,7 @@ class DashboardView:
         """Open add inventory dialog"""
 
         # Close any open dialogs first
-        for overlay in self.page.overlay:
-            if hasattr(overlay, 'open') and overlay.open:
-                overlay.open = False
+        self.page.overlay.clear()
         self.page.update()
         # Store reference to self for back navigation
         self.page._dashboard_ref = self
@@ -1423,9 +1450,7 @@ class DashboardView:
         """Open disburse inventory dialog"""
 
         # Close any open dialogs first
-        for overlay in self.page.overlay:
-            if hasattr(overlay, 'open') and overlay.open:
-                overlay.open = False
+        self.page.overlay.clear()
         self.page.update()
         # Store reference to self for back navigation
         self.page._dashboard_ref = self
@@ -1440,9 +1465,7 @@ class DashboardView:
         """Open add slides inventory dialog"""
 
         # Close any open dialogs first
-        for overlay in self.page.overlay:
-            if hasattr(overlay, 'open') and overlay.open:
-                overlay.open = False
+        self.page.overlay.clear()
         self.page.update()
         # Store reference to self for back navigation
         self.page._dashboard_ref = self

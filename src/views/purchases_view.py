@@ -1,5 +1,4 @@
 import os
-from datetime import datetime
 import flet as ft
 from utils.purchases_utils import export_purchases_to_excel, load_item_names_from_excel
 from utils.utils import is_excel_running, get_current_date

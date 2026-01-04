@@ -3,16 +3,13 @@ Excel Utilities for Invoice Creation
 This module provides functions to generate Excel invoices from invoice data.
 """
 
-import logging
 import xlsxwriter
 import openpyxl
 from openpyxl.cell.cell import MergedCell
 from typing import List, Tuple
 import os
 
-# Set up logging - only ERROR level to reduce noise
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+from utils.log_utils import log_error, log_exception
 
 
 def save_invoice(filepath: str, op_num: str, client: str, driver: str,
@@ -30,18 +27,13 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
         date_str (str, optional): Date string. Defaults to "".
         phone (str, optional): Phone number. Defaults to "".
     """
-    logger.info(f"Starting to save invoice {op_num} to {filepath}")
-    logger.debug(f"Client: {client}, Driver: {driver}, Items count: {len(items)}")
     
     # If file exists, remove it to ensure we create a fresh file
     import os
     if os.path.exists(filepath):
-        logger.info(f"File {filepath} exists, attempting to remove it")
         try:
             os.remove(filepath)
-            logger.info(f"Successfully removed existing file {filepath}")
         except Exception as e:
-            logger.warning(f"Could not remove existing file {filepath}: {e}")
             # If we can't remove the file (e.g. it's open in Excel), continue and let xlsxwriter handle it
             pass
     
@@ -189,10 +181,8 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
     # ==========================
     #   العناصر
     # ==========================
-    logger.info(f"Processing {len(items)} items for invoice {op_num}")
     for item in items:
         try:
-            logger.debug(f"Processing item: {item}")
             desc = item[0]
             block = item[1]
             thickness = item[2]
@@ -201,9 +191,8 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
             length = float(item[5]) if item[5] else 0
             height = float(item[6]) if item[6] else 0
             price_val = int(float(item[7])) if item[7] else 0
-            logger.debug(f"Parsed values - desc: {desc}, block: {block}, thickness: {thickness}, material: {material}, count: {count}, length: {length}, height: {height}, price: {price_val}")
         except (ValueError, IndexError) as e:
-            logger.error(f"Error parsing item {item}: {e}")
+            log_error(f"Error parsing item {item}: {e}")
             continue
 
         if first_item_row is None:
@@ -400,15 +389,13 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
     worksheet.set_column(10, 10, 14)  # إجمالي السعر / المتبقي (جدول المدفوعات)
 
     try:
-        logger.info(f"Attempting to close workbook for invoice {op_num}")
         workbook.close()
-        logger.info(f"Successfully saved invoice {op_num} to {filepath}")
     except PermissionError as e:
-        logger.error(f"Permission error when closing workbook for invoice {op_num}: {e}")
+        log_error(f"Permission error when closing workbook for invoice {op_num}: {e}")
         # Re-raise as a PermissionError so the calling code can handle it
         raise PermissionError("File is currently open in Excel. Please close the file and try again.") from e
     except Exception as e:
-        logger.error(f"Error when closing workbook for invoice {op_num}: {e}")
+        log_error(f"Error when closing workbook for invoice {op_num}: {e}")
         raise
 
 
@@ -423,10 +410,8 @@ def update_payment_in_invoice(filepath: str, payment_amount: float) -> bool:
     Returns:
         bool: True if successful, False otherwise
     """
-    logger.info(f"Updating payment in invoice file: {filepath}")
-    
     if not os.path.exists(filepath):
-        logger.error(f"Invoice file does not exist: {filepath}")
+        log_error(f"Invoice file does not exist: {filepath}")
         return False
     
     try:
@@ -437,7 +422,7 @@ def update_payment_in_invoice(filepath: str, payment_amount: float) -> bool:
         sheet = workbook.active
         
         if sheet is None:
-            logger.error("Could not access active sheet in invoice")
+            log_error("Could not access active sheet in invoice")
             workbook.close()
             return False
         
@@ -453,7 +438,7 @@ def update_payment_in_invoice(filepath: str, payment_amount: float) -> bool:
                 break
         
         if not payments_row:
-            logger.error("Could not find payments table in invoice")
+            log_error("Could not find payments table in invoice")
             workbook.close()
             return False
         
@@ -472,23 +457,20 @@ def update_payment_in_invoice(filepath: str, payment_amount: float) -> bool:
         cell = sheet.cell(row=payment_data_row, column=paid_column)
         if not isinstance(cell, MergedCell):
             cell.value = payment_amount
-            logger.info(f"Updated payment cell at row {payment_data_row}, column {paid_column} with value {payment_amount}")
         else:
-            logger.warning(f"Payment cell is merged, cannot update directly")
             workbook.close()
             return False
         
         # Save the workbook
         workbook.save(filepath)
         workbook.close()
-        logger.info(f"Successfully updated payment in invoice: {filepath}")
         return True
         
     except PermissionError as e:
-        logger.error(f"Permission error updating payment in invoice: {e}")
+        log_error(f"Permission error updating payment in invoice: {e}")
         raise PermissionError("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
     except Exception as e:
-        logger.error(f"Error updating payment in invoice: {e}")
+        log_error(f"Error updating payment in invoice: {e}")
         return False
 
 
@@ -542,7 +524,7 @@ def get_payment_from_invoice(filepath: str) -> float:
         return 0
         
     except Exception as e:
-        logger.error(f"Error reading payment from invoice: {e}")
+        log_error(f"Error reading payment from invoice: {e}")
         return 0
 
 
@@ -558,13 +540,11 @@ def update_payment_in_ledger(folder_path: str, op_num: str, payment_amount: floa
     Returns:
         bool: True if successful, False otherwise
     """
-    logger.info(f"Updating payment in ledger for invoice {op_num} at {folder_path}")
-    
     filename = "كشف حساب.xlsx"
     filepath = os.path.join(folder_path, filename)
     
     if not os.path.exists(filepath):
-        logger.error(f"Ledger file does not exist: {filepath}")
+        log_error(f"Ledger file does not exist: {filepath}")
         return False
     
     try:
@@ -575,7 +555,7 @@ def update_payment_in_ledger(folder_path: str, op_num: str, payment_amount: floa
         sheet = workbook.active
         
         if sheet is None:
-            logger.error("Could not access active sheet in ledger")
+            log_error("Could not access active sheet in ledger")
             workbook.close()
             return False
         
@@ -585,11 +565,9 @@ def update_payment_in_ledger(folder_path: str, op_num: str, payment_amount: floa
             cell_value = sheet.cell(row=row, column=1).value
             if str(cell_value) == str(op_num):
                 found_row = row
-                logger.info(f"Found invoice {op_num} at row {row}")
                 break
         
         if not found_row:
-            logger.warning(f"Invoice {op_num} not found in ledger")
             workbook.close()
             return False
         
@@ -598,27 +576,24 @@ def update_payment_in_ledger(folder_path: str, op_num: str, payment_amount: floa
         payment_cell = sheet.cell(row=found_row, column=9)
         if not isinstance(payment_cell, MergedCell):
             payment_cell.value = payment_amount
-            logger.info(f"Updated payment cell at row {found_row}, column 9 with value {payment_amount}")
         else:
             # If merged, find the top-left cell of the merge
             for merged_range in sheet.merged_cells.ranges:
                 if payment_cell.coordinate in merged_range:
                     top_left = sheet.cell(row=merged_range.min_row, column=merged_range.min_col)
                     top_left.value = payment_amount
-                    logger.info(f"Updated merged payment cell at row {merged_range.min_row} with value {payment_amount}")
                     break
         
         # Save the workbook
         workbook.save(filepath)
         workbook.close()
-        logger.info(f"Successfully updated payment in ledger for invoice {op_num}")
         return True
         
     except PermissionError as e:
-        logger.error(f"Permission error updating payment in ledger: {e}")
+        log_error(f"Permission error updating payment in ledger: {e}")
         raise PermissionError("ملف كشف الحساب مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
     except Exception as e:
-        logger.error(f"Error updating payment in ledger: {e}")
+        log_error(f"Error updating payment in ledger: {e}")
         return False
 
 
@@ -632,18 +607,14 @@ def delete_existing_invoice_file(filepath: str) -> bool:
     Returns:
         bool: True if file was deleted or didn't exist, False if deletion failed
     """
-    logger.info(f"Attempting to delete existing invoice file: {filepath}")
     import os
     try:
         if os.path.exists(filepath):
-            logger.info(f"File {filepath} exists, attempting to delete")
             os.remove(filepath)
-            logger.info(f"Successfully deleted file {filepath}")
             return True
-        logger.info(f"File {filepath} does not exist, returning True")
         return True  # File doesn't exist, so condition is satisfied
     except Exception as e:
-        logger.error(f"Error deleting existing invoice file {filepath}: {e}")
+        log_error(f"Error deleting existing invoice file {filepath}: {e}")
         return False
 
 
@@ -655,7 +626,6 @@ def remove_invoice_from_ledger(folder_path: str, op_num: str):
         folder_path (str): Path to the client's folder
         op_num (str): Invoice number to remove
     """
-    logger.info(f"Attempting to remove invoice {op_num} from ledger at {folder_path}")
     import os
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -664,74 +634,55 @@ def remove_invoice_from_ledger(folder_path: str, op_num: str):
 
     filename = f"كشف حساب.xlsx"
     filepath = os.path.join(folder_path, filename)
-
-    logger.debug(f"Checking if ledger file exists at {filepath}")
     if not os.path.exists(filepath):
-        logger.warning(f"Ledger file does not exist at {filepath}")
         return False
 
     workbook = None
     try:
-        logger.info(f"Loading existing ledger workbook from {filepath}")
         workbook = openpyxl.load_workbook(filepath)
         sheet = workbook.active
         if sheet is None:
-            logger.error(f"Could not access active sheet in ledger")
+            log_error(f"Could not access active sheet in ledger")
             return False
 
         # Find the row with the matching invoice number
-        logger.debug(f"Searching for invoice {op_num} in ledger")
         found_row = None
         for row in range(3, sheet.max_row + 1):  # Start from row 3 (after headers)
             cell_value = sheet.cell(row=row, column=1).value
             if cell_value == op_num:  # Column 1 is invoice number
                 found_row = row
-                logger.info(f"Found invoice {op_num} at row {row}")
                 break
             elif cell_value is not None:
-                logger.debug(f"Checking row {row}, value: {cell_value}")
-        
+                pass
         if not found_row:
-            logger.warning(f"Invoice {op_num} not found in ledger")
             return False  # Invoice not found in ledger
 
         # Determine how many rows this invoice entry spans
         # Look for the next row that has a value in column A or the total row
-        logger.debug(f"Determining how many rows invoice {op_num} spans, starting from row {found_row}")
         end_row = found_row
         for row_idx in range(found_row + 1, sheet.max_row + 1):
             cell_value = sheet.cell(row=row_idx, column=1).value
             if cell_value == "المجموع":  # This is the total row
-                logger.debug(f"Found total row at {row_idx}")
                 break
             elif cell_value is not None and cell_value != "":  # New invoice starts
-                logger.debug(f"Found new invoice at row {row_idx}, value: {cell_value}")
                 break
             else:
                 end_row = row_idx
-        
-        logger.info(f"Invoice {op_num} spans rows {found_row} to {end_row}")
-        
         # Also need to find the total row to update calculations
         total_row = None
         for row_idx in range(end_row + 1, sheet.max_row + 1):
             if sheet.cell(row=row_idx, column=1).value == "المجموع":
                 total_row = row_idx
-                logger.info(f"Found total row at {row_idx}")
                 break
         
         # Delete the rows for this invoice
         rows_to_delete = end_row - found_row + 1
-        logger.info(f"About to delete {rows_to_delete} rows for invoice {op_num}")
         if rows_to_delete > 0:
             sheet.delete_rows(found_row, rows_to_delete)
-            logger.info(f"Successfully deleted {rows_to_delete} rows for invoice {op_num}")
-            
             # If we had a total row, we need to adjust the formulas
             if total_row:
                 # Adjust total row index since we deleted rows above it
                 new_total_row = total_row - rows_to_delete
-                logger.info(f"Updating formulas in total row {new_total_row} (was {total_row})")
                 
                 # Update formulas in the total row to reflect the removed rows
                 # Column E (quantity), F (total price), G (amount), I (payments)
@@ -741,57 +692,50 @@ def remove_invoice_from_ledger(folder_path: str, op_num: str):
                         cell = sheet.cell(row=new_total_row, column=5)
                         if not isinstance(cell, MergedCell):
                             cell.value = f"=SUM(E3:E{new_total_row-1})"
-                    except Exception as e:
-                        logger.debug(f"Could not set column 5 formula: {e}")
-                    
+                    except Exception:
+                        pass
                     try:
                         cell = sheet.cell(row=new_total_row, column=6)
                         if not isinstance(cell, MergedCell):
                             cell.value = f"=SUM(F3:F{new_total_row-1})"
-                    except Exception as e:
-                        logger.debug(f"Could not set column 6 formula: {e}")
-                    
+                    except Exception:
+                        pass
                     try:
                         cell = sheet.cell(row=new_total_row, column=7)
                         if not isinstance(cell, MergedCell):
                             cell.value = f"=SUM(G3:G{new_total_row-1})"
-                    except Exception as e:
-                        logger.debug(f"Could not set column 7 formula: {e}")
-                    
+                    except Exception:
+                        pass
                     try:
                         cell = sheet.cell(row=new_total_row, column=9)
                         if not isinstance(cell, MergedCell):
                             cell.value = f"=SUM(I3:I{new_total_row-1})"
-                    except Exception as e:
-                        logger.debug(f"Could not set column 9 formula: {e}")
-                    
+                    except Exception:
+                        pass
                     # Update total debt cell
                     try:
                         j1_cell = sheet['J1']
                         if not isinstance(j1_cell, MergedCell):
                             j1_cell.value = f"=G{new_total_row}-I{new_total_row}"
-                    except Exception as e:
-                        logger.debug(f"Could not set J1 value in remove_invoice: {e}")
-                    logger.info(f"Updated formulas in total row {new_total_row}")
+                    except Exception:
+                        pass
                 except Exception as formula_ex:
-                    logger.error(f"Error updating formulas: {formula_ex}")
+                    log_error(f"Error updating formulas: {formula_ex}")
 
         # Save the updated workbook
-        logger.info(f"Saving updated ledger to {filepath}")
         workbook.save(filepath)
         workbook.close()
-        logger.info(f"Successfully removed invoice {op_num} from ledger")
         return True
 
     except Exception as e:
-        logger.error(f"Error removing invoice {op_num} from ledger at {folder_path}: {e}")
+        log_error(f"Error removing invoice {op_num} from ledger at {folder_path}: {e}")
         return False
     finally:
         if workbook:
             try:
                 workbook.close()
-            except Exception as e:
-                logger.debug(f"Error closing workbook: {e}")
+            except Exception:
+                pass
 
 
 def update_invoice_in_ledger(folder_path: str, op_num: str, client_name: str, date_str: str, 
@@ -815,34 +759,22 @@ def update_invoice_in_ledger(folder_path: str, op_num: str, client_name: str, da
         driver (str): Driver name
         invoice_items: List of invoice items with pre-calculated totals
     """
-    logger.info(f"Updating invoice {op_num} in ledger at {folder_path}")
-    logger.debug(f"Client: {client_name}, Driver: {driver}, Total Amount: {total_amount}, Items count: {len(invoice_items) if invoice_items else 0}")
     
     filename = f"كشف حساب.xlsx"
     filepath = os.path.join(folder_path, filename)
-
-    logger.debug(f"Checking if ledger file exists at {filepath}")
     if not os.path.exists(filepath):
-        logger.info(f"Ledger file does not exist, creating new ledger")
         return update_client_ledger(folder_path, client_name, date_str, op_num, total_amount, driver, invoice_items)
 
     # Step 1: Remove the existing invoice entry from the ledger
-    logger.info(f"Step 1: Removing existing invoice {op_num} from ledger")
     removal_result = remove_invoice_from_ledger(folder_path, op_num)
-    if removal_result:
-        logger.info(f"Successfully removed existing invoice {op_num} from ledger")
-    else:
-        logger.info(f"Invoice {op_num} was not found in ledger (may be new)")
+    # removal_result indicates if invoice was found and removed
     
     # Step 2: Add the updated invoice using the standard function
-    logger.info(f"Step 2: Adding updated invoice {op_num} to ledger")
     return update_client_ledger(folder_path, client_name, date_str, op_num, total_amount, driver, invoice_items)
 
 
 def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_num: str,
                           total_amount: float, driver: str = "", invoice_items=None):
-    logger.info(f"🔵 STARTING update_client_ledger for {client_name}, invoice {op_num}")
-    logger.debug(f"Date: {date_str}, Driver: {driver}, Total Amount: {total_amount}, Items count: {len(invoice_items) if invoice_items else 0}")
     import os
     from datetime import datetime
     import openpyxl
@@ -852,11 +784,7 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
 
     filename = f"كشف حساب.xlsx"
     filepath = os.path.join(folder_path, filename)
-
-    logger.debug(f"Checking if ledger file exists at {filepath}")
     file_exists = os.path.exists(filepath)
-    logger.info(f"Ledger file exists: {file_exists}")
-
     # تجهيز حدود الخلايا (Border)
     thin_border = Border(
         left=Side(style='thin'), right=Side(style='thin'),
@@ -865,13 +793,11 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
 
     workbook = None
     try:
-        logger.info(f"🔵 Entering try block for update_client_ledger")
         if file_exists:
-            logger.info(f"Loading existing ledger workbook from {filepath}")
             workbook = openpyxl.load_workbook(filepath)
             sheet = workbook.active
             if sheet is None: 
-                logger.error(f"Could not access active sheet in ledger")
+                log_error(f"Could not access active sheet in ledger")
                 return (False, "invalid_sheet")
 
             # Find if there's already a total row and remember its position
@@ -929,9 +855,8 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                                 cell.number_format = '0.00'
                             elif col in [6, 7, 9]:  # إجمالي السعر، المبلغ، الدفعات - أعداد صحيحة
                                 cell.number_format = '#,##0'
-                    except Exception as e:
-                        logger.debug(f"Could not clear formatting on row {current_row} col {col}: {e}")
-
+                    except Exception:
+                        pass
                 # Merged data (written only on the first row)
                 if idx == 0:
                     # Set values BEFORE merging to avoid MergedCell issues
@@ -985,7 +910,7 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                         if num_items > 1:
                             sheet.merge_cells(start_row=start_row, start_column=10, end_row=end_row, end_column=10)
                     except Exception as e:
-                        logger.error(f"Error setting merged data for invoice {op_num}: {e}")
+                        log_error(f"Error setting merged data for invoice {op_num}: {e}")
 
                 # Variable data (non-merged) - item details
                 if item:
@@ -1004,8 +929,8 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                         cell6 = sheet.cell(row=current_row, column=6)
                         if not isinstance(cell6, MergedCell):
                             cell6.value = price
-                    except Exception as e:
-                        logger.debug(f"Could not set item data on row {current_row}: {e}")
+                    except Exception:
+                        pass
                 else:
                     try:
                         cell4 = sheet.cell(row=current_row, column=4)
@@ -1017,9 +942,8 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                         cell6 = sheet.cell(row=current_row, column=6)
                         if not isinstance(cell6, MergedCell):
                             cell6.value = total_amount
-                    except Exception as e:
-                        logger.debug(f"Could not set empty item data on row {current_row}: {e}")
-
+                    except Exception:
+                        pass
                 sheet.row_dimensions[current_row].height = 22
 
             # --- CREATE TOTAL ROW AT THE END ---
@@ -1045,15 +969,13 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                 total_label.fill = PatternFill(start_color="B4C7E7", end_color="B4C7E7", fill_type="solid")
                 total_label.alignment = Alignment(horizontal='center', vertical='center')
                 total_label.border = thin_border
-            except Exception as e:
-                logger.debug(f"Could not set total label formatting: {e}")
-            
+            except Exception:
+                pass
             # Now merge after setting value
             try:
                 sheet.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=4)
-            except Exception as e:
-                logger.debug(f"Could not merge total row cells: {e}")
-
+            except Exception:
+                pass
             # Format other cells in the total row
             for col in range(5, 11):
                 try:
@@ -1068,39 +990,34 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                             cell.number_format = '0.00'
                         elif col in [6, 7, 9]:  # إجمالي السعر، المبلغ، الدفعات - أعداد صحيحة
                             cell.number_format = '#,##0'
-                except Exception as e:
-                    logger.debug(f"Could not format total row cell at column {col}: {e}")
-
+                except Exception:
+                    pass
             # SUM formulas for the total row - sum all values from row 3 up to the row before the total
             # Column E (quantity area), F (total price), G (amount), I (payments)
             try:
                 cell = sheet.cell(row=total_row, column=5)
                 if not isinstance(cell, MergedCell):
                     cell.value = f"=SUM(E3:E{total_row-1})"
-            except Exception as e:
-                logger.debug(f"Could not set total row column 5: {e}")
-            
+            except Exception:
+                pass
             try:
                 cell = sheet.cell(row=total_row, column=6)
                 if not isinstance(cell, MergedCell):
                     cell.value = f"=SUM(F3:F{total_row-1})"
-            except Exception as e:
-                logger.debug(f"Could not set total row column 6: {e}")
-            
+            except Exception:
+                pass
             try:
                 cell = sheet.cell(row=total_row, column=7)
                 if not isinstance(cell, MergedCell):
                     cell.value = f"=SUM(G3:G{total_row-1})"
-            except Exception as e:
-                logger.debug(f"Could not set total row column 7: {e}")
-            
+            except Exception:
+                pass
             try:
                 cell = sheet.cell(row=total_row, column=9)
                 if not isinstance(cell, MergedCell):
                     cell.value = f"=SUM(I3:I{total_row-1})"
-            except Exception as e:
-                logger.debug(f"Could not set total row column 9: {e}")
-
+            except Exception:
+                pass
             sheet.row_dimensions[total_row].height = 25
 
             # --- UPDATE TOTAL DEBT CELL AT THE TOP ---
@@ -1109,64 +1026,47 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                 j1_cell = sheet['J1']
                 if not isinstance(j1_cell, MergedCell):
                     j1_cell.value = f"=G{total_row}-I{total_row}"
-            except Exception as e:
-                logger.debug(f"Could not set J1 value in existing ledger: {e}")
-
+            except Exception:
+                pass
             # Adjust column widths (if needed)
             column_widths = [15, 15, 15, 25, 13, 16, 16, 16, 13, 22]
             for col, width in enumerate(column_widths, start=1):
                 sheet.column_dimensions[get_column_letter(col)].width = width
-
-            logger.info(f"Saving updated ledger to {filepath}")
             workbook.save(filepath)
             workbook.close()
-            logger.info(f"Successfully updated client ledger for {client_name}, invoice {op_num}")
             return (True, None)
         else:
             # Create a new ledger file
-            logger.info(f"🔵 Creating new ledger workbook at {filepath}")
             workbook = openpyxl.Workbook()
             sheet = workbook.active
             sheet.title = "كشف حساب"
             sheet.sheet_view.rightToLeft = True
-            logger.info(f"🔵 Created workbook sheet")
-
             # Page header
-            logger.info(f"🔵 Merging cells A1:H1 for title")
             sheet.merge_cells('A1:H1')
-            logger.info(f"🔵 Setting title cell properties")
             title_cell = sheet['A1']
-            logger.debug(f"title_cell type: {type(title_cell)}, is MergedCell: {isinstance(title_cell, MergedCell)}")
-            logger.info(f"🔵 Setting title cell value and formatting")
             title_cell.value = f"كشف حساب العميل / {client_name}"
             title_cell.font = Font(name='Arial', size=18, bold=True, color="FFFFFF")
             title_cell.fill = PatternFill(start_color="2F5597", end_color="2F5597", fill_type="solid")
             title_cell.alignment = Alignment(horizontal='center', vertical='center')
-            logger.info(f"🔵 Title cell set successfully")
-
             # Total debt header
-            logger.info(f"🔵 Setting total debt header (I1, J1)")
             try:
                 cell = sheet['I1']
-                logger.debug(f"I1 cell type: {type(cell)}, is MergedCell: {isinstance(cell, MergedCell)}")
                 if not isinstance(cell, MergedCell):
                     cell.value = "إجمالي الديون"
                     cell.font = Font(name='Arial', size=12, bold=True, color="FFFFFF")
                     cell.fill = PatternFill(start_color="70AD47", end_color="70AD47", fill_type="solid")
                     cell.alignment = Alignment(horizontal='center', vertical='center')
             except Exception as e:
-                logger.error(f"❌ ERROR setting I1 formatting: {e}", exc_info=True)
+                log_error(f"❌ ERROR setting I1 formatting: {e}", exc_info=True)
             
             try:
                 cell = sheet['J1']
-                logger.debug(f"J1 cell type: {type(cell)}, is MergedCell: {isinstance(cell, MergedCell)}")
                 if not isinstance(cell, MergedCell):
                     cell.font = Font(name='Arial', size=12, bold=True, color="FFFFFF")
                     cell.fill = PatternFill(start_color="70AD47", end_color="70AD47", fill_type="solid")
                     cell.alignment = Alignment(horizontal='center', vertical='center')
             except Exception as e:
-                logger.debug(f"Could not set J1 formatting: {e}")
-
+                pass
             sheet.row_dimensions[1].height = 35
 
             # Table headers
@@ -1183,8 +1083,7 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                         cell.border = thin_border
                         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
                 except Exception as e:
-                    logger.debug(f"Could not set header cell at column {col}: {e}")
-            
+                    pass
             sheet.row_dimensions[2].height = 35
             next_row = 3  # First data row in new file
 
@@ -1298,29 +1197,25 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                 if not isinstance(cell, MergedCell):
                     cell.value = f"=SUM(E3:E{total_row-1})"
             except Exception as e:
-                logger.debug(f"Could not set total row column 5: {e}")
-            
+                pass
             try:
                 cell = sheet.cell(row=total_row, column=6)
                 if not isinstance(cell, MergedCell):
                     cell.value = f"=SUM(F3:F{total_row-1})"
             except Exception as e:
-                logger.debug(f"Could not set total row column 6: {e}")
-            
+                pass
             try:
                 cell = sheet.cell(row=total_row, column=7)
                 if not isinstance(cell, MergedCell):
                     cell.value = f"=SUM(G3:G{total_row-1})"
             except Exception as e:
-                logger.debug(f"Could not set total row column 7: {e}")
-            
+                pass
             try:
                 cell = sheet.cell(row=total_row, column=9)
                 if not isinstance(cell, MergedCell):
                     cell.value = f"=SUM(I3:I{total_row-1})"
             except Exception as e:
-                logger.debug(f"Could not set total row column 9: {e}")
-
+                pass
             sheet.row_dimensions[total_row].height = 25
 
             # --- UPDATE TOTAL DEBT CELL AT THE TOP ---
@@ -1329,17 +1224,13 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                 if not isinstance(j1_cell, MergedCell):
                     j1_cell.value = f"=G{total_row}-I{total_row}"
             except Exception as e:
-                logger.debug(f"Could not set J1 value in new ledger: {e}")
-
+                pass
             # Adjust column widths
             column_widths = [15, 15, 15, 25, 13, 16, 16, 16, 13, 22]
             for col, width in enumerate(column_widths, start=1):
                 sheet.column_dimensions[get_column_letter(col)].width = width
-
-            logger.info(f"Saving new ledger to {filepath}")
             workbook.save(filepath)
             workbook.close()
-            logger.info(f"Successfully created new client ledger for {client_name}, invoice {op_num}")
             return (True, None)
 
     except PermissionError:
@@ -1353,4 +1244,4 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
             try:
                 workbook.close()
             except Exception as e:
-                logger.debug(f"Error closing workbook: {e}")
+                pass
