@@ -113,7 +113,10 @@ def initialize_slides_inventory_excel(file_path):
             cell.border = border
         
         # Set column widths for add sheet
-        add_column_widths = [12, 12, 15, 10, 12, 12, 12, 10, 8, 10, 8, 12, 10, 12, 12, 15]
+        # Columns: تاريخ النشر(12), رقم البلوك(12), النوع(15), رقم المكينه(10), 
+        #          وقت الدخول(18), وقت الخروج(18), عدد الساعات(12), السمك(10), العدد(8), 
+        #          الطول(10), الخصم(8), الطول بعد(12), الارتفاع(10), الكمية م2(12), سعر المتر(12), اجمالي السعر(15)
+        add_column_widths = [12, 12, 15, 10, 18, 18, 12, 10, 8, 10, 8, 12, 10, 12, 12, 15]
         for col_num, width in enumerate(add_column_widths, 1):
             add_sheet.column_dimensions[get_column_letter(col_num)].width = width
         
@@ -412,19 +415,19 @@ def add_slides_inventory_from_publishing(file_path, publishing_data):
             add_sheet.cell(row=row_num, column=3, value=material)         # النوع
             add_sheet.cell(row=row_num, column=4, value=machine_number)   # رقم المكينه
             
-            # وقت الدخول - Store as Excel datetime
+            # وقت الدخول - Store as Excel datetime with AM/PM format
             entry_cell = add_sheet.cell(row=row_num, column=5)
             if entry_time_excel:
                 entry_cell.value = entry_time_excel
-                entry_cell.number_format = 'DD/MM/YYYY HH:MM'
+                entry_cell.number_format = 'DD/MM/YYYY h:mm AM/PM'
             else:
                 entry_cell.value = entry_time
             
-            # وقت الخروج - Store as Excel datetime
+            # وقت الخروج - Store as Excel datetime with AM/PM format
             exit_cell = add_sheet.cell(row=row_num, column=6)
             if exit_time_excel:
                 exit_cell.value = exit_time_excel
-                exit_cell.number_format = 'DD/MM/YYYY HH:MM'
+                exit_cell.number_format = 'DD/MM/YYYY h:mm AM/PM'
             else:
                 exit_cell.value = exit_time
             

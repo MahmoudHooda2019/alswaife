@@ -6,7 +6,7 @@ Styled similar to blocks and slides views
 import flet as ft
 import os
 from datetime import datetime
-from utils.path_utils import resource_path
+from utils.utils import resource_path, is_excel_running, get_current_date
 from utils.inventory_utils import (
     initialize_inventory_excel,
     add_inventory_entry,
@@ -45,7 +45,7 @@ class InventoryRow:
         self.date_field = self._create_styled_textfield(
             "التاريخ",
             140,
-            value=datetime.now().strftime("%d/%m/%Y"),
+            value=get_current_date("%d/%m/%Y"),
             read_only=True,
             icon=ft.Icons.CALENDAR_TODAY,
         )
@@ -257,6 +257,15 @@ class InventoryAddView:
             self._show_dialog("تحذير", "لا توجد بيانات لحفظها", ft.Colors.ORANGE_400)
             return
 
+        # التحقق من أن Excel مغلق
+        if is_excel_running():
+            self._show_excel_warning_dialog()
+            return
+
+        self._do_save()
+
+    def _do_save(self):
+        """تنفيذ عملية الحفظ الفعلية"""
         try:
             excel_file = os.path.join(self.inventory_path, "مخزون ادوات التشغيل.xlsx")
 
@@ -293,6 +302,39 @@ class InventoryAddView:
             )
         except Exception as e:
             self._show_dialog("خطأ", f"حدث خطأ: {str(e)}", ft.Colors.RED_400)
+
+    def _show_excel_warning_dialog(self):
+        """Show Excel warning dialog with continue option"""
+        def close_dlg(e=None):
+            dlg.open = False
+            self.page.update()
+
+        def continue_save(e=None):
+            dlg.open = False
+            self.page.update()
+            self._do_save()
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("تحذير", color=ft.Colors.ORANGE_400, weight=ft.FontWeight.BOLD),
+            content=ft.Text("برنامج Excel مفتوح حالياً.\nيرجى إغلاقه قبل الحفظ.", size=16, rtl=True),
+            actions=[
+                ft.TextButton(
+                    "متابعة على أي حال",
+                    on_click=continue_save,
+                    style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
+                ),
+                ft.TextButton(
+                    "إلغاء",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.BLUE_GREY_900
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
 
     def _show_dialog(self, title: str, message: str, title_color=ft.Colors.BLUE_300):
         """Show a styled dialog"""

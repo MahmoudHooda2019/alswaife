@@ -13,78 +13,52 @@ from utils.reports_utils import execute_report
 # Define all report sections with their sub-options
 REPORT_SECTIONS_DATA = [
     {
-        "id": "income_expenses",
-        "name": "الإيرادات والمصروفات",
-        "icon": ft.Icons.ACCOUNT_BALANCE_WALLET,
-        "color": ft.Colors.GREEN_700,
-        "sub_options": [
-            {"id": "income", "name": "الإيرادات", "description": "تقرير جميع الإيرادات"},
-            {"id": "expenses", "name": "المصروفات", "description": "تقرير جميع المصروفات"},
-            {"id": "income_expenses_summary", "name": "ملخص شامل", "description": "ملخص الإيرادات والمصروفات"},
-        ]
-    },
-    {
-        "id": "inventory",
-        "name": "المخزون",
-        "icon": ft.Icons.INVENTORY_2,
-        "color": ft.Colors.INDIGO_700,
-        "sub_options": [
-            {"id": "inventory", "name": "تقرير المخزون", "description": "رصيد المخزون الحالي لجميع الأصناف"},
-            {"id": "inventory_add", "name": "إضافات المخزون", "description": "جميع الإضافات للمخزون"},
-            {"id": "inventory_disburse", "name": "صرف المخزون", "description": "جميع عمليات الصرف"},
-        ]
-    },
-    {
-        "id": "attendance",
-        "name": "الحضور والانصراف",
-        "icon": ft.Icons.PEOPLE,
-        "color": ft.Colors.BLUE_700,
-        "sub_options": [
-            {"id": "attendance", "name": "سجل الحضور", "description": "سجل حضور الموظفين"},
-            {"id": "attendance_summary", "name": "ملخص الحضور", "description": "ملخص ساعات العمل"},
-        ]
-    },
-    {
         "id": "blocks",
-        "name": "البلوكات",
+        "name": "البلوكات المنشورة",
         "icon": ft.Icons.VIEW_IN_AR,
         "color": ft.Colors.AMBER_700,
         "sub_options": [
-            {"id": "blocks", "name": "مخزون البلوكات", "description": "جميع البلوكات المتاحة"},
-            {"id": "blocks_by_material", "name": "حسب الخامة", "description": "البلوكات مصنفة بالخامة"},
-            {"id": "blocks_by_quarry", "name": "حسب المحجر", "description": "البلوكات مصنفة بالمحجر"},
+            {"id": "blocks_published", "name": "البلوكات المنشورة كاملة", "description": "البلوكات التي تحتوي على A و B"},
         ]
     },
     {
-        "id": "slides",
-        "name": "الشرائح",
-        "icon": ft.Icons.LAYERS,
-        "color": ft.Colors.PURPLE_700,
+        "id": "clients",
+        "name": "ديون العملاء",
+        "icon": ft.Icons.PERSON,
+        "color": ft.Colors.RED_700,
         "sub_options": [
-            {"id": "slides", "name": "جميع الشرائح", "description": "تقرير جميع الشرائح"},
-            {"id": "slides_by_block", "name": "حسب البلوك", "description": "الشرائح مصنفة بالبلوك"},
+            {"id": "clients_debts", "name": "العملاء المدينين", "description": "العملاء الذين عليهم ديون فقط"},
         ]
     },
     {
         "id": "machines",
-        "name": "الماكينات",
+        "name": "إنتاج الماكينات",
         "icon": ft.Icons.PRECISION_MANUFACTURING,
         "color": ft.Colors.CYAN_700,
         "sub_options": [
             {"id": "machine_production_1", "name": "ماكينة 1", "description": "إنتاج الماكينة رقم 1"},
             {"id": "machine_production_2", "name": "ماكينة 2", "description": "إنتاج الماكينة رقم 2"},
             {"id": "machine_production_3", "name": "ماكينة 3", "description": "إنتاج الماكينة رقم 3"},
-            {"id": "all_machines", "name": "جميع الماكينات", "description": "إنتاج جميع الماكينات"},
         ]
     },
     {
-        "id": "clients",
-        "name": "العملاء",
-        "icon": ft.Icons.PERSON,
-        "color": ft.Colors.TEAL_700,
+        "id": "income_expenses",
+        "name": "الإيرادات والمصروفات",
+        "icon": ft.Icons.ACCOUNT_BALANCE_WALLET,
+        "color": ft.Colors.GREEN_700,
         "sub_options": [
-            {"id": "clients", "name": "كشف العملاء", "description": "قائمة جميع العملاء"},
-            {"id": "clients_balances", "name": "أرصدة العملاء", "description": "أرصدة حسابات العملاء"},
+            {"id": "income", "name": "الإيرادات فقط", "description": "تقرير جميع الإيرادات"},
+            {"id": "expenses", "name": "المصروفات فقط", "description": "تقرير جميع المصروفات"},
+            {"id": "income_expenses_both", "name": "الإيرادات والمصروفات معاً", "description": "تقرير شامل"},
+        ]
+    },
+    {
+        "id": "inventory",
+        "name": "مخزون الأدوات",
+        "icon": ft.Icons.INVENTORY_2,
+        "color": ft.Colors.INDIGO_700,
+        "sub_options": [
+            {"id": "inventory_consumption", "name": "استهلاك الأدوات", "description": "المصروفات من أذون الصرف لكل صنف"},
         ]
     },
 ]
@@ -627,9 +601,6 @@ class ReportsView:
             machine_num = report_id.split("_")[-1]
             query["report_type"] = "machine_production"
             query["machine_number"] = machine_num
-        elif report_id == "all_machines":
-            query["report_type"] = "machine_production"
-            query["machine_number"] = None
         
         return query
     

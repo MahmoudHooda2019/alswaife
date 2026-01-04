@@ -7,6 +7,7 @@ import xlsxwriter
 
 from utils.blocks_utils import export_simple_blocks_excel
 from utils.log_utils import log_error, log_exception
+from utils.utils import is_excel_running, get_current_date
 
 class BlockRow:
     """Row UI for block entry with improved styling"""
@@ -20,6 +21,7 @@ class BlockRow:
     def __init__(self, page: ft.Page, delete_callback, data=None):
         self.page = page
         self.delete_callback = delete_callback
+        self.is_expanded = True  # Track fold state
         self._build_controls()
         self._set_default_values()
 
@@ -88,7 +90,7 @@ class BlockRow:
         self.date_field = self._create_styled_textfield(
             "التاريخ",
             width_medium,
-            value=datetime.now().strftime("%Y-%m-%d"),
+            value=get_current_date("%Y-%m-%d"),
             read_only=True,
             icon=ft.Icons.CALENDAR_TODAY
         )
@@ -107,6 +109,29 @@ class BlockRow:
             width_small,
             on_change=self.on_block_change,
             icon=ft.Icons.NUMBERS
+        )
+        
+        # Block type options for نيو حلايب
+        self.BLOCK_TYPE_OPTIONS = [
+            ft.dropdown.Option("A"),
+            ft.dropdown.Option("B"),
+        ]
+        
+        # Block type dropdown (for نيو حلايب - user selects A or B)
+        self.block_type_dropdown = self._create_styled_dropdown(
+            "نوع البلوك",
+            width_small,
+            self.BLOCK_TYPE_OPTIONS,
+            on_change=self._on_field_change,
+            icon=ft.Icons.CATEGORY
+        )
+        
+        # Block type text field (read-only, for جندولا and احمر اسوان)
+        self.block_type_text = self._create_styled_textfield(
+            "نوع البلوك",
+            width_small,
+            read_only=True,
+            icon=ft.Icons.CATEGORY
         )
         
         # Material dropdown
@@ -206,6 +231,19 @@ class BlockRow:
             )
         )
         
+        # Fold/Expand button
+        self.fold_btn = ft.IconButton(
+            icon=ft.Icons.KEYBOARD_ARROW_UP,
+            icon_color=ft.Colors.BLUE_300,
+            tooltip="طي/فتح",
+            on_click=self._toggle_fold,
+            bgcolor=ft.Colors.GREY_800,
+            icon_size=24,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=10)
+            ),
+        )
+        
         # Section header style
         def create_section_header(text, color):
             return ft.Container(
@@ -229,78 +267,108 @@ class BlockRow:
                 margin=ft.margin.only(bottom=10)
             )
         
+        # Container for block type that switches between dropdown and text field
+        self.block_type_container = ft.Container(
+            content=self.block_type_dropdown,  # Default to dropdown for نيو حلايب
+        )
+        
+        # Collapsible content container
+        self.content_container = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Divider(height=20, color=ft.Colors.GREY_700),
+                    
+                    # Basic Information Section
+                    create_section_header("المعلومات الأساسية", ft.Colors.BLUE_400),
+                    
+                    ft.Row(
+                        controls=[
+                            self.trip_number,
+                            self.trip_count,
+                            self.date_field,
+                            self.quarry,
+                        ],
+                        spacing=15,
+                        wrap=True
+                    ),
+                    
+                    ft.Row(
+                        controls=[
+                            self.block_number,
+                            self.block_type_container,
+                            self.material_dropdown,
+                        ],
+                        spacing=15,
+                        wrap=True
+                    ),
+                    
+                    ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
+                    
+                    # Measurements Section
+                    create_section_header("القياسات", ft.Colors.GREEN_400),
+                    
+                    ft.Row(
+                        controls=[
+                            self.length_field,
+                            self.width_field,
+                            self.height_field,
+                            self.volume_field,
+                        ],
+                        spacing=15,
+                        wrap=True
+                    ),
+                    
+                    ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
+                    
+                    # Calculations Section
+                    create_section_header("الحسابات", ft.Colors.ORANGE_400),
+                    
+                    ft.Row(
+                        controls=[
+                            self.weight_per_m3_field,
+                            self.block_weight_field,
+                            self.price_per_ton_field,
+                            self.total_price_field,
+                        ],
+                        spacing=15,
+                        wrap=True
+                    ),
+                ],
+                spacing=12
+            ),
+            animate=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT),
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
+        )
+        
+        # Header summary text (shown when collapsed)
+        self.summary_text = ft.Text(
+            "",
+            size=14,
+            color=ft.Colors.GREY_400,
+            weight=ft.FontWeight.W_500,
+        )
+        
         # Create the main card with gradient background
         self.card = ft.Card(
             content=ft.Container(
                 content=ft.Column(
                     controls=[
-                        # Header with delete button
+                        # Header with summary and action buttons
                         ft.Row(
                             controls=[
+                                self.summary_text,
                                 ft.Container(expand=True),
-                                self.delete_btn
+                                self.fold_btn,
+                                self.delete_btn,
                             ],
-                            alignment=ft.MainAxisAlignment.END
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                         
-                        ft.Divider(height=20, color=ft.Colors.GREY_700),
-                        
-                        # Basic Information Section
-                        create_section_header("المعلومات الأساسية", ft.Colors.BLUE_400),
-                        
-                        ft.Row(
-                            controls=[
-                                self.trip_number,
-                                self.trip_count,
-                                self.date_field,
-                                self.quarry,
-                            ],
-                            spacing=15,
-                            wrap=True
-                        ),
-                        
-                        ft.Row(
-                            controls=[
-                                self.block_number,
-                                self.material_dropdown,
-                            ],
-                            spacing=15,
-                            wrap=True
-                        ),
-                        
-                        ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
-                        
-                        # Measurements Section
-                        create_section_header("القياسات", ft.Colors.GREEN_400),
-                        
-                        ft.Row(
-                            controls=[
-                                self.length_field,
-                                self.width_field,
-                                self.height_field,
-                                self.volume_field,
-                            ],
-                            spacing=15,
-                            wrap=True
-                        ),
-                        
-                        ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
-                        
-                        # Calculations Section
-                        create_section_header("الحسابات", ft.Colors.ORANGE_400),
-                        
-                        ft.Row(
-                            controls=[
-                                self.weight_per_m3_field,
-                                self.block_weight_field,
-                                self.price_per_ton_field,
-                                self.total_price_field,
-                            ],
-                            spacing=15,
-                            wrap=True
-                        ),
+                        # Collapsible content
+                        self.content_container,
                     ],
-                    spacing=12
+                    spacing=0
                 ),
                 padding=20,
                 gradient=ft.LinearGradient(
@@ -309,12 +377,35 @@ class BlockRow:
                     colors=[ft.Colors.GREY_900, ft.Colors.GREY_800]
                 ),
                 border_radius=15,
-                border=ft.border.all(1, ft.Colors.GREY_700)
+                border=ft.border.all(1, ft.Colors.GREY_700),
+                animate=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT),
             ),
             elevation=8,
         )
         
         self.row = self.card
+    
+    def _toggle_fold(self, e=None):
+        """Toggle the fold/expand state with animation"""
+        self.is_expanded = not self.is_expanded
+        
+        if self.is_expanded:
+            # Expand
+            self.content_container.height = None
+            self.content_container.opacity = 1
+            self.fold_btn.icon = ft.Icons.KEYBOARD_ARROW_UP
+            self.summary_text.value = ""
+        else:
+            # Collapse
+            self.content_container.height = 0
+            self.content_container.opacity = 0
+            self.fold_btn.icon = ft.Icons.KEYBOARD_ARROW_DOWN
+            # Show summary - only block number and material
+            block_num = self.block_number.value or "---"
+            material = self.material_dropdown.value or "---"
+            self.summary_text.value = f"بلوك: {block_num} | {material}"
+        
+        self.page.update()
 
     def on_block_change(self, e):
         """Handle block number changes and replace Arabic characters with English equivalents"""
@@ -334,18 +425,42 @@ class BlockRow:
         self._calculate_values()
     
     def _on_material_change(self, e=None):
-        """Handle material change and update weight per m3 and price per ton"""
+        """Handle material change and update weight per m3, price per ton, and block type"""
         material = self.material_dropdown.value
         
         if material == "نيو حلايب":
             self.weight_per_m3_field.value = "2.70"
             self.price_per_ton_field.value = "1150"
+            # Show dropdown for A/B selection
+            self.block_type_container.content = self.block_type_dropdown
+            if not self.block_type_dropdown.value:
+                self.block_type_dropdown.value = "A"
         elif material == "جندولا":
             self.weight_per_m3_field.value = "2.85"
             self.price_per_ton_field.value = "1500"
+            # Show text field with "جندولا"
+            self.block_type_text.value = "جندولا"
+            self.block_type_container.content = self.block_type_text
         elif material == "احمر اسوان":
             self.weight_per_m3_field.value = "0"
             self.price_per_ton_field.value = "0"
+            # Show text field with "احمر"
+            self.block_type_text.value = "احمر"
+            self.block_type_container.content = self.block_type_text
+            
+        self._calculate_values()
+        self.page.update()
+    
+    def get_block_type(self):
+        """Get the current block type value"""
+        material = self.material_dropdown.value
+        if material == "نيو حلايب":
+            return self.block_type_dropdown.value or "A"
+        elif material == "جندولا":
+            return "جندولا"
+        elif material == "احمر اسوان":
+            return "احمر"
+        return ""
             
         self._calculate_values()
         self.page.update()
@@ -402,6 +517,7 @@ class BlockRow:
             'date': self.date_field.value,
             'quarry': self.quarry.value,
             'block_number': self.block_number.value,
+            'block_type': self.get_block_type(),
             'material': self.material_dropdown.value,
             'length': self.length_field.value,
             'width': self.width_field.value,
@@ -551,6 +667,27 @@ class BlocksView:
             self._show_dialog("تحذير", "لا توجد بيانات لحفظها", ft.Colors.ORANGE_400)
             return
 
+        # التحقق من وجود رقم البلوك في كل صف
+        for i, row in enumerate(self.rows):
+            if self._row_has_data(row):
+                block_num = row.block_number.value
+                if not block_num or not block_num.strip():
+                    self._show_dialog(
+                        "خطأ",
+                        f"الصف {i + 1}: رقم البلوك مطلوب",
+                        ft.Colors.RED_400,
+                    )
+                    return
+
+        # التحقق من أن Excel مغلق
+        if is_excel_running():
+            self._show_excel_warning_dialog()
+            return
+
+        self._do_save()
+
+    def _do_save(self):
+        """تنفيذ عملية الحفظ الفعلية"""
         try:
             data = [row.to_dict() for row in self.rows if self._row_has_data(row)]
             file_path = export_simple_blocks_excel(data)
@@ -561,11 +698,44 @@ class BlocksView:
             
             self._show_success_dialog(file_path)
             
-        except PermissionError as e:
+        except PermissionError:
             self._show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
         except Exception as e:
             self._show_dialog("خطأ", f"حدث خطأ أثناء حفظ الملف:\n{str(e)}", ft.Colors.RED_400)
             log_exception(f"Error saving blocks file: {e}")
+
+    def _show_excel_warning_dialog(self):
+        """Show Excel warning dialog with continue option"""
+        def close_dlg(e=None):
+            dlg.open = False
+            self.page.update()
+
+        def continue_save(e=None):
+            dlg.open = False
+            self.page.update()
+            self._do_save()
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("تحذير", color=ft.Colors.ORANGE_400, weight=ft.FontWeight.BOLD),
+            content=ft.Text("برنامج Excel مفتوح حالياً.\nيرجى إغلاقه قبل الحفظ.", size=16, rtl=True),
+            actions=[
+                ft.TextButton(
+                    "متابعة على أي حال",
+                    on_click=continue_save,
+                    style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
+                ),
+                ft.TextButton(
+                    "إلغاء",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.BLUE_GREY_900
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
 
     def _show_dialog(self, title: str, message: str, title_color=ft.Colors.BLUE_300):
         """Show a styled dialog"""

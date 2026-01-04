@@ -11,7 +11,7 @@ from utils.attendance_utils import create_or_update_attendance, load_attendance_
 from utils.purchases_utils import add_income_record, export_purchases_to_excel
 from tkinter import filedialog
 import tkinter as tk
-from utils.path_utils import resource_path
+from utils.utils import resource_path, is_excel_running, get_current_date
 import json
 from typing import Optional
 
@@ -92,7 +92,7 @@ class AttendanceView:
         # Date selection with enhanced styling
         self.date_field = ft.TextField(
             label="التاريخ",
-            value=datetime.now().strftime('%d/%m/%Y'),
+            value=get_current_date('%d/%m/%Y'),
             width=200,
             text_align=ft.TextAlign.CENTER,
             on_change=self.on_date_change,
@@ -532,6 +532,48 @@ class AttendanceView:
     def save_to_excel(self, e):
         """Save attendance data to Excel file"""
         
+        # التحقق من أن Excel مغلق
+        if is_excel_running():
+            self._show_excel_warning_dialog()
+            return
+        
+        self._do_save()
+
+    def _show_excel_warning_dialog(self):
+        """Show Excel warning dialog with continue option"""
+        def close_dlg(e=None):
+            dlg.open = False
+            self.page.update()
+
+        def continue_save(e=None):
+            dlg.open = False
+            self.page.update()
+            self._do_save()
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("تحذير", color=ft.Colors.ORANGE_400, weight=ft.FontWeight.BOLD),
+            content=ft.Text("برنامج Excel مفتوح حالياً.\nيرجى إغلاقه قبل الحفظ.", size=16, rtl=True),
+            actions=[
+                ft.TextButton(
+                    "متابعة على أي حال",
+                    on_click=continue_save,
+                    style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
+                ),
+                ft.TextButton(
+                    "إلغاء",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.BLUE_GREY_900
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def _do_save(self):
+        """تنفيذ عملية الحفظ الفعلية"""
         documents_path = os.path.join(os.path.expanduser("~"), "Documents")
         alswaife_path = os.path.join(documents_path, "alswaife")
         attendance_path = os.path.join(alswaife_path, "حضور وانصراف")

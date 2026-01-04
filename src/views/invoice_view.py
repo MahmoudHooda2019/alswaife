@@ -29,38 +29,11 @@ except ImportError:
     def set_zoom_level(db_path: str, zoom_level: float) -> None: pass
 
 from utils.invoice_utils import update_client_ledger, remove_invoice_from_ledger, delete_existing_invoice_file, update_invoice_in_ledger, update_payment_in_invoice, update_payment_in_ledger, get_payment_from_invoice
-from utils.path_utils import resource_path
+from utils.utils import resource_path, is_excel_running, get_current_date
 from utils.slides_utils import disburse_slides_from_invoice
 from utils.purchases_utils import add_income_record
 from utils.log_utils import log_error, log_exception
 
-
-def is_excel_running():
-    """Check if Microsoft Excel is currently running"""
-    try:
-        if platform.system() == 'Windows':
-            # Use tasklist to check for Excel process
-            result = subprocess.run(
-                ['tasklist', '/FI', 'IMAGENAME eq EXCEL.EXE', '/NH'],
-                capture_output=True,
-                text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
-            return 'EXCEL.EXE' in result.stdout.upper()
-        elif platform.system() == 'Darwin':  # macOS
-            result = subprocess.run(
-                ['pgrep', '-x', 'Microsoft Excel'],
-                capture_output=True
-            )
-            return result.returncode == 0
-        else:  # Linux
-            result = subprocess.run(
-                ['pgrep', '-f', 'libreoffice.*calc'],
-                capture_output=True
-            )
-            return result.returncode == 0
-    except Exception:
-        return False
 
 class InvoiceRow:
     """ كلاس صف الفاتورة (البند) """
@@ -518,9 +491,7 @@ class InvoiceView:
         )
         
         # Get date - try internet first, fallback to local time
-        date_value = self.get_internet_date()
-        if not date_value:
-            date_value = datetime.now().strftime('%d/%m/%Y')
+        date_value = get_current_date('%d/%m/%Y')
             
         self.date_var = ft.TextField(label="التاريخ", value=date_value, width=120)
         
@@ -574,48 +545,6 @@ class InvoiceView:
         )
         
         self.page.update()
-
-    def get_internet_date(self):
-        """Get current date from internet, fallback to local time if unavailable"""
-        # Use threading to avoid blocking UI
-        import threading
-        import queue
-        
-        result_queue = queue.Queue()
-        
-        def fetch_date():
-            try:
-                # Try to get date from worldtimeapi.org
-                response = urllib.request.urlopen('http://worldtimeapi.org/api/timezone/Africa/Cairo', timeout=3)
-                if response.getcode() == 200:
-                    import json
-                    data = json.loads(response.read().decode())
-                    # Parse the datetime string and format it as DD/MM/YYYY
-                    dt = datetime.fromisoformat(data['datetime'].replace('Z', '+00:00'))
-                    result_queue.put(dt.strftime('%d/%m/%Y'))
-                    return
-            except Exception as e:
-                # If worldtimeapi.org fails, try another service
-                try:
-                    # Try to get date from httpbin.org as fallback
-                    response = urllib.request.urlopen('http://httpbin.org/json', timeout=3)
-                    if response.getcode() == 200:
-                        # If we can connect, use local time (we just verified internet connectivity)
-                        result_queue.put(datetime.now().strftime('%d/%m/%Y'))
-                        return
-                except Exception as e2:
-                    # Internet not available, return None to use local time
-                    pass
-            result_queue.put(None)
-        
-        # Start the network request in a separate thread
-        thread = threading.Thread(target=fetch_date)
-        thread.daemon = True
-        thread.start()
-        
-        # Don't wait for the result, return immediately with local time
-        # The network result will be used if it arrives in time
-        return datetime.now().strftime('%d/%m/%Y')
     
     def load_clients(self):
         """Load existing client names from the 'فواتير' directory"""
@@ -1664,10 +1593,7 @@ class InvoiceView:
         self.current_invoice_path = None
         
         # تحديث التاريخ للتاريخ الحالي
-        date_value = self.get_internet_date()
-        if not date_value:
-            date_value = datetime.now().strftime('%d/%m/%Y')
-        self.date_var.value = date_value
+        self.date_var.value = get_current_date('%d/%m/%Y')
         
         # Clear all rows
         self.rows.clear()

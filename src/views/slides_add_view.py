@@ -2,7 +2,7 @@ import flet as ft
 import json
 import os
 from datetime import datetime
-from utils.path_utils import resource_path
+from utils.utils import resource_path, is_excel_running
 from utils.slides_utils import initialize_slides_inventory_excel, add_slides_inventory_entry, convert_existing_slides_inventory_to_formulas
 from utils.log_utils import log_error, log_exception
 
@@ -843,14 +843,69 @@ class SlidesAddView:
             self.page.update()
 
     def save_to_excel(self, e=None):
-        """Save data to Excel file with validation"""
+        """Save data to Excel file"""
         if not any(self._row_has_data(row) for row in self.rows):
             self._show_dialog("تحذير", "لا توجد بيانات لحفظها", ft.Colors.ORANGE_400)
             return
 
-        try:
+        # التحقق من وجود رقم البلوك في كل صف
+        for i, row in enumerate(self.rows):
+            if self._row_has_data(row):
+                block_num = row.block_number.value
+                if not block_num or not block_num.strip():
+                    self._show_dialog(
+                        "خطأ",
+                        f"الصف {i + 1}: رقم البلوك مطلوب",
+                        ft.Colors.RED_400,
+                    )
+                    return
+
+        # التحقق من أن Excel مغلق
+        if is_excel_running():
+            self._show_excel_warning_dialog()
+            return
+
+        # جمع البيانات
+        data = [row.to_dict() for row in self.rows if self._row_has_data(row)]
+        self._do_save(data)
+
+    def _show_excel_warning_dialog(self):
+        """Show Excel warning dialog with continue option"""
+        def close_dlg(e=None):
+            dlg.open = False
+            self.page.update()
+
+        def continue_save(e=None):
+            dlg.open = False
+            self.page.update()
             data = [row.to_dict() for row in self.rows if self._row_has_data(row)]
-            
+            self._do_save(data)
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("تحذير", color=ft.Colors.ORANGE_400, weight=ft.FontWeight.BOLD),
+            content=ft.Text("برنامج Excel مفتوح حالياً.\nيرجى إغلاقه قبل الحفظ.", size=16, rtl=True),
+            actions=[
+                ft.TextButton(
+                    "متابعة على أي حال",
+                    on_click=continue_save,
+                    style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
+                ),
+                ft.TextButton(
+                    "إلغاء",
+                    on_click=close_dlg,
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.BLUE_GREY_900
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def _do_save(self, data):
+        """تنفيذ عملية الحفظ الفعلية"""
+        try:
             # Create Excel file for slides inventory
             excel_file = os.path.join(self.slides_path, "مخزون الشرائح.xlsx")
             

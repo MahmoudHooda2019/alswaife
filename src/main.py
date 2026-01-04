@@ -6,8 +6,8 @@
 import sys
 import os
 import flet as ft
-from utils.path_utils import resource_path
-from utils.log_utils import log_error, log_exception
+from utils.utils import resource_path
+from utils.log_utils import log_exception
 
 # Version information
 try:
