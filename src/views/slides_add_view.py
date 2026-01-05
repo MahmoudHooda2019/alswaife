@@ -35,8 +35,9 @@ class SlideRow:
 
     def _create_styled_textfield(self, label, width, **kwargs):
         """Create a consistently styled text field"""
-        # If read_only is True, use black background to distinguish it
-        default_bgcolor = ft.Colors.BLACK if kwargs.get("read_only") else ft.Colors.BLUE_GREY_900
+        # If read_only is True, use BLACK45 background to distinguish it (same as blocks view)
+        is_read_only = kwargs.get('read_only', False)
+        default_bgcolor = ft.Colors.BLACK45 if is_read_only else ft.Colors.BLUE_GREY_900
         bgcolor = kwargs.pop("bgcolor", default_bgcolor)
         return ft.TextField(
             label=label,
@@ -123,7 +124,6 @@ class SlideRow:
             "تاريخ النشر",
             width_medium,
             value=datetime.now().strftime("%Y-%m-%d"),
-            read_only=True,
             icon=ft.Icons.CALENDAR_TODAY
         )
 
