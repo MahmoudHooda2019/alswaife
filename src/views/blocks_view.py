@@ -69,6 +69,8 @@ class BlockRow:
         width_medium = 160
         width_large = 190
         numeric_filter = ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*$")
+        # Filter that allows Arabic decimal separators (ز and ،) to be converted later
+        numeric_filter_with_arabic = ft.InputFilter(regex_string=r"^[0-9ز،]*\.?[0-9ز،]*$")
         
         # Trip number
         self.trip_number = self._create_styled_textfield(
@@ -147,7 +149,7 @@ class BlockRow:
             "الطول",
             width_small,
             keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=numeric_filter,
+            input_filter=numeric_filter_with_arabic,
             on_change=self._on_field_change,
             suffix_text="م"
         )
@@ -157,7 +159,7 @@ class BlockRow:
             "العرض",
             width_small,
             keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=numeric_filter,
+            input_filter=numeric_filter_with_arabic,
             on_change=self._on_field_change,
             suffix_text="م"
         )
@@ -167,7 +169,7 @@ class BlockRow:
             "الارتفاع",
             width_small,
             keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=numeric_filter,
+            input_filter=numeric_filter_with_arabic,
             on_change=self._on_field_change,
             suffix_text="م"
         )
@@ -345,6 +347,11 @@ class BlockRow:
             size=14,
             color=ft.Colors.GREY_400,
             weight=ft.FontWeight.W_500,
+            rtl=True,
+            no_wrap=False,
+            overflow=ft.TextOverflow.VISIBLE,
+            max_lines=1,
+            text_align=ft.TextAlign.RIGHT
         )
         
         # Create the main card with gradient background
@@ -399,10 +406,17 @@ class BlockRow:
             self.content_container.height = 0
             self.content_container.opacity = 0
             self.fold_btn.icon = ft.Icons.KEYBOARD_ARROW_DOWN
-            # Show summary - only block number and material
+            # Show summary - رقم البلوك # نوع البلوك # الخامة # الطول X العرض X الارتفاع # م3
             block_num = self.block_number.value or "---"
+            block_type = self.get_block_type() or "---"
             material = self.material_dropdown.value or "---"
-            self.summary_text.value = f"بلوك: {block_num} | {material}"
+            length = self.length_field.value or "0"
+            width = self.width_field.value or "0"
+            height = self.height_field.value or "0"
+            volume = self.volume_field.value or "0.00"
+            # Use LTR mark (\u200E) to fix number display direction
+            ltr = "\u200E"
+            self.summary_text.value = f"{ltr}{block_num} # {block_type} # {material} # {ltr}{length} x {ltr}{width} x {ltr}{height} = {ltr}{volume}"
         
         self.page.update()
 
@@ -421,7 +435,26 @@ class BlockRow:
 
     def _on_field_change(self, e=None):
         """Handle field changes and trigger calculations"""
+        # Handle Arabic decimal separator for dimension fields
+        if e and hasattr(e, 'control'):
+            self._handle_arabic_decimal_input(e.control)
         self._calculate_values()
+    
+    def _handle_arabic_decimal_input(self, text_field):
+        """Handle Arabic decimal separator (Zein letter) and replace with decimal point"""
+        if text_field.value:
+            # Replace Arabic decimal separator (Zein letter 'زين') with decimal point
+            new_value = text_field.value.replace('،', '.')  # Arabic comma/decimal separator
+            new_value = new_value.replace('ز', '.')  # Arabic 'zein' letter
+            # Also handle potential Arabic digit inputs
+            arabic_digits = {'٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'}
+            for arabic_digit, english_digit in arabic_digits.items():
+                new_value = new_value.replace(arabic_digit, english_digit)
+            
+            if new_value != text_field.value:
+                text_field.value = new_value
+                return True
+        return False
     
     def _on_material_change(self, e=None):
         """Handle material change and update weight per m3, price per ton, and block type"""
@@ -447,7 +480,7 @@ class BlockRow:
             self.block_type_text.value = "جندولا"
             self.block_type_container.content = self.block_type_text
         elif material == "احمر اسوان":
-            self.weight_per_m3_field.value = "2.70"
+            self.weight_per_m3_field.value = "2.80"
             self.price_per_ton_field.value = "1500"
             # Show text field with "احمر"
             self.block_type_text.value = "احمر"
