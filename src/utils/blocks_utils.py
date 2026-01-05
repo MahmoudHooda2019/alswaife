@@ -595,6 +595,7 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
             "FFC9F3",  # Light Magenta
             "C9FFF3",  # Light Turquoise
             "F3C9FF",  # Light Lavender
+            "E6E6FA",  # Lavender (Added for 15th column)
         ]
         
 
@@ -676,6 +677,7 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[7], end_color=column_colors[7], fill_type="solid")
+            cell.number_format = '0.00'
             worksheet.cell(row=excel_row+1, column=8).border = thin_border
             
             # Column 9: العرض (merged 2 rows)
@@ -684,6 +686,7 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[8], end_color=column_colors[8], fill_type="solid")
+            cell.number_format = '0.00'
             worksheet.cell(row=excel_row+1, column=9).border = thin_border
             
             # Column 10: الارتفاع (merged 2 rows)
@@ -692,13 +695,14 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[9], end_color=column_colors[9], fill_type="solid")
+            cell.number_format = '0.00'
             worksheet.cell(row=excel_row+1, column=10).border = thin_border
             
-            # Column 11: م3 (volume) - Calculate using formula (merged 2 rows)
+            # Column 11: م3 (volume) - Calculate using formula with ROUND (merged 2 rows)
             length_cell = get_column_letter(8)
             width_cell = get_column_letter(9)
             height_cell = get_column_letter(10)
-            formula_str = f'={length_cell}{excel_row}*{width_cell}{excel_row}*{height_cell}{excel_row}'
+            formula_str = f'=ROUND({length_cell}{excel_row}*{width_cell}{excel_row}*{height_cell}{excel_row},2)'
             worksheet.merge_cells(start_row=excel_row, start_column=11, end_row=excel_row+1, end_column=11)
             cell = worksheet.cell(row=excel_row, column=11)
             cell.value = formula_str
@@ -716,10 +720,10 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
             cell.fill = PatternFill(start_color=column_colors[11], end_color=column_colors[11], fill_type="solid")
             worksheet.cell(row=excel_row+1, column=12).border = thin_border
             
-            # Column 13: وزن البلوك - Calculate using formula (merged 2 rows)
+            # Column 13: وزن البلوك - Calculate using formula with ROUND (merged 2 rows)
             volume_cell = get_column_letter(11)
             weight_per_m3_cell = get_column_letter(12)
-            formula_str = f'={volume_cell}{excel_row}*{weight_per_m3_cell}{excel_row}'
+            formula_str = f'=ROUND({volume_cell}{excel_row}*{weight_per_m3_cell}{excel_row},2)'
             worksheet.merge_cells(start_row=excel_row, start_column=13, end_row=excel_row+1, end_column=13)
             cell = worksheet.cell(row=excel_row, column=13)
             cell.value = formula_str
@@ -808,6 +812,7 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         "FFC9F3",  # Light Magenta
         "C9FFF3",  # Light Turquoise
         "F3C9FF",  # Light Lavender
+        "E6E6FA",  # Lavender (Added for 15th column)
     ]
 
     # Header styles
@@ -908,6 +913,7 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[7], end_color=column_colors[7], fill_type="solid")
+        cell.number_format = '0.00'
         worksheet.cell(row=excel_row+1, column=8).border = thin_border
         
         # Column 9: العرض (merged 2 rows)
@@ -916,6 +922,7 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[8], end_color=column_colors[8], fill_type="solid")
+        cell.number_format = '0.00'
         worksheet.cell(row=excel_row+1, column=9).border = thin_border
         
         # Column 10: الارتفاع (merged 2 rows)
@@ -924,13 +931,14 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[9], end_color=column_colors[9], fill_type="solid")
+        cell.number_format = '0.00'
         worksheet.cell(row=excel_row+1, column=10).border = thin_border
         
-        # Column 11: م3 (volume) - Formula (merged 2 rows)
+        # Column 11: م3 (volume) - Formula with ROUND (merged 2 rows)
         length_col = get_column_letter(8)
         width_col = get_column_letter(9)
         height_col = get_column_letter(10)
-        volume_formula = f'={length_col}{excel_row}*{width_col}{excel_row}*{height_col}{excel_row}'
+        volume_formula = f'=ROUND({length_col}{excel_row}*{width_col}{excel_row}*{height_col}{excel_row},2)'
         worksheet.merge_cells(start_row=excel_row, start_column=11, end_row=excel_row+1, end_column=11)
         cell = worksheet.cell(row=excel_row, column=11, value=volume_formula)
         cell.border = thin_border
@@ -946,10 +954,10 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
         cell.fill = PatternFill(start_color=column_colors[11], end_color=column_colors[11], fill_type="solid")
         worksheet.cell(row=excel_row+1, column=12).border = thin_border
         
-        # Column 13: وزن البلوك - Formula (merged 2 rows)
+        # Column 13: وزن البلوك - Formula with ROUND (merged 2 rows)
         volume_col = get_column_letter(11)
         weight_per_m3_col = get_column_letter(12)
-        weight_formula = f'={volume_col}{excel_row}*{weight_per_m3_col}{excel_row}'
+        weight_formula = f'=ROUND({volume_col}{excel_row}*{weight_per_m3_col}{excel_row},2)'
         worksheet.merge_cells(start_row=excel_row, start_column=13, end_row=excel_row+1, end_column=13)
         cell = worksheet.cell(row=excel_row, column=13, value=weight_formula)
         cell.border = thin_border

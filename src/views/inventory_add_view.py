@@ -24,7 +24,9 @@ class InventoryRow:
 
     def _create_styled_textfield(self, label, width, **kwargs):
         """Create a consistently styled text field"""
-        bgcolor = kwargs.pop("bgcolor", ft.Colors.BLUE_GREY_900)
+        # If read_only is True, use black background to distinguish it
+        default_bgcolor = ft.Colors.BLACK if kwargs.get("read_only") else ft.Colors.BLUE_GREY_900
+        bgcolor = kwargs.pop("bgcolor", default_bgcolor)
         return ft.TextField(
             label=label,
             width=width,

@@ -9,7 +9,6 @@ from utils.log_utils import log_error, log_exception
 
 class SlideRow:
     """Row UI for slide entry with styling similar to blocks view"""
-
     MATERIAL_OPTIONS = [
         ft.dropdown.Option("نيو حلايب"),
         ft.dropdown.Option("جندولا"),
@@ -30,6 +29,46 @@ class SlideRow:
 
     def __init__(self, page: ft.Page, delete_callback, data=None):
         self.page = page
+        self.delete_callback = delete_callback
+        self._build_controls()
+        self._set_default_values()
+
+    def _create_styled_textfield(self, label, width, **kwargs):
+        """Create a consistently styled text field"""
+        # If read_only is True, use black background to distinguish it
+        default_bgcolor = ft.Colors.BLACK if kwargs.get("read_only") else ft.Colors.BLUE_GREY_900
+        bgcolor = kwargs.pop("bgcolor", default_bgcolor)
+        return ft.TextField(
+            label=label,
+            width=width,
+            border_radius=10,
+            filled=True,
+            bgcolor=bgcolor,
+            border_color=ft.Colors.GREY_700,
+            focused_border_color=ft.Colors.WHITE,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            text_style=ft.TextStyle(size=14, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+            cursor_color=ft.Colors.WHITE,
+            **kwargs,
+        )
+
+    def _create_styled_dropdown(self, label, width, options, **kwargs):
+        """Create a consistently styled dropdown"""
+        # Extract bgcolor if provided in kwargs, otherwise use default
+        bgcolor = kwargs.pop('bgcolor', ft.Colors.BLUE_GREY_900)
+        return ft.Dropdown(
+            label=label,
+            width=width,
+            border_radius=10,
+            filled=True,
+            bgcolor=bgcolor,
+            border_color=ft.Colors.GREY_700,
+            focused_border_color=ft.Colors.WHITE,
+            label_style=ft.TextStyle(color=ft.Colors.GREY_400),
+            text_style=ft.TextStyle(size=14, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+            options=options,
+            **kwargs
+        )
         self.delete_callback = delete_callback
         self._build_controls()
         self._set_default_values()

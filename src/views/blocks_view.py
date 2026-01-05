@@ -24,7 +24,11 @@ class BlockRow:
     def _create_styled_textfield(self, label, width, **kwargs):
         """Create a consistently styled text field"""
         # Extract bgcolor if provided in kwargs, otherwise use default
-        bgcolor = kwargs.pop('bgcolor', ft.Colors.BLUE_GREY_900)
+        # Determine default background color based on read_only state
+        is_read_only = kwargs.get('read_only', False)
+        default_bgcolor = ft.Colors.BLACK45 if is_read_only else ft.Colors.BLUE_GREY_900
+        
+        bgcolor = kwargs.pop('bgcolor', default_bgcolor)
         
         return ft.TextField(
             label=label,
@@ -87,7 +91,6 @@ class BlockRow:
             "التاريخ",
             width_medium,
             value=get_current_date("%Y-%m-%d"),
-            read_only=True,
             icon=ft.Icons.CALENDAR_TODAY
         )
         
@@ -118,7 +121,7 @@ class BlockRow:
             "نوع البلوك",
             width_small,
             self.BLOCK_TYPE_OPTIONS,
-            on_change=self._on_field_change,
+            on_change=self._on_block_type_change,
             icon=ft.Icons.CATEGORY
         )
         
@@ -182,7 +185,6 @@ class BlockRow:
         self.weight_per_m3_field = self._create_styled_textfield(
             "الوزن",
             width_small,
-            read_only=True,
             icon=ft.Icons.SCALE,
             value="0.00"
         )
@@ -196,13 +198,15 @@ class BlockRow:
             value="0.00"
         )
         
-        # Price per ton - read-only, based on material
+        # Price per ton - editable, based on material
         self.price_per_ton_field = self._create_styled_textfield(
             "سعر الطن",
             width_medium,
-            read_only=True,
             icon=ft.Icons.ATTACH_MONEY,
-            value="0.00"
+            value="0.00",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=numeric_filter,
+            on_change=self._on_field_change
         )
         
         # Total price - read-only, calculated automatically
@@ -214,7 +218,6 @@ class BlockRow:
             value="0.00"
         )
         
-        # Delete button
         self.delete_btn = ft.IconButton(
             icon=ft.Icons.DELETE_OUTLINE,
             icon_color=ft.Colors.RED_400,
@@ -426,24 +429,42 @@ class BlockRow:
         
         if material == "نيو حلايب":
             self.weight_per_m3_field.value = "2.70"
-            self.price_per_ton_field.value = "1150"
             # Show dropdown for A/B selection
             self.block_type_container.content = self.block_type_dropdown
             if not self.block_type_dropdown.value:
                 self.block_type_dropdown.value = "A"
+            
+            # Set price based on A/B
+            if self.block_type_dropdown.value == "A":
+                self.price_per_ton_field.value = "1450"
+            else:
+                self.price_per_ton_field.value = "1125"
+                
         elif material == "جندولا":
             self.weight_per_m3_field.value = "2.85"
-            self.price_per_ton_field.value = "1500"
+            self.price_per_ton_field.value = "1600"
             # Show text field with "جندولا"
             self.block_type_text.value = "جندولا"
             self.block_type_container.content = self.block_type_text
         elif material == "احمر اسوان":
-            self.weight_per_m3_field.value = "0"
-            self.price_per_ton_field.value = "0"
+            self.weight_per_m3_field.value = "2.70"
+            self.price_per_ton_field.value = "1500"
             # Show text field with "احمر"
             self.block_type_text.value = "احمر"
             self.block_type_container.content = self.block_type_text
             
+        self._calculate_values()
+        self.page.update()
+
+    def _on_block_type_change(self, e=None):
+        """Handle block type change (A/B) for نيو حلايب"""
+        material = self.material_dropdown.value
+        if material == "نيو حلايب":
+            if self.block_type_dropdown.value == "A":
+                self.price_per_ton_field.value = "1450"
+            else:
+                self.price_per_ton_field.value = "1125"
+        
         self._calculate_values()
         self.page.update()
     
