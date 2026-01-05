@@ -3,6 +3,7 @@ Inventory Disburse View - UI for disbursing inventory items
 Styled similar to blocks and slides views
 """
 
+import asyncio
 import flet as ft
 import os
 import traceback
@@ -440,22 +441,18 @@ class InventoryDisburseView:
         except Exception as e:
             self._show_dialog("خطأ", f"حدث خطأ: {str(e)}", ft.Colors.RED_400)
 
+    async def _delayed_close(self, dlg):
+        """Close dialog with delay to prevent glitch"""
+        await asyncio.sleep(0.3)
+        self.page.close(dlg)
+
     def _show_excel_warning_dialog(self):
         """Show Excel warning dialog with continue option"""
         def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
+            self.page.run_task(self._delayed_close, dlg)
 
         def continue_save(e=None):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
+            self.page.close(dlg)
             self._do_save()
 
         dlg = ft.AlertDialog(
@@ -476,20 +473,12 @@ class InventoryDisburseView:
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=ft.Colors.BLUE_GREY_900
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.open(dlg)
 
     def _show_dialog(self, title: str, message: str, title_color=ft.Colors.BLUE_300):
         """Show a styled dialog"""
         def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
+            self.page.run_task(self._delayed_close, dlg)
 
         dlg = ft.AlertDialog(
             title=ft.Text(title, color=title_color, weight=ft.FontWeight.BOLD),
@@ -502,30 +491,22 @@ class InventoryDisburseView:
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=ft.Colors.BLUE_GREY_900,
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.open(dlg)
 
     def _show_success_dialog(self, filepath: str, count: int):
         """Show success dialog"""
         def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
+            self.page.run_task(self._delayed_close, dlg)
 
         def open_file(e=None):
-            close_dlg()
+            self.page.close(dlg)
             try:
                 os.startfile(filepath)
             except:
                 pass
 
         def open_folder(e=None):
-            close_dlg()
+            self.page.close(dlg)
             try:
                 os.startfile(os.path.dirname(filepath))
             except:
@@ -565,6 +546,4 @@ class InventoryDisburseView:
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=ft.Colors.BLUE_GREY_900,
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.open(dlg)

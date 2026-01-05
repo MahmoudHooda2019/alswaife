@@ -154,7 +154,7 @@ def convert_existing_inventory_to_formulas(file_path):
             inventory_sheet.cell(row=row_num, column=2).value = additions_formula
             inventory_sheet.cell(row=row_num, column=2).border = border
             inventory_sheet.cell(row=row_num, column=2).alignment = alignment
-            inventory_sheet.cell(row=row_num, column=2).number_format = '#,##0.00'
+            inventory_sheet.cell(row=row_num, column=2).number_format = '#,##0'
             
             # Formula for total disbursements (SUMIF from disbursements sheet)
             # Using single quotes around sheet names to handle spaces
@@ -162,14 +162,14 @@ def convert_existing_inventory_to_formulas(file_path):
             inventory_sheet.cell(row=row_num, column=3).value = disbursements_formula
             inventory_sheet.cell(row=row_num, column=3).border = border
             inventory_sheet.cell(row=row_num, column=3).alignment = alignment
-            inventory_sheet.cell(row=row_num, column=3).number_format = '#,##0.00'
+            inventory_sheet.cell(row=row_num, column=3).number_format = '#,##0'
             
             # Formula for current balance (additions - disbursements)
             balance_formula = f"=B{row_num}-C{row_num}"
             inventory_sheet.cell(row=row_num, column=4).value = balance_formula
             inventory_sheet.cell(row=row_num, column=4).border = border
             inventory_sheet.cell(row=row_num, column=4).alignment = alignment
-            inventory_sheet.cell(row=row_num, column=4).number_format = '#,##0.00'
+            inventory_sheet.cell(row=row_num, column=4).number_format = '#,##0'
         
         # Save the workbook
         wb.save(file_path)
@@ -205,16 +205,28 @@ def add_inventory_entry(file_path, item_name, quantity, unit_price, notes="", en
         if entry_date is None:
             entry_date = datetime.now().strftime('%d/%m/%Y')
         
-        # Calculate total price
-        total_price = float(quantity) * float(unit_price)
+        # Parse quantity and unit_price
+        qty_float = float(quantity)
+        price_float = float(unit_price)
+        
+        # Check if quantity is a whole number
+        qty_is_int = qty_float == int(qty_float)
+        qty_value = int(qty_float) if qty_is_int else qty_float
+        
+        # Check if unit_price is a whole number
+        price_is_int = price_float == int(price_float)
+        price_value = int(price_float) if price_is_int else price_float
+        
+        # Calculate total price and round it
+        total_price = round(qty_float * price_float)
         
         # Add data row
         row_data = [
             next_entry_number,  # Auto entry number
             entry_date,
             item_name,
-            float(quantity),
-            float(unit_price),
+            qty_value,
+            price_value,
             total_price,
             notes
         ]
@@ -238,8 +250,12 @@ def add_inventory_entry(file_path, item_name, quantity, unit_price, notes="", en
             cell.border = border
             cell.alignment = alignment
             # Apply number formatting for numeric columns
-            if col_num in [4, 5, 6]:  # Quantity, Unit Price, Total Price
-                cell.number_format = '#,##0.00'
+            if col_num == 4:  # Quantity
+                cell.number_format = '#,##0' if qty_is_int else '#,##0.00'
+            elif col_num == 5:  # Unit Price
+                cell.number_format = '#,##0' if price_is_int else '#,##0.00'
+            elif col_num == 6:  # Total Price - always integer
+                cell.number_format = '#,##0'
         
         # Save the workbook
         wb.save(file_path)
@@ -280,16 +296,28 @@ def disburse_inventory_entry(file_path, item_name, quantity, unit_price, notes="
         if disburse_date is None:
             disburse_date = datetime.now().strftime('%d/%m/%Y')
         
-        # Calculate total price
-        total_price = float(quantity) * float(unit_price)
+        # Parse quantity and unit_price
+        qty_float = float(quantity)
+        price_float = float(unit_price)
+        
+        # Check if quantity is a whole number
+        qty_is_int = qty_float == int(qty_float)
+        qty_value = int(qty_float) if qty_is_int else qty_float
+        
+        # Check if unit_price is a whole number
+        price_is_int = price_float == int(price_float)
+        price_value = int(price_float) if price_is_int else price_float
+        
+        # Calculate total price and round it
+        total_price = round(qty_float * price_float)
         
         # Add data row
         row_data = [
             next_entry_number,  # Auto entry number
             disburse_date,
             item_name,
-            float(quantity),
-            float(unit_price),
+            qty_value,
+            price_value,
             total_price,
             notes
         ]
@@ -313,8 +341,12 @@ def disburse_inventory_entry(file_path, item_name, quantity, unit_price, notes="
             cell.border = border
             cell.alignment = alignment
             # Apply number formatting for numeric columns
-            if col_num in [4, 5, 6]:  # Quantity, Unit Price, Total Price
-                cell.number_format = '#,##0.00'
+            if col_num == 4:  # Quantity
+                cell.number_format = '#,##0' if qty_is_int else '#,##0.00'
+            elif col_num == 5:  # Unit Price
+                cell.number_format = '#,##0' if price_is_int else '#,##0.00'
+            elif col_num == 6:  # Total Price - always integer
+                cell.number_format = '#,##0'
         
         # Save the workbook
         wb.save(file_path)

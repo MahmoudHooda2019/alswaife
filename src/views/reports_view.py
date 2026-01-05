@@ -3,6 +3,7 @@ Reports View - Enhanced reports interface with RecyclerView and CardView design
 Allows users to select sections, sub-sections, and date ranges
 """
 
+import asyncio
 import flet as ft
 import os
 from datetime import datetime
@@ -612,37 +613,32 @@ class ReportsView:
                     return opt["name"]
         return report_id
     
+    async def _delayed_close(self, dlg):
+        """Close dialog with delay to prevent glitch"""
+        await asyncio.sleep(0.3)
+        self.page.close(dlg)
+    
     def _show_dialog(self, title: str, message: str, title_color=ft.Colors.BLUE_300):
         """Show a styled dialog"""
-        def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-        
         dlg = ft.AlertDialog(
             title=ft.Text(title, color=title_color, weight=ft.FontWeight.BOLD),
             content=ft.Text(message, size=16, rtl=True),
             actions=[
                 ft.TextButton(
                     "حسناً",
-                    on_click=close_dlg,
+                    on_click=lambda e: self.page.run_task(self._delayed_close, dlg),
                     style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
                 ),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=ft.Colors.GREY_900,
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.open(dlg)
     
     def _show_success_dialog(self, filepaths: List[str]):
         """Show success dialog with generated files"""
-        def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-        
         def open_folder(e=None):
-            close_dlg()
+            self.page.close(dlg)
             try:
                 if filepaths:
                     folder = os.path.dirname(filepaths[0])
@@ -651,7 +647,7 @@ class ReportsView:
                 pass
         
         def open_first_file(e=None):
-            close_dlg()
+            self.page.close(dlg)
             try:
                 if filepaths:
                     os.startfile(filepaths[0])
@@ -718,7 +714,7 @@ class ReportsView:
                 ),
                 ft.TextButton(
                     "إغلاق",
-                    on_click=close_dlg,
+                    on_click=lambda e: self.page.run_task(self._delayed_close, dlg),
                     style=ft.ButtonStyle(color=ft.Colors.GREY_400)
                 ),
             ],
@@ -726,6 +722,4 @@ class ReportsView:
             bgcolor=ft.Colors.GREY_900,
             shape=ft.RoundedRectangleBorder(radius=15),
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.open(dlg)

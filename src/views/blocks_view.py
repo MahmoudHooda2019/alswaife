@@ -232,14 +232,20 @@ class BlockRow:
             )
         )
         
-        # Fold/Expand button
+        # Fold/Expand button with rotate animation
+        self.fold_icon = ft.Icon(
+            ft.Icons.KEYBOARD_ARROW_DOWN,
+            color=ft.Colors.BLUE_300,
+            size=24,
+            rotate=ft.Rotate(angle=3.14159),  # 180 degrees (expanded state)
+            animate_rotation=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT),
+        )
+        
         self.fold_btn = ft.IconButton(
-            icon=ft.Icons.KEYBOARD_ARROW_UP,
-            icon_color=ft.Colors.BLUE_300,
+            content=self.fold_icon,
             tooltip="طي/فتح",
             on_click=self._toggle_fold,
             bgcolor=ft.Colors.GREY_800,
-            icon_size=24,
             style=ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=10)
             ),
@@ -399,13 +405,13 @@ class BlockRow:
             # Expand
             self.content_container.height = None
             self.content_container.opacity = 1
-            self.fold_btn.icon = ft.Icons.KEYBOARD_ARROW_UP
+            self.fold_icon.rotate.angle = 3.14159  # 180 degrees (arrow up)
             self.summary_text.value = ""
         else:
             # Collapse
             self.content_container.height = 0
             self.content_container.opacity = 0
-            self.fold_btn.icon = ft.Icons.KEYBOARD_ARROW_DOWN
+            self.fold_icon.rotate.angle = 0  # 0 degrees (arrow down)
             # Show summary - رقم البلوك # نوع البلوك # الخامة # الطول X العرض X الارتفاع # م3
             block_num = self.block_number.value or "---"
             block_type = self.get_block_type() or "---"
@@ -641,6 +647,11 @@ class BlocksView:
             ),
             actions=[
                 ft.IconButton(
+                    icon=ft.Icons.REFRESH,
+                    on_click=self.reset_all,
+                    tooltip="مسح الكل"
+                ),
+                ft.IconButton(
                     icon=ft.Icons.ADD,
                     on_click=self.add_row,
                     tooltip="إضافة بلوك جديد"
@@ -683,6 +694,13 @@ class BlocksView:
         """Navigate back to previous view"""
         if self.on_back:
             self.on_back()
+
+    def reset_all(self, e=None):
+        """Reset all rows - clear all data"""
+        self.rows.clear()
+        self.rows_container.controls.clear()
+        self.add_row()
+        self.page.update()
 
     def add_row(self, e=None):
         """Add a new block row and scroll to it"""

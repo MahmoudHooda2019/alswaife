@@ -1,3 +1,4 @@
+import asyncio
 import flet as ft
 import os
 from views.invoice_view import InvoiceView
@@ -106,6 +107,11 @@ class DashboardView:
             alignment=ft.alignment.center,
             expand=True
         )
+
+    async def _delayed_close(self, dlg):
+        """Close dialog with delay to prevent glitch"""
+        await asyncio.sleep(2.7)
+        self.page.close(dlg)
 
     def build_ui(self):
         """Build the main dashboard UI"""
@@ -225,13 +231,6 @@ class DashboardView:
 
     def show_about_dialog(self, e):
         """Show about dialog with developer information"""
-        def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-        
         dlg = ft.AlertDialog(
             modal=True,
             content=ft.Container(
@@ -341,7 +340,7 @@ class DashboardView:
             actions=[
                 ft.TextButton(
                     "إغلاق",
-                    on_click=close_dlg,
+                    on_click=lambda e: self.page.run_task(self._delayed_close, dlg),
                     style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
                 ),
             ],
@@ -349,9 +348,7 @@ class DashboardView:
             bgcolor=ft.Colors.GREY_900,
             shape=ft.RoundedRectangleBorder(radius=20),
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.open(dlg)
 
     def open_reports(self, e):
         """Open the enhanced reports view"""
@@ -728,6 +725,9 @@ class DashboardView:
             if self.compare_server:
                 self.compare_server.stop()
             dlg.open = False
+            self.page.update()
+            if dlg in self.page.overlay:
+                self.page.overlay.remove(dlg)
             self.page.update()
         
         def on_device_click(device_ip):

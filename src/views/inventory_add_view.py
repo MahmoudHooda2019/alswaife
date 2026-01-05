@@ -3,6 +3,7 @@ Inventory Add View - UI for adding inventory items
 Styled similar to blocks and slides views
 """
 
+import asyncio
 import flet as ft
 import os
 from datetime import datetime
@@ -48,7 +49,6 @@ class InventoryRow:
             "التاريخ",
             140,
             value=get_current_date("%d/%m/%Y"),
-            read_only=True,
             icon=ft.Icons.CALENDAR_TODAY,
         )
 
@@ -209,6 +209,9 @@ class InventoryAddView:
             ),
             actions=[
                 ft.IconButton(
+                    icon=ft.Icons.REFRESH, on_click=self.reset_all, tooltip="مسح الكل"
+                ),
+                ft.IconButton(
                     icon=ft.Icons.ADD, on_click=self.add_row, tooltip="إضافة صف جديد"
                 ),
                 ft.Container(
@@ -238,6 +241,13 @@ class InventoryAddView:
         """Navigate back"""
         if self.on_back:
             self.on_back()
+
+    def reset_all(self, e=None):
+        """Reset all rows - clear all data"""
+        self.rows.clear()
+        self.rows_container.controls.clear()
+        self.add_row()
+        self.page.update()
 
     def add_row(self, e=None):
         """Add a new inventory row"""
@@ -291,7 +301,6 @@ class InventoryAddView:
                         notes=data["notes"],
                         entry_date=data["date"],
                     )
-                    row.clear()
                     saved_count += 1
 
             self._show_success_dialog(excel_file, saved_count)
@@ -305,22 +314,18 @@ class InventoryAddView:
         except Exception as e:
             self._show_dialog("خطأ", f"حدث خطأ: {str(e)}", ft.Colors.RED_400)
 
+    async def _delayed_close(self, dlg):
+        """Close dialog with delay to prevent glitch"""
+        await asyncio.sleep(0.3)
+        self.page.close(dlg)
+
     def _show_excel_warning_dialog(self):
         """Show Excel warning dialog with continue option"""
         def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
+            self.page.run_task(self._delayed_close, dlg)
 
         def continue_save(e=None):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
+            self.page.close(dlg)
             self._do_save()
 
         dlg = ft.AlertDialog(
@@ -341,20 +346,12 @@ class InventoryAddView:
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=ft.Colors.BLUE_GREY_900
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.open(dlg)
 
     def _show_dialog(self, title: str, message: str, title_color=ft.Colors.BLUE_300):
         """Show a styled dialog"""
         def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
+            self.page.run_task(self._delayed_close, dlg)
 
         dlg = ft.AlertDialog(
             title=ft.Text(title, color=title_color, weight=ft.FontWeight.BOLD),
@@ -367,30 +364,22 @@ class InventoryAddView:
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=ft.Colors.BLUE_GREY_900,
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.open(dlg)
 
     def _show_success_dialog(self, filepath: str, count: int):
         """Show success dialog"""
         def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
+            self.page.run_task(self._delayed_close, dlg)
 
         def open_file(e=None):
-            close_dlg()
+            self.page.close(dlg)
             try:
                 os.startfile(filepath)
             except:
                 pass
 
         def open_folder(e=None):
-            close_dlg()
+            self.page.close(dlg)
             try:
                 os.startfile(os.path.dirname(filepath))
             except:
@@ -430,6 +419,4 @@ class InventoryAddView:
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=ft.Colors.BLUE_GREY_900,
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.open(dlg)

@@ -261,6 +261,35 @@ class SlideRow:
             )
         )
 
+        # Fold/Expand button with rotate animation
+        self.is_expanded = True
+        self.fold_icon = ft.Icon(
+            ft.Icons.KEYBOARD_ARROW_DOWN,
+            color=ft.Colors.BLUE_300,
+            size=24,
+            rotate=ft.Rotate(angle=3.14159),  # 180 degrees (expanded state)
+            animate_rotation=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT),
+        )
+        
+        self.fold_btn = ft.IconButton(
+            content=self.fold_icon,
+            tooltip="طي/فتح",
+            on_click=self._toggle_fold,
+            bgcolor=ft.Colors.GREY_800,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=10)
+            ),
+        )
+
+        # Header summary text (shown when collapsed)
+        self.summary_text = ft.Text(
+            "",
+            size=14,
+            color=ft.Colors.GREY_400,
+            weight=ft.FontWeight.W_500,
+            rtl=True,
+        )
+
         # Section header style
         def create_section_header(text, color):
             return ft.Container(
@@ -284,83 +313,99 @@ class SlideRow:
                 margin=ft.margin.only(bottom=10)
             )
 
+        # Collapsible content container
+        self.content_container = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Divider(height=20, color=ft.Colors.GREY_700),
+                    
+                    # Basic Information Section
+                    create_section_header("المعلومات الأساسية", ft.Colors.BLUE_400),
+                    
+                    ft.Row(
+                        controls=[
+                            self.publishing_date,
+                            self.block_number,
+                            self.material_dropdown,
+                            self.machine_number,
+                        ],
+                        spacing=15,
+                        wrap=True
+                    ),
+                    
+                    ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
+                    
+                    # Measurements Section
+                    create_section_header("القياسات", ft.Colors.GREEN_400),
+                    
+                    ft.Row(
+                        controls=[
+                            self.quantity_field,
+                            self.length_field,
+                            self.height_field,
+                            self.thickness_dropdown,
+                        ],
+                        spacing=15,
+                        wrap=True
+                    ),
+                    
+                    ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
+                    
+                    # Calculations Section
+                    create_section_header("الحسابات", ft.Colors.ORANGE_400),
+                    
+                    ft.Row(
+                        controls=[
+                            self.area_field,
+                            self.price_per_meter_field,
+                            self.total_price_field,
+                        ],
+                        spacing=15,
+                        wrap=True
+                    ),
+                    
+                    ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
+                    
+                    # Time Section
+                    create_section_header("أوقات التشغيل", ft.Colors.PURPLE_400),
+                    
+                    ft.Row(
+                        controls=[
+                            self.entry_time,
+                            self.exit_time,
+                            self.hours_count,
+                        ],
+                        spacing=15,
+                        wrap=True
+                    ),
+                ],
+                spacing=12
+            ),
+            animate=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT),
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
+        )
+
         # Create the main card with gradient background
         self.card = ft.Card(
             content=ft.Container(
                 content=ft.Column(
                     controls=[
-                        # Header with delete button
+                        # Header with summary and action buttons
                         ft.Row(
                             controls=[
+                                self.summary_text,
                                 ft.Container(expand=True),
-                                self.delete_btn
+                                self.fold_btn,
+                                self.delete_btn,
                             ],
-                            alignment=ft.MainAxisAlignment.END
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                         
-                        ft.Divider(height=20, color=ft.Colors.GREY_700),
-                        
-                        # Basic Information Section
-                        create_section_header("المعلومات الأساسية", ft.Colors.BLUE_400),
-                        
-                        ft.Row(
-                            controls=[
-                                self.publishing_date,
-                                self.block_number,
-                                self.material_dropdown,
-                                self.machine_number,
-                            ],
-                            spacing=15,
-                            wrap=True
-                        ),
-                        
-                        ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
-                        
-                        # Measurements Section
-                        create_section_header("القياسات", ft.Colors.GREEN_400),
-                        
-                        ft.Row(
-                            controls=[
-                                self.quantity_field,
-                                self.length_field,
-                                self.height_field,
-                                self.thickness_dropdown,
-                            ],
-                            spacing=15,
-                            wrap=True
-                        ),
-                        
-                        ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
-                        
-                        # Calculations Section
-                        create_section_header("الحسابات", ft.Colors.ORANGE_400),
-                        
-                        ft.Row(
-                            controls=[
-                                self.area_field,
-                                self.price_per_meter_field,
-                                self.total_price_field,
-                            ],
-                            spacing=15,
-                            wrap=True
-                        ),
-                        
-                        ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
-                        
-                        # Time Section
-                        create_section_header("أوقات التشغيل", ft.Colors.PURPLE_400),
-                        
-                        ft.Row(
-                            controls=[
-                                self.entry_time,
-                                self.exit_time,
-                                self.hours_count,
-                            ],
-                            spacing=15,
-                            wrap=True
-                        ),
+                        # Collapsible content
+                        self.content_container,
                     ],
-                    spacing=12
+                    spacing=0
                 ),
                 padding=20,
                 gradient=ft.LinearGradient(
@@ -369,12 +414,39 @@ class SlideRow:
                     colors=[ft.Colors.GREY_900, ft.Colors.GREY_800]
                 ),
                 border_radius=15,
-                border=ft.border.all(1, ft.Colors.GREY_700)
+                border=ft.border.all(1, ft.Colors.GREY_700),
+                animate=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT),
             ),
             elevation=8,
         )
 
         self.row = self.card
+
+    def _toggle_fold(self, e=None):
+        """Toggle the fold/expand state with animation"""
+        self.is_expanded = not self.is_expanded
+        
+        if self.is_expanded:
+            # Expand
+            self.content_container.height = None
+            self.content_container.opacity = 1
+            self.fold_icon.rotate.angle = 3.14159  # 180 degrees (arrow up)
+            self.summary_text.value = ""
+        else:
+            # Collapse
+            self.content_container.height = 0
+            self.content_container.opacity = 0
+            self.fold_icon.rotate.angle = 0  # 0 degrees (arrow down)
+            # Show summary
+            block_num = self.block_number.value or "---"
+            material = self.material_dropdown.value or "---"
+            area = self.area_field.value or "0.00"
+            length = self.length_field.value or "0"
+            height = self.height_field.value or "0"
+            ltr = "\u200E"
+            self.summary_text.value = f"{ltr}{block_num} # {material} # {ltr}{length} x {ltr}{height} = {ltr}{area}"
+        
+        self.page.update()
 
     def _on_field_change(self, e=None):
         """Handle field changes and trigger calculations"""
