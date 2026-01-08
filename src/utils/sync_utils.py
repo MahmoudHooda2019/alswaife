@@ -16,6 +16,7 @@ from datetime import datetime
 # Default sync port
 SYNC_PORT = 5555
 COMPARE_PORT = 5556
+UDP_PORT = 5557
 BUFFER_SIZE = 8192
 HEADER_SIZE = 10
 
@@ -215,6 +216,50 @@ def extract_backup_zip(zip_path, progress_callback=None):
         return False, None
 
 
+class BroadcastServer:
+    """خادم البث - يعلن عن وجود الجهاز على الشبكة"""
+    
+    def __init__(self, port=UDP_PORT):
+        self.port = port
+        self.sock = None
+        self.running = False
+        
+    def start(self):
+        """بدء خادم البث"""
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.sock.bind(('0.0.0.0', self.port))
+            self.running = True
+            
+            thread = threading.Thread(target=self._listen)
+            thread.daemon = True
+            thread.start()
+        except Exception as e:
+            print(f"Failed to start broadcast server: {e}")
+            
+    def stop(self):
+        """إيقاف خادم البث"""
+        self.running = False
+        if self.sock:
+            try:
+                self.sock.close()
+            except:
+                pass
+
+    def _listen(self):
+        """الاستماع لرسائل الاستكشاف"""
+        while self.running:
+            try:
+                data, addr = self.sock.recvfrom(1024)
+                if data.decode('utf-8').strip() == "DISCOVER_AL_SWAIFE":
+                    # الرد برسالة تأكيد
+                    response = f"AL_SWAIFE_DEVICE:{socket.gethostname()}"
+                    self.sock.sendto(response.encode('utf-8'), addr)
+            except:
+                pass
+
+
 class SyncServer:
     """خادم المزامنة - يستقبل البيانات من جهاز آخر"""
     
@@ -225,6 +270,7 @@ class SyncServer:
         self.on_progress = None
         self.on_complete = None
         self.on_error = None
+        self.broadcast_server = BroadcastServer()
     
     def start(self):
         """بدء الخادم"""
@@ -239,6 +285,8 @@ class SyncServer:
             thread.daemon = True
             thread.start()
             
+            self.broadcast_server.start()
+            
             return True, get_local_ip()
         except Exception as e:
             return False, str(e)
@@ -251,6 +299,7 @@ class SyncServer:
                 self.server_socket.close()
             except:
                 pass
+        self.broadcast_server.stop()
     
     def _accept_connections(self):
         """قبول الاتصالات الواردة"""
@@ -398,40 +447,36 @@ class SyncClient:
                 self.on_error(f"خطأ في الاتصال: {str(e)}")
 
 
-def discover_devices(port=SYNC_PORT, timeout=3):
-    """اكتشاف الأجهزة المتاحة على الشبكة"""
+def discover_devices(timeout=2.0):
+    """اكتشاف الأجهزة باستخدام UDP Broadcast"""
     devices = []
     local_ip = get_local_ip()
     
-    # الحصول على نطاق الشبكة
-    ip_parts = local_ip.split('.')
-    if len(ip_parts) != 4:
-        return devices
-    
-    network_prefix = '.'.join(ip_parts[:3])
-    
-    def check_device(ip):
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(0.5)
-            result = sock.connect_ex((ip, port))
-            sock.close()
-            if result == 0 and ip != local_ip:
-                devices.append(ip)
-        except:
-            pass
-    
-    threads = []
-    for i in range(1, 255):
-        ip = f"{network_prefix}.{i}"
-        t = threading.Thread(target=check_device, args=(ip,))
-        t.start()
-        threads.append(t)
-    
-    for t in threads:
-        t.join(timeout=timeout)
-    
-    return devices
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.settimeout(timeout)
+        
+        message = "DISCOVER_AL_SWAIFE"
+        sock.sendto(message.encode('utf-8'), ('255.255.255.255', UDP_PORT))
+        
+        start_time = datetime.now()
+        while (datetime.now() - start_time).total_seconds() < timeout:
+            try:
+                data, addr = sock.recvfrom(1024)
+                ip = addr[0]
+                if ip != local_ip:
+                    devices.append(ip)
+            except socket.timeout:
+                break
+            except:
+                continue
+                
+        sock.close()
+    except Exception as e:
+        print(f"Discovery error: {e}")
+        
+    return list(set(devices))
 
 
 class CompareServer:

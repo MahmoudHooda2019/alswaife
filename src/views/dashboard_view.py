@@ -1,6 +1,7 @@
 import asyncio
 import flet as ft
 import os
+import threading
 from views.invoice_view import InvoiceView
 from views.attendance_view import AttendanceView
 from views.blocks_view import BlocksView
@@ -12,6 +13,7 @@ from views.reports_view import ReportsView
 from utils.update_utils import check_for_updates, download_update, install_update
 from utils.invoice_utils import save_invoice, update_client_ledger
 from utils.log_utils import log_error, log_exception
+from utils.dialog_utils import DialogManager
 
 
 def save_callback(filepath, op_num, client, driver, date_str, phone, items):
@@ -107,11 +109,6 @@ class DashboardView:
             alignment=ft.alignment.center,
             expand=True
         )
-
-    async def _delayed_close(self, dlg):
-        """Close dialog with delay to prevent glitch"""
-        await asyncio.sleep(2.7)
-        self.page.close(dlg)
 
     def build_ui(self):
         """Build the main dashboard UI"""
@@ -209,28 +206,13 @@ class DashboardView:
 
     def show_placeholder(self, feature):
         message = f" الخاصية {feature} قيد التطوير" if feature else "هذه الخاصية قيد التطوير"
-        
-        def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-        
-        dlg = ft.AlertDialog(
-            title=ft.Text("تنبيه"),
-            content=ft.Text(message, rtl=True),
-            actions=[
-                ft.TextButton("حسناً", on_click=close_dlg)
-            ],
-            actions_alignment=ft.MainAxisAlignment.END
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        DialogManager.show_info_dialog(self.page, message, title="تنبيه")
 
     def show_about_dialog(self, e):
         """Show about dialog with developer information"""
+        def close_dlg(e):
+            DialogManager.close_dialog(self.page, dlg)
+
         dlg = ft.AlertDialog(
             modal=True,
             content=ft.Container(
@@ -340,7 +322,7 @@ class DashboardView:
             actions=[
                 ft.TextButton(
                     "إغلاق",
-                    on_click=lambda e: self.page.run_task(self._delayed_close, dlg),
+                    on_click=close_dlg,
                     style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
                 ),
             ],
@@ -348,7 +330,9 @@ class DashboardView:
             bgcolor=ft.Colors.GREY_900,
             shape=ft.RoundedRectangleBorder(radius=20),
         )
-        self.page.open(dlg)
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
 
     def open_reports(self, e):
         """Open the enhanced reports view"""
@@ -358,41 +342,22 @@ class DashboardView:
 
     def open_update(self, e):
         """Open update dialog to check and download updates"""
-        import threading
         
         # Show checking progress
-        progress_dlg = ft.AlertDialog(
-            modal=True,
-            content=ft.Column(
-                controls=[
-                    ft.ProgressRing(width=40, height=40, color=ft.Colors.ORANGE_400),
-                    ft.Text("جاري التحقق...", size=14, color=ft.Colors.WHITE),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=10,
-                tight=True,
-            ),
-            bgcolor=ft.Colors.GREY_900,
-            shape=ft.RoundedRectangleBorder(radius=10),
-        )
-        self.page.overlay.append(progress_dlg)
-        progress_dlg.open = True
-        self.page.update()
+        progress_dlg = DialogManager.show_loading_dialog(self.page, "جاري التحقق...")
         
         def check():
             try:
                 update_available, current_ver, latest_ver, download_url = check_for_updates()
                 
-                progress_dlg.open = False
-                self.page.update()
+                DialogManager.close_dialog(self.page, progress_dlg)
                 
                 if update_available and download_url:
                     self.show_update_available_dialog(current_ver, latest_ver, download_url)
                 else:
                     self.show_no_update_dialog(current_ver, latest_ver)
             except Exception as ex:
-                progress_dlg.open = False
-                self.page.update()
+                DialogManager.close_dialog(self.page, progress_dlg)
                 self.show_update_error(f"فشل في التحقق من التحديثات: {str(ex)}")
         
         thread = threading.Thread(target=check)
@@ -401,11 +366,7 @@ class DashboardView:
     def show_update_available_dialog(self, current_ver, latest_ver, download_url):
         """Show dialog when update is available"""
         def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
+            DialogManager.close_dialog(self.page, dlg)
         
         def start_download(e):
             close_dlg(e)
@@ -463,50 +424,14 @@ class DashboardView:
 
     def show_no_update_dialog(self, current_ver, latest_ver):
         """Show dialog when no update is available"""
-        def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-        
-        dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=24),
-                    ft.Text("لا يوجد تحديث", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_300, size=16, rtl=True),
-                ],
-                spacing=8,
-                rtl=True,
-            ),
-            content=ft.Row(
-                controls=[
-                    ft.Text("الإصدار:", size=13, color=ft.Colors.GREY_400, rtl=True),
-                    ft.Text(current_ver, size=13, color=ft.Colors.GREEN_400, weight=ft.FontWeight.BOLD),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                spacing=5,
-                rtl=True,
-            ),
-            actions=[
-                ft.TextButton(
-                    "حسناً",
-                    on_click=close_dlg,
-                    style=ft.ButtonStyle(color=ft.Colors.GREEN_300)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.CENTER,
-            bgcolor=ft.Colors.GREY_900,
-            shape=ft.RoundedRectangleBorder(radius=10),
+        DialogManager.show_success_dialog(
+            self.page, 
+            f"أنت تستخدم أحدث إصدار ({current_ver})", 
+            title="لا يوجد تحديث"
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
 
     def download_and_install_update(self, download_url):
         """Download and install the update"""
-        import threading
         
         # Cancel flag
         self.download_cancelled = False
@@ -562,8 +487,7 @@ class DashboardView:
                 setup_path = download_update(download_url, update_progress, check_cancelled)
                 
                 if self.download_cancelled:
-                    progress_dlg.open = False
-                    self.page.update()
+                    DialogManager.close_dialog(self.page, progress_dlg)
                     self.show_download_cancelled_dialog()
                     return
                 
@@ -573,21 +497,17 @@ class DashboardView:
                     self.page.update()
                     
                     if install_update(setup_path):
-                        progress_dlg.open = False
-                        self.page.update()
+                        DialogManager.close_dialog(self.page, progress_dlg)
                         self.show_install_success_dialog()
                     else:
-                        progress_dlg.open = False
-                        self.page.update()
+                        DialogManager.close_dialog(self.page, progress_dlg)
                         self.show_update_error("فشل في تشغيل المثبت")
                 else:
-                    progress_dlg.open = False
-                    self.page.update()
+                    DialogManager.close_dialog(self.page, progress_dlg)
                     if not self.download_cancelled:
                         self.show_update_error("فشل في تحميل التحديث")
             except Exception as ex:
-                progress_dlg.open = False
-                self.page.update()
+                DialogManager.close_dialog(self.page, progress_dlg)
                 self.show_update_error(f"خطأ: {str(ex)}")
         
         thread = threading.Thread(target=download)
@@ -595,43 +515,12 @@ class DashboardView:
     
     def show_download_cancelled_dialog(self):
         """Show dialog when download is cancelled"""
-        def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-        
-        dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.CANCEL, color=ft.Colors.ORANGE_400, size=24),
-                    ft.Text("تم الإلغاء", weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_300, size=16, rtl=True),
-                ],
-                spacing=8,
-                rtl=True,
-            ),
-            content=ft.Text("تم إلغاء تحميل التحديث", size=14, color=ft.Colors.WHITE, rtl=True),
-            actions=[
-                ft.TextButton("حسناً", on_click=close_dlg, style=ft.ButtonStyle(color=ft.Colors.BLUE_400)),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.GREY_900,
-            shape=ft.RoundedRectangleBorder(radius=10),
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        DialogManager.show_warning_dialog(self.page, "تم إلغاء تحميل التحديث", title="تم الإلغاء")
 
     def show_install_success_dialog(self):
         """Show dialog after installer starts"""
         def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
+            DialogManager.close_dialog(self.page, dlg)
         
         def close_app(e):
             self.page.window.close()
@@ -674,36 +563,11 @@ class DashboardView:
 
     def show_update_error(self, error_msg):
         """Show update error dialog"""
-        def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-        
-        dlg = ft.AlertDialog(
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED_400, size=28),
-                    ft.Text("خطأ في التحديث", weight=ft.FontWeight.BOLD, color=ft.Colors.RED_300),
-                ],
-                spacing=10,
-            ),
-            content=ft.Text(error_msg, size=14, rtl=True, color=ft.Colors.WHITE),
-            actions=[
-                ft.TextButton("إغلاق", on_click=close_dlg, style=ft.ButtonStyle(color=ft.Colors.GREY_400)),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.GREY_900,
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        DialogManager.show_error_dialog(self.page, error_msg, title="خطأ في التحديث")
 
     def open_sync(self, e):
         """Open sync dialog - search for devices and compare"""
         from utils.sync_utils import get_local_ip, discover_devices, CompareServer, COMPARE_PORT
-        import threading
         
         local_ip = get_local_ip()
         self.discovered_devices = []
@@ -724,11 +588,7 @@ class DashboardView:
             # إيقاف خادم المقارنة عند الإغلاق
             if self.compare_server:
                 self.compare_server.stop()
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
+            DialogManager.close_dialog(self.page, dlg)
         
         def on_device_click(device_ip):
             """عند اختيار جهاز - بدء المقارنة"""
@@ -816,7 +676,7 @@ class DashboardView:
             self.page.update()
             
             def do_search():
-                devices = discover_devices(port=COMPARE_PORT, timeout=3)
+                devices = discover_devices(timeout=3)
                 self.discovered_devices = devices
                 update_devices_list(devices)
             
@@ -917,38 +777,16 @@ class DashboardView:
         from utils.sync_utils import CompareClient
         
         # عرض نافذة التحميل
-        loading_dlg = ft.AlertDialog(
-            modal=True,
-            content=ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.ProgressRing(width=40, height=40, color=ft.Colors.ORANGE_400, stroke_width=4),
-                        ft.Container(height=10),
-                        ft.Text("جاري المقارنة...", size=14, color=ft.Colors.WHITE),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=10,
-                ),
-                padding=30,
-                width=200,
-            ),
-            bgcolor=ft.Colors.GREY_900,
-            shape=ft.RoundedRectangleBorder(radius=15),
-        )
-        self.page.overlay.append(loading_dlg)
-        loading_dlg.open = True
-        self.page.update()
+        loading_dlg = DialogManager.show_loading_dialog(self.page, "جاري المقارنة...")
         
         client = CompareClient()
         
         def on_compare_complete(differences, remote_ip):
-            loading_dlg.open = False
-            self.page.update()
+            DialogManager.close_dialog(self.page, loading_dlg)
             self._show_differences_dialog(differences, remote_ip)
         
         def on_error(error):
-            loading_dlg.open = False
-            self.page.update()
+            DialogManager.close_dialog(self.page, loading_dlg)
             self._show_sync_result(f"خطأ: {error}", False)
         
         client.on_compare_complete = on_compare_complete
@@ -1076,11 +914,7 @@ class DashboardView:
             list_items.append(item)
         
         def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
+            DialogManager.close_dialog(self.page, dlg)
         
         def send_selected(e):
             if not selected_files:
@@ -1235,13 +1069,11 @@ class DashboardView:
             self.page.update()
         
         def on_complete(success, message):
-            progress_dlg.open = False
-            self.page.update()
+            DialogManager.close_dialog(self.page, progress_dlg)
             self._show_sync_result(message, success)
         
         def on_error(error):
-            progress_dlg.open = False
-            self.page.update()
+            DialogManager.close_dialog(self.page, progress_dlg)
             self._show_sync_result(error, False)
         
         client.on_send_progress = on_progress
@@ -1252,42 +1084,10 @@ class DashboardView:
 
     def _show_sync_result(self, message, success):
         """Show sync result dialog"""
-        def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-        
-        icon = ft.Icons.CHECK_CIRCLE if success else ft.Icons.ERROR
-        color = ft.Colors.GREEN_400 if success else ft.Colors.RED_400
-        title_color = ft.Colors.GREEN_300 if success else ft.Colors.RED_300
-        title_text = "نجاح" if success else "خطأ"
-        
-        dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Row(
-                controls=[
-                    ft.Icon(icon, color=color, size=28),
-                    ft.Text(title_text, weight=ft.FontWeight.BOLD, color=title_color, size=16),
-                ],
-                spacing=10,
-            ),
-            content=ft.Text(message, size=14, color=ft.Colors.WHITE, rtl=True),
-            actions=[
-                ft.TextButton(
-                    "حسناً",
-                    on_click=close_dlg,
-                    style=ft.ButtonStyle(color=ft.Colors.LIGHT_BLUE_300)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.CENTER,
-            bgcolor=ft.Colors.GREY_900,
-            shape=ft.RoundedRectangleBorder(radius=15),
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        if success:
+            DialogManager.show_success_dialog(self.page, message, title="نجاح")
+        else:
+            DialogManager.show_error_dialog(self.page, message, title="خطأ")
 
     def open_invoices(self, e):
         # Clear page and load InvoiceView directly without animation
@@ -1325,11 +1125,7 @@ class DashboardView:
     def open_inventory(self, e):
         """Open inventory dialog with options to add or disburse - card style"""
         def close_dlg(e):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
+            DialogManager.close_dialog(self.page, dlg)
         
         def open_add(e):
             close_dlg(e)

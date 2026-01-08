@@ -4,6 +4,7 @@ import flet as ft
 from utils.blocks_utils import export_simple_blocks_excel
 from utils.log_utils import log_exception
 from utils.utils import is_excel_running, get_current_date
+from utils.dialog_utils import DialogManager
 
 class BlockRow:
     """Row UI for block entry with improved styling"""
@@ -517,9 +518,6 @@ class BlockRow:
         elif material == "احمر اسوان":
             return "احمر"
         return ""
-            
-        self._calculate_values()
-        self.page.update()
     
     def _calculate_values(self):
         """Calculate all dependent values with error handling"""
@@ -775,92 +773,88 @@ class BlocksView:
     def _show_excel_warning_dialog(self):
         """Show Excel warning dialog with continue option"""
         def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
+            DialogManager.close_dialog(self.page, dlg)
 
         def continue_save(e=None):
-            dlg.open = False
-            self.page.update()
+            DialogManager.close_dialog(self.page, dlg)
             self._do_save()
 
-        dlg = ft.AlertDialog(
-            title=ft.Text("تحذير", color=ft.Colors.ORANGE_400, weight=ft.FontWeight.BOLD),
-            content=ft.Text("برنامج Excel مفتوح حالياً.\nيرجى إغلاقه قبل الحفظ.", size=16, rtl=True),
-            actions=[
-                ft.TextButton(
-                    "متابعة على أي حال",
-                    on_click=continue_save,
-                    style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
-                ),
-                ft.TextButton(
-                    "إلغاء",
-                    on_click=close_dlg,
-                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.BLUE_GREY_900
+        actions = [
+            ft.TextButton(
+                "متابعة على أي حال",
+                on_click=continue_save,
+                style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
+            ),
+            ft.TextButton(
+                "إلغاء",
+                on_click=close_dlg,
+                style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+            ),
+        ]
+
+        dlg = DialogManager.show_custom_dialog(
+            self.page,
+            "تحذير",
+            ft.Text("برنامج Excel مفتوح حالياً.\nيرجى إغلاقه قبل الحفظ.", size=16, rtl=True),
+            actions,
+            icon=ft.Icons.WARNING_AMBER_ROUNDED,
+            icon_color=ft.Colors.ORANGE_400,
+            title_color=ft.Colors.ORANGE_400
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
 
     def _show_dialog(self, title: str, message: str, title_color=ft.Colors.BLUE_300):
         """Show a styled dialog"""
-        def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-
-        dlg = ft.AlertDialog(
-            title=ft.Text(title, color=title_color, weight=ft.FontWeight.BOLD),
-            content=ft.Text(message, size=16, rtl=True),
-            actions=[
-                ft.TextButton(
-                    "إغلاق",
-                    on_click=close_dlg,
-                    style=ft.ButtonStyle(
-                        color=ft.Colors.BLUE_300
-                    )
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.BLUE_GREY_900
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        if title == "خطأ" or title_color == ft.Colors.RED_400:
+            DialogManager.show_error_dialog(self.page, message, title=title)
+        elif title == "تحذير" or title_color == ft.Colors.ORANGE_400:
+            DialogManager.show_warning_dialog(self.page, message, title=title)
+        else:
+            DialogManager.show_info_dialog(self.page, message, title=title)
 
     def _show_success_dialog(self, filepath: str):
         """Show success dialog with file actions"""
-        def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-
         def open_file(e=None):
-            close_dlg()
+            DialogManager.close_dialog(self.page, dlg)
             try:
                 os.startfile(filepath)
             except Exception:
                 pass
 
         def open_folder(e=None):
-            close_dlg()
+            DialogManager.close_dialog(self.page, dlg)
             try:
                 folder = os.path.dirname(filepath)
                 os.startfile(folder)
             except Exception:
                 pass
+        
+        def close_dlg(e=None):
+            DialogManager.close_dialog(self.page, dlg)
 
-        dlg = ft.AlertDialog(
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=30),
-                    ft.Text("تم الحفظ بنجاح", color=ft.Colors.GREEN_300, weight=ft.FontWeight.BOLD),
-                ], 
-                rtl=True,
-                spacing=10
+        actions = [
+            ft.TextButton(
+                "فتح الملف",
+                on_click=open_file,
+                icon=ft.Icons.FILE_OPEN,
+                style=ft.ButtonStyle(color=ft.Colors.GREEN_300)
             ),
-            content=ft.Column(
+            ft.TextButton(
+                "فتح المجلد",
+                on_click=open_folder,
+                icon=ft.Icons.FOLDER_OPEN,
+                style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
+            ),
+            ft.TextButton(
+                "إغلاق",
+                on_click=close_dlg,
+                style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+            ),
+        ]
+
+        dlg = DialogManager.show_custom_dialog(
+            self.page,
+            "تم الحفظ بنجاح",
+            ft.Column(
                 rtl=True,
                 controls=[
                     ft.Text("تم إنشاء الملف بنجاح:", size=14, rtl=True),
@@ -880,28 +874,8 @@ class BlocksView:
                 ],
                 tight=True
             ),
-            actions=[
-                ft.TextButton(
-                    "فتح الملف",
-                    on_click=open_file,
-                    icon=ft.Icons.FILE_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.GREEN_300)
-                ),
-                ft.TextButton(
-                    "فتح المجلد",
-                    on_click=open_folder,
-                    icon=ft.Icons.FOLDER_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
-                ),
-                ft.TextButton(
-                    "إغلاق",
-                    on_click=close_dlg,
-                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.BLUE_GREY_900
+            actions,
+            icon=ft.Icons.CHECK_CIRCLE,
+            icon_color=ft.Colors.GREEN_400,
+            title_color=ft.Colors.GREEN_300
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()

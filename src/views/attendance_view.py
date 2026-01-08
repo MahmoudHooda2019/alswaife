@@ -11,6 +11,7 @@ from utils.attendance_utils import create_or_update_attendance, load_attendance_
 from utils.utils import resource_path, is_excel_running, get_current_date
 import json
 from typing import Optional
+from utils.dialog_utils import DialogManager
 
 
 class AttendanceView:
@@ -539,35 +540,34 @@ class AttendanceView:
     def _show_excel_warning_dialog(self):
         """Show Excel warning dialog with continue option"""
         def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
+            DialogManager.close_dialog(self.page, dlg)
 
         def continue_save(e=None):
-            dlg.open = False
-            self.page.update()
+            DialogManager.close_dialog(self.page, dlg)
             self._do_save()
 
-        dlg = ft.AlertDialog(
-            title=ft.Text("تحذير", color=ft.Colors.ORANGE_400, weight=ft.FontWeight.BOLD),
-            content=ft.Text("برنامج Excel مفتوح حالياً.\nيرجى إغلاقه قبل الحفظ.", size=16, rtl=True),
-            actions=[
-                ft.TextButton(
-                    "متابعة على أي حال",
-                    on_click=continue_save,
-                    style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
-                ),
-                ft.TextButton(
-                    "إلغاء",
-                    on_click=close_dlg,
-                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.BLUE_GREY_900
+        actions = [
+            ft.TextButton(
+                "متابعة على أي حال",
+                on_click=continue_save,
+                style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
+            ),
+            ft.TextButton(
+                "إلغاء",
+                on_click=close_dlg,
+                style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+            ),
+        ]
+
+        dlg = DialogManager.show_custom_dialog(
+            self.page,
+            "تحذير",
+            ft.Text("برنامج Excel مفتوح حالياً.\nيرجى إغلاقه قبل الحفظ.", size=16, rtl=True),
+            actions,
+            icon=ft.Icons.WARNING_AMBER_ROUNDED,
+            icon_color=ft.Colors.ORANGE_400,
+            title_color=ft.Colors.ORANGE_400
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
 
     def _do_save(self):
         """تنفيذ عملية الحفظ الفعلية"""
@@ -715,148 +715,7 @@ class AttendanceView:
                 self.show_message("الملف مفتوح في برنامج آخر، الرجاء إغلاقه", error=True)
             else:
                 self.show_message(f"خطأ في الحفظ: {error}", error=True)
-    
-    def show_message(self, message, error=False, filepath=None):
-        """Show status message with dialog notification"""
-        if hasattr(self, 'dialog') and self.dialog:
-            self.dialog.open = False
-        
-        if not error and filepath:
-            self.dialog = ft.AlertDialog(
-                title=ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=30),
-                        ft.Text("تم الحفظ بنجاح", color=ft.Colors.GREEN_300, weight=ft.FontWeight.BOLD, rtl=True),
-                    ],
-                    rtl=True,
-                    spacing=10
-                ),
-                content=ft.Column(
-                    rtl=True,
-                    controls=[
-                        ft.Text("تم حفظ ملف الحضور والانصراف بنجاح:", size=14, rtl=True),
-                        ft.Container(
-                            content=ft.Text(
-                                os.path.basename(filepath),
-                                size=13,
-                                color=ft.Colors.BLUE_200,
-                                weight=ft.FontWeight.W_500,
-                                rtl=True
-                            ),
-                            bgcolor=ft.Colors.BLUE_GREY_800,
-                            padding=10,
-                            border_radius=8,
-                            margin=ft.margin.only(top=10),
-                            rtl=True
-                        )
-                    ],
-                    tight=True
-                ),
-                actions=[
-                    ft.TextButton(
-                        "فتح الملف", 
-                        on_click=lambda e: self.open_file(filepath),
-                        style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
-                    ),
-                    ft.TextButton(
-                        "فتح المسار", 
-                        on_click=lambda e: self.open_folder(filepath),
-                        style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
-                    ),
-                    ft.TextButton(
-                        "إغلاق", 
-                        on_click=lambda e: self.close_dialog(),
-                        style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                    ),
-                ],
-                actions_alignment=ft.MainAxisAlignment.END,
-                bgcolor=ft.Colors.BLUE_GREY_900,
-                shape=ft.RoundedRectangleBorder(radius=16)
-            )
-        elif not error:  # Success message without filepath
-            self.dialog = ft.AlertDialog(
-                title=ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=30),
-                        ft.Text("تمت العملية بنجاح", color=ft.Colors.GREEN_300, weight=ft.FontWeight.BOLD, rtl=True),
-                    ],
-                    rtl=True,
-                    spacing=10
-                ),
-                content=ft.Text(message, size=16, rtl=True),
-                actions=[
-                    ft.TextButton(
-                        "إغلاق", 
-                        on_click=lambda e: self.close_dialog(),
-                        style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                    ),
-                ],
-                actions_alignment=ft.MainAxisAlignment.END,
-                bgcolor=ft.Colors.GREEN_900,
-                shape=ft.RoundedRectangleBorder(radius=16)
-            )
-        else:
-            self.dialog = ft.AlertDialog(
-                title=ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED_400, size=30),
-                        ft.Text("خطأ في الحفظ", color=ft.Colors.RED_300, weight=ft.FontWeight.BOLD, rtl=True),
-                    ],
-                    rtl=True,
-                    spacing=10
-                ),
-                content=ft.Text(message, size=16, rtl=True),
-                actions=[
-                    ft.TextButton(
-                        "إغلاق", 
-                        on_click=lambda e: self.close_dialog(),
-                        style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                    ),
-                ],
-                actions_alignment=ft.MainAxisAlignment.END,
-                bgcolor=ft.Colors.RED_900,
-                shape=ft.RoundedRectangleBorder(radius=16)
-            )
-        
-        self.page.overlay.append(self.dialog)
-        self.dialog.open = True
-        self.page.update()
-    
-    def close_dialog(self):
-        """Close the dialog"""
-        if hasattr(self, 'dialog') and self.dialog:
-            self.dialog.open = False
-            self.page.update()
-    
-    def open_file(self, filepath):
-        """Open the saved Excel file"""
-        try:
-            if platform.system() == 'Windows':
-                os.startfile(filepath)
-            elif platform.system() == 'Darwin':
-                subprocess.call(['open', filepath])
-            else:
-                subprocess.call(['xdg-open', filepath])
-        except Exception as ex:
-            self.show_message(f"فشل في فتح الملف: {ex}", error=True)
-        finally:
-            self.close_dialog()
-    
-    def open_folder(self, filepath):
-        """Open the folder containing the saved Excel file"""
-        try:
-            folder_path = os.path.dirname(filepath)
-            if platform.system() == 'Windows':
-                os.startfile(folder_path)
-            elif platform.system() == 'Darwin':
-                subprocess.call(['open', folder_path])
-            else:
-                subprocess.call(['xdg-open', folder_path])
-        except Exception as ex:
-            self.show_message(f"فشل في فتح المسار: {ex}", error=True)
-        finally:
-            self.close_dialog()
-    
+
     def add_new_employee(self, e):
         """Add a new employee not in the JSON file"""
         if not self.date_field or not self.date_field.value or not self.shift_dropdown or not self.shift_dropdown.value:
@@ -1037,3 +896,93 @@ class AttendanceView:
                 self.show_message(f"فشل في فتح الملف: {ex}", error=True)
         else:
             self.show_message("ملف الحضور غير موجود، قم بحفظ البيانات أولاً", error=True)
+
+    def show_message(self, message, error=False, filepath=None):
+        """Show status message with dialog notification"""
+        if hasattr(self, 'dialog') and self.dialog:
+             DialogManager.close_dialog(self.page, self.dialog)
+        
+        if not error and filepath:
+            def open_file_action(e):
+                self.open_file(filepath)
+            
+            def open_folder_action(e):
+                self.open_folder(filepath)
+            
+            def close_dlg(e):
+                DialogManager.close_dialog(self.page, dlg)
+
+            actions = [
+                ft.TextButton("فتح الملف", on_click=open_file_action),
+                ft.TextButton("فتح المسار", on_click=open_folder_action),
+                ft.TextButton("إغلاق", on_click=close_dlg)
+            ]
+
+            dlg = DialogManager.show_custom_dialog(
+                self.page,
+                "تم الحفظ بنجاح",
+                ft.Column(
+                    controls=[
+                        ft.Text("تم حفظ ملف الحضور والانصراف بنجاح:", size=14, rtl=True),
+                        ft.Container(
+                            content=ft.Text(
+                                os.path.basename(filepath),
+                                size=13,
+                                color=ft.Colors.BLUE_200,
+                                weight=ft.FontWeight.W_500,
+                                rtl=True
+                            ),
+                            bgcolor=ft.Colors.BLUE_GREY_800,
+                            padding=10,
+                            border_radius=8,
+                            margin=ft.margin.only(top=10),
+                            rtl=True
+                        )
+                    ],
+                    tight=True
+                ),
+                actions,
+                icon=ft.Icons.CHECK_CIRCLE,
+                icon_color=ft.Colors.GREEN_400,
+                title_color=ft.Colors.GREEN_300
+            )
+            self.dialog = dlg
+            
+        elif not error:  # Success message without filepath
+            DialogManager.show_success_dialog(self.page, message, title="تمت العملية بنجاح")
+        else:
+            DialogManager.show_error_dialog(self.page, message, title="خطأ في الحفظ")
+    
+    def close_dialog(self):
+        """Close the dialog"""
+        if hasattr(self, 'dialog') and self.dialog:
+            DialogManager.close_dialog(self.page, self.dialog)
+    
+    def open_file(self, filepath):
+        """Open the saved Excel file"""
+        try:
+            if platform.system() == 'Windows':
+                os.startfile(filepath)
+            elif platform.system() == 'Darwin':
+                subprocess.call(['open', filepath])
+            else:
+                subprocess.call(['xdg-open', filepath])
+        except Exception as ex:
+            self.show_message(f"فشل في فتح الملف: {ex}", error=True)
+        finally:
+            self.close_dialog()
+    
+    def open_folder(self, filepath):
+        """Open the folder containing the saved Excel file"""
+        try:
+            folder_path = os.path.dirname(filepath)
+            if platform.system() == 'Windows':
+                os.startfile(folder_path)
+            elif platform.system() == 'Darwin':
+                subprocess.call(['open', folder_path])
+            else:
+                subprocess.call(['xdg-open', folder_path])
+        except Exception as ex:
+            self.show_message(f"فشل في فتح المسار: {ex}", error=True)
+        finally:
+            self.close_dialog()

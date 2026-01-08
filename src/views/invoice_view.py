@@ -33,6 +33,7 @@ from utils.utils import resource_path, is_excel_running, get_current_date
 from utils.slides_utils import disburse_slides_from_invoice
 from utils.purchases_utils import add_income_record
 from utils.log_utils import log_error, log_exception
+from utils.dialog_utils import DialogManager
 
 
 class InvoiceRow:
@@ -761,63 +762,43 @@ class InvoiceView:
     def _show_excel_warning_dialog(self):
         """Show warning dialog when Excel is open"""
         def on_skip(e):
-            dlg.open = False
-            self.page.update()
-            # Proceed with save anyway
+            DialogManager.close_dialog(self.page, dlg)
             self._perform_save()
         
         def on_cancel(e):
-            dlg.open = False
-            self.page.update()
+            DialogManager.close_dialog(self.page, dlg)
         
-        dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.ORANGE_400, size=28),
-                    ft.Text("تنبيه - برنامج Excel مفتوح", weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_400),
-                ],
-                spacing=10
+        actions = [
+            ft.TextButton(
+                "تخطي والمتابعة",
+                on_click=on_skip,
+                style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
             ),
-            content=ft.Column(
+            ft.TextButton(
+                "إلغاء",
+                on_click=on_cancel,
+                style=ft.ButtonStyle(color=ft.Colors.GREY_400)
+            ),
+        ]
+        
+        dlg = DialogManager.show_custom_dialog(
+            self.page,
+            "تنبيه - برنامج Excel مفتوح",
+            ft.Column(
                 controls=[
-                    ft.Text(
-                        "تم اكتشاف أن برنامج Microsoft Excel مفتوح حالياً.",
-                        size=14),
+                    ft.Text("تم اكتشاف أن برنامج Microsoft Excel مفتوح حالياً.", size=14),
                     ft.Container(height=10),
-                    ft.Text(
-                        "قد يؤدي ذلك إلى فشل حفظ الملفات إذا كانت مفتوحة في Excel.",
-                        size=14,
-                        rtl=True,
-                        color=ft.Colors.GREY_400
-                    ),
+                    ft.Text("قد يؤدي ذلك إلى فشل حفظ الملفات إذا كانت مفتوحة في Excel.", size=14, rtl=True, color=ft.Colors.GREY_400),
                     ft.Container(height=10),
-                    ft.Text(
-                        "يُنصح بإغلاق جميع ملفات Excel قبل المتابعة.",
-                        size=14,
-                        rtl=True,
-                        weight=ft.FontWeight.W_500
-                    ),
+                    ft.Text("يُنصح بإغلاق جميع ملفات Excel قبل المتابعة.", size=14, rtl=True, weight=ft.FontWeight.W_500),
                 ],
-                tight=True),
-            actions=[
-                ft.TextButton(
-                    "تخطي والمتابعة",
-                    on_click=on_skip,
-                    style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
-                ),
-                ft.TextButton(
-                    "إلغاء",
-                    on_click=on_cancel,
-                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.GREY_900
+                tight=True
+            ),
+            actions,
+            icon=ft.Icons.WARNING_AMBER_ROUNDED,
+            icon_color=ft.Colors.ORANGE_400,
+            title_color=ft.Colors.ORANGE_400
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
     
     def _perform_save(self):
         """Perform the actual save operation"""
@@ -836,47 +817,23 @@ class InvoiceView:
         
             if is_revenue:
                 # Show confirmation dialog
-                def on_confirm_revenue(e):
-                    confirm_dlg.open = False
-                    self.page.update()
+                def on_confirm_revenue():
                     self._save_revenue_invoice(op_num, client, date_str, driver, phone)
                 
-                def on_cancel_revenue(e):
-                    confirm_dlg.open = False
-                    self.page.update()
-                
-                confirm_dlg = ft.AlertDialog(
-                    title=ft.Text("تنبيه"),
-                    content=ft.Text("العميل فارغ أو يحتوي على كلمة 'ايراد'. سيتم حفظ الفاتورة في مجلد الإيرادات دون إنشاء كشف حساب. هل توافق؟"),
-                    actions=[
-                        ft.TextButton("نعم", on_click=on_confirm_revenue),
-                        ft.TextButton("لا", on_click=on_cancel_revenue)
-                    ],
-                    actions_alignment=ft.MainAxisAlignment.END
+                DialogManager.show_confirm_dialog(
+                    self.page,
+                    "العميل فارغ أو يحتوي على كلمة 'ايراد'. سيتم حفظ الفاتورة في مجلد الإيرادات دون إنشاء كشف حساب. هل توافق؟",
+                    on_confirm_revenue,
+                    title="تنبيه"
                 )
-                self.page.overlay.append(confirm_dlg)
-                confirm_dlg.open = True
-                self.page.update()
                 return
 
             if not op_num:
-                dlg = ft.AlertDialog(
-                    title=ft.Text("خطأ"),
-                    content=ft.Text("يرجى إدخال رقم العملية")
-                )
-                self.page.overlay.append(dlg)
-                dlg.open = True
-                self.page.update()
+                DialogManager.show_error_dialog(self.page, "يرجى إدخال رقم العملية")
                 return
 
         except Exception as ex:
-            dlg = ft.AlertDialog(
-                title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
-            )
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            DialogManager.show_error_dialog(self.page, f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
             return
 
         # Validate items before saving
@@ -938,13 +895,7 @@ class InvoiceView:
             return
 
         if not items_data:
-            dlg = ft.AlertDialog(
-                title=ft.Text("تنبيه"),
-                content=ft.Text("لا توجد بنود للحفظ")
-            )
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            DialogManager.show_warning_dialog(self.page, "لا توجد بنود للحفظ")
             return
 
         def sanitize(s):
@@ -964,10 +915,7 @@ class InvoiceView:
         try:
             os.makedirs(my_invoices_dir, exist_ok=True)
         except OSError as ex:
-             dlg = ft.AlertDialog(title=ft.Text("خطأ"), content=ft.Text(f"فشل إنشاء المجلد: {ex}"))
-             self.page.overlay.append(dlg)
-             dlg.open = True
-             self.page.update()
+             DialogManager.show_error_dialog(self.page, f"فشل إنشاء المجلد: {ex}")
              return
 
         # Update filename format
@@ -1133,20 +1081,21 @@ class InvoiceView:
                 except Exception as payment_ex:
                     log_error(f"Error sending payment: {payment_ex}")
             
-            # Add income record to purchases/income ledger (always record invoice)
-            try:
-                purchases_folder = os.path.join(self.documents_path, "ايرادات ومصروفات")
-                os.makedirs(purchases_folder, exist_ok=True)
-                purchases_file = os.path.join(purchases_folder, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
-                income_record = {
-                    'date': date_str,
-                    'invoice_number': op_num,
-                    'client': client if client else "بدون اسم",
-                    'amount': payment_amount if payment_amount > 0 else total_amount,
-                }
-                result = add_income_record(purchases_file, income_record)
-            except Exception as income_ex:
-                log_exception(f"Error adding income record: {income_ex}")
+            # Add income record to purchases/income ledger (only if payment was made)
+            if payment_amount > 0:
+                try:
+                    purchases_folder = os.path.join(self.documents_path, "ايرادات ومصروفات")
+                    os.makedirs(purchases_folder, exist_ok=True)
+                    purchases_file = os.path.join(purchases_folder, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
+                    income_record = {
+                        'date': date_str,
+                        'invoice_number': op_num,
+                        'client': client if client else "بدون اسم",
+                        'amount': payment_amount,
+                    }
+                    result = add_income_record(purchases_file, income_record)
+                except Exception as income_ex:
+                    log_exception(f"Error adding income record: {income_ex}")
             
             def open_file(e):
                 # Use our universal function to open the file
@@ -1162,50 +1111,34 @@ class InvoiceView:
                 open_path(ledger_path)
 
             def close_dlg(e):
-                dlg.open = False
-                self.page.update()
+                DialogManager.close_dialog(self.page, dlg)
 
-            dlg = ft.AlertDialog(
-                title=ft.Text("نجاح"),
-                content=ft.Text(f"تم حفظ الفاتورة وتحديث كشف الحساب بنجاح.\المسار: {full_path}"),
-                actions=[
-                    ft.TextButton("فتح الفاتورة", on_click=open_file),
-                    ft.TextButton("فتح كشف الحساب", on_click=open_ledger),
-                    ft.TextButton("فتح المجلد", on_click=open_folder),
-                    ft.TextButton("حسنا", on_click=close_dlg)
-                ],
-                actions_alignment=ft.MainAxisAlignment.END
+            actions = [
+                ft.TextButton("فتح الفاتورة", on_click=open_file),
+                ft.TextButton("فتح كشف الحساب", on_click=open_ledger),
+                ft.TextButton("فتح المجلد", on_click=open_folder),
+                ft.TextButton("حسنا", on_click=close_dlg)
+            ]
+
+            dlg = DialogManager.show_custom_dialog(
+                self.page,
+                "نجاح",
+                ft.Text(f"تم حفظ الفاتورة وتحديث كشف الحساب بنجاح.\nالمسار: {full_path}"),
+                actions,
+                icon=ft.Icons.CHECK_CIRCLE,
+                icon_color=ft.Colors.GREEN_400,
+                title_color=ft.Colors.GREEN_300
             )
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
             
         except PermissionError as ex:
-            dlg = ft.AlertDialog(
-                title=ft.Text("خطأ"),
-                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى."))
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            DialogManager.show_error_dialog(self.page, "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
         except Exception as ex:
-            dlg = ft.AlertDialog(
-                title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
-            )
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            DialogManager.show_error_dialog(self.page, f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
 
     def _save_revenue_invoice(self, op_num, client, date_str, driver, phone):
         """Save revenue invoice to a separate directory without creating a ledger"""
         if not op_num:
-            dlg = ft.AlertDialog(
-                title=ft.Text("خطأ"),
-                content=ft.Text("يرجى إدخال رقم العملية")
-            )
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            DialogManager.show_error_dialog(self.page, "يرجى إدخال رقم العملية")
             return
 
         # Validate items before saving
@@ -1268,13 +1201,7 @@ class InvoiceView:
             return
 
         if not items_data:
-            dlg = ft.AlertDialog(
-                title=ft.Text("تنبيه"),
-                content=ft.Text("لا توجد بنود للحفظ")
-            )
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            DialogManager.show_warning_dialog(self.page, "لا توجد بنود للحفظ")
             return
 
         def sanitize(s):
@@ -1290,10 +1217,7 @@ class InvoiceView:
         try:
             os.makedirs(my_invoices_dir, exist_ok=True)
         except OSError as ex:
-             dlg = ft.AlertDialog(title=ft.Text("خطأ"), content=ft.Text(f"فشل إنشاء المجلد: {ex}"))
-             self.page.overlay.append(dlg)
-             dlg.open = True
-             self.page.update()
+             DialogManager.show_error_dialog(self.page, f"فشل إنشاء المجلد: {ex}")
              return
 
         fname = f"فاتورة رقم ({sanitize(op_num)}) _ ايراد _ بتاريخ {date_str.replace('/', '-')}.xlsx"
@@ -1396,20 +1320,21 @@ class InvoiceView:
                 except Exception as payment_ex:
                     log_error(f"Error sending payment: {payment_ex}")
             
-            # Add income record to income/expenses ledger
-            try:
-                purchases_folder = os.path.join(self.documents_path, "ايرادات ومصروفات")
-                os.makedirs(purchases_folder, exist_ok=True)
-                purchases_file = os.path.join(purchases_folder, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
-                income_record = {
-                    'date': date_str,
-                    'invoice_number': op_num,
-                    'client': client if client else "بدون اسم",
-                    'amount': payment_amount if payment_amount > 0 else total_amount,
-                }
-                result = add_income_record(purchases_file, income_record)
-            except Exception as income_ex:
-                log_exception(f"Error adding income record: {income_ex}")
+            # Add income record to income/expenses ledger (only if payment was made)
+            if payment_amount > 0:
+                try:
+                    purchases_folder = os.path.join(self.documents_path, "ايرادات ومصروفات")
+                    os.makedirs(purchases_folder, exist_ok=True)
+                    purchases_file = os.path.join(purchases_folder, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
+                    income_record = {
+                        'date': date_str,
+                        'invoice_number': op_num,
+                        'client': client if client else "بدون اسم",
+                        'amount': payment_amount,
+                    }
+                    result = add_income_record(purchases_file, income_record)
+                except Exception as income_ex:
+                    log_exception(f"Error adding income record: {income_ex}")
             
             def open_file(e):
                 try:
@@ -1439,37 +1364,28 @@ class InvoiceView:
                 open_path(revenue_dir)
 
             def close_dlg(e):
-                dlg.open = False
-                self.page.update()
+                DialogManager.close_dialog(self.page, dlg)
 
-            dlg = ft.AlertDialog(
-                title=ft.Text("نجاح"),
-                content=ft.Text(f"تم حفظ فاتورة الإيراد بنجاح.\نالمسار: {full_path}"),
-                actions=[
-                    ft.TextButton("فتح الفاتورة", on_click=open_file),
-                    ft.TextButton("فتح المجلد", on_click=open_folder),
-                    ft.TextButton("حسنا", on_click=close_dlg)
-                ],
-                actions_alignment=ft.MainAxisAlignment.END
+            actions = [
+                ft.TextButton("فتح الفاتورة", on_click=open_file),
+                ft.TextButton("فتح المجلد", on_click=open_folder),
+                ft.TextButton("حسنا", on_click=close_dlg)
+            ]
+
+            dlg = DialogManager.show_custom_dialog(
+                self.page,
+                "نجاح",
+                ft.Text(f"تم حفظ فاتورة الإيراد بنجاح.\nالمسار: {full_path}"),
+                actions,
+                icon=ft.Icons.CHECK_CIRCLE,
+                icon_color=ft.Colors.GREEN_400,
+                title_color=ft.Colors.GREEN_300
             )
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
             
         except PermissionError as ex:
-            dlg = ft.AlertDialog(
-                title=ft.Text("خطأ"),
-                content=ft.Text("الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى."))
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            DialogManager.show_error_dialog(self.page, "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
         except Exception as ex:
-            dlg = ft.AlertDialog(
-                title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}"))
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            DialogManager.show_error_dialog(self.page, f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
 
     def on_op_number_blur(self, e):
         """Handle when focus leaves the invoice number field"""
@@ -1478,27 +1394,15 @@ class InvoiceView:
             # Check if invoice exists in database
             if invoice_exists(self.db_path, op_num):
                 # Ask user if they want to load the existing invoice
-                def on_confirm_load(e):
-                    confirm_dlg.open = False
-                    self.page.update()
+                def on_confirm_load():
                     self.load_invoice_data(op_num)
                 
-                def on_cancel_load(e):
-                    confirm_dlg.open = False
-                    self.page.update()
-                
-                confirm_dlg = ft.AlertDialog(
-                    title=ft.Text("تنبيه"),
-                    content=ft.Text(f"يوجد فاتورة برقم {op_num} محفوظة مسبقاً. هل تريد تحميل بياناتها؟"),
-                    actions=[
-                        ft.TextButton("نعم", on_click=on_confirm_load),
-                        ft.TextButton("لا", on_click=on_cancel_load)
-                    ],
-                    actions_alignment=ft.MainAxisAlignment.END
+                DialogManager.show_confirm_dialog(
+                    self.page,
+                    f"يوجد فاتورة برقم {op_num} محفوظة مسبقاً. هل تريد تحميل بياناتها؟",
+                    on_confirm_load,
+                    title="تنبيه"
                 )
-                self.page.overlay.append(confirm_dlg)
-                confirm_dlg.open = True
-                self.page.update()
         
     def load_invoice_data(self, op_num):
         """Load invoice data from database and populate the form"""
@@ -1565,12 +1469,7 @@ class InvoiceView:
             
         except Exception as ex:
             log_error(f"Error loading invoice data: {ex}")
-            dlg = ft.AlertDialog(
-                title=ft.Text("خطأ"),
-                content=ft.Text(f"حدث خطأ أثناء تحميل بيانات الفاتورة:\n{ex}"))
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            DialogManager.show_error_dialog(self.page, f"حدث خطأ أثناء تحميل بيانات الفاتورة:\n{ex}")
 
     def increment_op(self):
         try:

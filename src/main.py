@@ -27,8 +27,6 @@ try:
 except:
     pass
 
-from views.dashboard_view import DashboardView
-
 
 def main(page: ft.Page):
     """نقطة الدخول الرئيسية للتطبيق."""
@@ -43,6 +41,9 @@ def main(page: ft.Page):
         icon_path = resource_path(os.path.join("assets", "icon.ico"))
         page.window.icon = icon_path
 
+        # Lazy import to catch errors during view loading
+        from views.dashboard_view import DashboardView
+
         # Create and show the Dashboard
         dashboard = DashboardView(page)
         dashboard.show()
@@ -53,22 +54,41 @@ def main(page: ft.Page):
 
         # Show error dialog
         error_msg = f"حدث خطأ غير متوقع:\n{str(e)}"
-
-        def close_dlg(e):
-            dlg.open = False
-            page.update()
-
-        dlg = ft.AlertDialog(
+        
+        page.dialog = ft.AlertDialog(
             title=ft.Text("خطأ في التطبيق"),
             content=ft.Text(error_msg, rtl=True),
-            actions=[ft.TextButton("موافق", on_click=close_dlg)],
+            actions=[ft.TextButton("موافق", on_click=lambda _: page.window_close())],
         )
-        page.overlay.append(dlg)
-        dlg.open = True
+        page.dialog.open = True
         page.update()
-        sys.exit(1)
 
 
 if __name__ == "__main__":
-    # Run as desktop app with assets [directory]
-    ft.app(target=main, view=ft.AppView.FLET_APP, assets_dir="assets")
+    try:
+        # Run as desktop app with assets directory
+        ft.app(target=main, view=ft.AppView.FLET_APP, assets_dir="assets")
+    except Exception as e:
+        # Fallback error handling for crashes before UI starts
+        try:
+            log_exception(f"Fatal startup error: {e}")
+        except:
+            pass
+            
+        # Write to crash file on desktop for visibility
+        try:
+            import traceback
+            from datetime import datetime
+            desktop = os.path.join(os.path.expanduser("~"), "Documents")
+            crash_file = os.path.join(desktop, "AL_SWAIFE_CRASH.txt")
+            with open(crash_file, "w", encoding="utf-8") as f:
+                f.write(f"Crash Time: {datetime.now()}\n")
+                f.write("-" * 50 + "\n")
+                f.write(f"Error: {str(e)}\n")
+                f.write("-" * 50 + "\n")
+                f.write(traceback.format_exc())
+        except:
+            pass
+        
+        # Re-raise to show in console if available
+        raise
