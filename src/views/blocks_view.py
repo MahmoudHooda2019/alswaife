@@ -3,7 +3,7 @@ import flet as ft
 
 from utils.blocks_utils import export_simple_blocks_excel
 from utils.log_utils import log_exception
-from utils.utils import is_excel_running, get_current_date
+from utils.utils import is_excel_running, get_current_date, is_file_locked
 from utils.dialog_utils import DialogManager
 
 class BlockRow:
@@ -431,7 +431,8 @@ class BlockRow:
         """Handle block number changes and replace Arabic characters with English equivalents"""
         val = self.block_number.value
         if val:
-            new_val = val.replace('ش', 'A').replace('لا', 'B').replace('a', 'A').replace('b', 'B').replace('أ', 'A').replace('ب', 'B').replace('ِ', 'A').replace('لآ', 'B')
+            from utils.utils import normalize_block_number
+            new_val = normalize_block_number(val, reorder=True)  # Full normalization with reordering
             if new_val != val:
                 self.block_number.value = new_val
                 # Only update if value changed
@@ -449,19 +450,8 @@ class BlockRow:
     
     def _handle_arabic_decimal_input(self, text_field):
         """Handle Arabic decimal separator (Zein letter) and replace with decimal point"""
-        if text_field.value:
-            # Replace Arabic decimal separator (Zein letter 'زين') with decimal point
-            new_value = text_field.value.replace('،', '.')  # Arabic comma/decimal separator
-            new_value = new_value.replace('ز', '.')  # Arabic 'zein' letter
-            # Also handle potential Arabic digit inputs
-            arabic_digits = {'٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'}
-            for arabic_digit, english_digit in arabic_digits.items():
-                new_value = new_value.replace(arabic_digit, english_digit)
-            
-            if new_value != text_field.value:
-                text_field.value = new_value
-                return True
-        return False
+        from utils.utils import handle_arabic_decimal_input
+        return handle_arabic_decimal_input(text_field)
     
     def _on_material_change(self, e=None):
         """Handle material change and update weight per m3, price per ton, and block type"""
@@ -754,6 +744,14 @@ class BlocksView:
 
     def _do_save(self):
         """تنفيذ عملية الحفظ الفعلية"""
+        # التحقق من أن الملف غير مفتوح
+        blocks_file = os.path.join(
+            os.path.expanduser("~"), "Documents", "alswaife", "البلوكات", "مخزون البلوكات.xlsx"
+        )
+        if is_file_locked(blocks_file):
+            self._show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
+            return
+        
         try:
             data = [row.to_dict() for row in self.rows if self._row_has_data(row)]
             file_path = export_simple_blocks_excel(data)

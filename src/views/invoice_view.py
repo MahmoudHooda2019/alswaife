@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import os
 import flet as ft
 import json
@@ -28,20 +28,22 @@ except ImportError:
     def get_zoom_level(db_path: str) -> float: return 1.0
     def set_zoom_level(db_path: str, zoom_level: float) -> None: pass
 
-from utils.invoice_utils import update_client_ledger, remove_invoice_from_ledger, delete_existing_invoice_file, update_invoice_in_ledger, update_payment_in_invoice, update_payment_in_ledger, get_payment_from_invoice
-from utils.utils import resource_path, is_excel_running, get_current_date
+from utils.invoice_utils import delete_existing_invoice_file
+from utils.utils import resource_path, is_excel_running, get_current_date, convert_english_to_arabic, is_file_locked
 from utils.slides_utils import disburse_slides_from_invoice
-from utils.purchases_utils import add_income_record
 from utils.log_utils import log_error, log_exception
 from utils.dialog_utils import DialogManager
+from utils.payments_utils import add_invoice_to_payments, remove_invoice_from_payments, update_client_statement
 
 
 class InvoiceRow:
     """ كلاس صف الفاتورة (البند) """
-    def __init__(self, page, row_index, product_dict, delete_callback, scale_factor=1.0):
+    def __init__(self, page, row_index, product_dict, delete_callback, scale_factor=1.0, navigation_callback=None):
         self.page = page
+        self.row_index = row_index  # Store row index for navigation
         self.products = product_dict
         self.delete_callback = delete_callback
+        self.navigation_callback = navigation_callback  # Callback for navigation between rows
         self.scale_factor = scale_factor
         self.row_container = None  # Reference to the UI container
         # For length calculation
@@ -71,19 +73,25 @@ class InvoiceRow:
             label="رقم البلوك", 
             width=self.default_widths['block'],
             on_change=self.on_block_change,
-            on_blur=self.on_block_blur
+            on_blur=self.on_block_blur,
+            on_focus=lambda e: self._on_field_focus(1)
         )
         self.thick_var = ft.Dropdown(
             label="السمك",
             options=[ft.dropdown.Option("2سم"), ft.dropdown.Option("3سم"), ft.dropdown.Option("4سم")],
-            width=self.default_widths['thick']
+            width=self.default_widths['thick'],
+            border_color=ft.Colors.GREY_700,
+            focused_border_color=ft.Colors.BLUE_400,
+            focused_bgcolor=ft.Colors.BLUE_GREY_900,
+            on_focus=lambda e: self._on_field_focus(2)
         )
         self.count_var = ft.TextField(
             label="العدد", 
             width=self.default_widths['count'],
             keyboard_type=ft.KeyboardType.NUMBER,
             input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
-            on_change=self.calculate
+            on_change=self.calculate,
+            on_focus=lambda e: self._on_field_focus(3)
         )
         # New field for length before discount
         self.len_before_var = ft.TextField(
@@ -92,7 +100,8 @@ class InvoiceRow:
             label_style=ft.TextStyle(size=10.0),
             keyboard_type=ft.KeyboardType.NUMBER,
             input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
-            on_change=self.on_len_before_change  # Use new handler
+            on_change=self.on_len_before_change,  # Use new handler
+            on_focus=lambda e: self._on_field_focus(5)
         )
         # New field for discount
         self.discount_var = ft.TextField(
@@ -102,7 +111,8 @@ class InvoiceRow:
             keyboard_type=ft.KeyboardType.NUMBER,
             input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
             on_change=self.on_discount_change,  # Use new handler
-            value="0.20"  # Set default value to 0.20
+            value="0.20",  # Set default value to 0.20
+            on_focus=lambda e: self._on_field_focus(4)
         )
         # Modified length field - now readonly
         self.len_var = ft.TextField(
@@ -116,7 +126,8 @@ class InvoiceRow:
             width=self.default_widths['height'],
             keyboard_type=ft.KeyboardType.NUMBER,
             input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),
-            on_change=self.calculate
+            on_change=self.calculate,
+            on_focus=lambda e: self._on_field_focus(6)
         )
         
         self.area_var = ft.TextField(label="المسطح", width=self.default_widths['area'], disabled=True)
@@ -125,7 +136,8 @@ class InvoiceRow:
             width=self.default_widths['price'],
             keyboard_type=ft.KeyboardType.NUMBER,
             input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
-            on_change=self.calculate
+            on_change=self.calculate,
+            on_focus=lambda e: self._on_field_focus(7)
         )
         self.total_var = ft.TextField(label="الإجمالي", width=self.default_widths['total'], disabled=True)
         
@@ -137,7 +149,11 @@ class InvoiceRow:
             label="البيان",
             options=prefixed_options,
             width=self.default_widths['product'],
-            on_change=self.on_product_select
+            on_change=self.on_product_select,
+            border_color=ft.Colors.GREY_700,
+            focused_border_color=ft.Colors.BLUE_400,
+            focused_bgcolor=ft.Colors.BLUE_GREY_900,
+            on_focus=lambda e: self._on_field_focus(0)
         )
         
         # Apply initial scale to ensure fields are displayed at the correct size
@@ -159,14 +175,8 @@ class InvoiceRow:
     def on_block_change(self, e):
         val = self.block_var.value
         if val:
-            # تحويل الحروف إلى A, B, F
-            # A: ِ, ش, a
-            # B: لآ, لا, b
-            # F: f, [, ب
-            new_val = val.replace('ِ', 'A').replace('ش', 'A').replace('a', 'A')
-            new_val = new_val.replace('لآ', 'B').replace('لا', 'B').replace('b', 'B')
-            new_val = new_val.replace('f', 'F').replace('[', 'F').replace('ب', 'F')
-            new_val = new_val.upper()
+            from utils.utils import normalize_block_number
+            new_val = normalize_block_number(val, reorder=False)  # Only normalize, don't reorder on change
             
             if new_val != val:
                 self.block_var.value = new_val
@@ -174,21 +184,11 @@ class InvoiceRow:
                     self.page.update()
 
     def on_block_blur(self, e):
-        """Reorder block number when focus leaves - move letter to beginning if at end"""
+        """Normalize and reorder block number when focus leaves"""
         val = self.block_var.value
         if val:
-            # تحويل الحروف إلى A, B, F
-            new_val = val.replace('ِ', 'A').replace('ش', 'A').replace('a', 'A')
-            new_val = new_val.replace('لآ', 'B').replace('لا', 'B').replace('b', 'B')
-            new_val = new_val.replace('f', 'F').replace('[', 'F').replace('ب', 'F')
-            new_val = new_val.upper()
-            
-            import re
-            match = re.match(r'^(\d+)([A-Za-z]+)$', new_val)
-            if match:
-                numbers = match.group(1)
-                letters = match.group(2).upper()
-                new_val = letters + numbers
+            from utils.utils import normalize_block_number
+            new_val = normalize_block_number(val, reorder=True)  # Full normalization with reordering
             
             if new_val != val:
                 self.block_var.value = new_val
@@ -197,20 +197,8 @@ class InvoiceRow:
 
     def handle_arabic_decimal_input(self, text_field):
         """Handle Arabic decimal separator (Zein letter) and replace with decimal point"""
-        if text_field.value:
-            # Replace Arabic decimal separator (Zein letter 'زين') with decimal point
-            # The Zein letter on Arabic keyboard typically maps to the comma key or 'z'
-            new_value = text_field.value.replace('،', '.')  # Arabic comma/decimal separator
-            new_value = new_value.replace('ز', '.')  # Arabic 'zein' letter often maps to 'z' key
-            # Also handle potential Arabic digit inputs
-            arabic_digits = {'٠': '0', '٢': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'}
-            for arabic_digit, english_digit in arabic_digits.items():
-                new_value = new_value.replace(arabic_digit, english_digit)
-            
-            if new_value != text_field.value:
-                text_field.value = new_value
-                return True
-        return False
+        from utils.utils import handle_arabic_decimal_input
+        return handle_arabic_decimal_input(text_field)
 
     def on_len_before_change(self, e):
         """Handle input changes for length before field with Arabic decimal handling"""
@@ -234,6 +222,9 @@ class InvoiceRow:
 
     def on_product_select(self, e):
         """عند اختيار البيان، إرساله إلى خانة الخامة بدون حرف الشين"""
+        # Update focus tracking when dropdown is used
+        self._on_field_focus(0)
+        
         selected_product = self.product_dropdown.value
         if selected_product:
             # Remove the "ش " prefix if present
@@ -365,6 +356,9 @@ class InvoiceRow:
 
     def on_thickness_change(self, e):
         """عند تغيير السمك"""
+        # Update focus tracking when dropdown is used
+        self._on_field_focus(2)
+        
         # When thickness changes, update the price based on current product selection
         selected_product = self.product_dropdown.value
         if selected_product:
@@ -433,6 +427,51 @@ class InvoiceRow:
             self.total_var
         ]
 
+    def get_editable_fields(self):
+        """Return list of editable fields in order for navigation"""
+        return [
+            self.product_dropdown,  # 0 - البيان
+            self.block_var,         # 1 - رقم البلوك
+            self.thick_var,         # 2 - السمك
+            self.count_var,         # 3 - العدد
+            self.discount_var,      # 4 - الخصم
+            self.len_before_var,    # 5 - الطول قبل
+            self.height_var,        # 6 - الارتفاع
+            self.price_var,         # 7 - السعر
+        ]
+
+    def focus_field(self, field_index):
+        """Focus a specific field by index, handles both TextField and Dropdown"""
+        from utils.log_utils import log_error
+        
+        fields = self.get_editable_fields()
+        log_error(f"focus_field called: field_index={field_index}, total_fields={len(fields)}")
+        
+        if 0 <= field_index < len(fields):
+            field = fields[field_index]
+            log_error(f"Focusing field type: {type(field).__name__}")
+            try:
+                field.focus()
+                log_error(f"focus() called successfully on {type(field).__name__}")
+                
+                # Always update focus tracking manually for reliable navigation
+                if self.navigation_callback:
+                    self.navigation_callback(self.row_index, field_index)
+                    
+                # Force update the page to ensure focus is visible
+                if self.page:
+                    self.page.update()
+                return True
+            except Exception as ex:
+                log_error(f"Error focusing field: {ex}")
+                return False
+        return False
+
+    def _on_field_focus(self, field_index):
+        """Called when a field receives focus - updates navigation tracking"""
+        if self.navigation_callback:
+            self.navigation_callback(self.row_index, field_index)
+
     def destroy(self, e):
         # Call the delete callback to remove this row from the rows list
         self.delete_callback(self)
@@ -454,6 +493,10 @@ class InvoiceView:
         
         # Add keyboard event handler
         self.page.on_keyboard_event = self.on_keyboard_event
+        
+        # Initialize focus tracking variables for Excel-like navigation
+        self._current_row_idx = 0
+        self._current_field_idx = 0
         
         self.products_path = resource_path(os.path.join('data', 'products.json'))
         # Use Documents folder for database instead of resources (which is read-only)
@@ -517,16 +560,12 @@ class InvoiceView:
             suffix=self.client_suffix_text,
         )
 
-        self.ent_driver = ft.TextField(label="اسم السائق", width=150)
-        self.ent_phone = ft.TextField(label="رقم التليفون", width=150)
-        
-        # Payment field for sending payment to Excel
-        self.ent_payment = ft.TextField(
-            label="المدفوع",
-            width=120,
-            keyboard_type=ft.KeyboardType.NUMBER,
-            input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*$")
+        self.ent_driver = ft.TextField(
+            label="اسم السائق",
+            width=150,
+            on_change=self.on_driver_text_change
         )
+        self.ent_phone = ft.TextField(label="رقم التليفون", width=150)
         
         # Variable to store the current invoice file path
         self.current_invoice_path = None
@@ -592,33 +631,12 @@ class InvoiceView:
                 
         return ""
 
-    def convert_english_to_arabic(self, text):
-        """تحويل الحروف الإنجليزية إلى العربية (بناءً على تخطيط لوحة المفاتيح)"""
-        # خريطة تحويل الحروف الإنجليزية إلى العربية
-        eng_to_ar = {
-            'q': 'ض', 'w': 'ص', 'e': 'ث', 'r': 'ق', 't': 'ف', 'y': 'غ', 'u': 'ع', 'i': 'ه', 'o': 'خ', 'p': 'ح', '[': 'ج', ']': 'د',
-            'a': 'ش', 's': 'س', 'd': 'ي', 'f': 'ب', 'g': 'ل', 'h': 'ا', 'j': 'ت', 'k': 'ن', 'l': 'م', ';': 'ك', "'": 'ط',
-            'z': 'ئ', 'x': 'ء', 'c': 'ؤ', 'v': 'ر', 'b': 'لا', 'n': 'ى', 'm': 'ة', ',': 'و', '.': 'ز', '/': 'ظ',
-            'Q': 'َ', 'W': 'ً', 'E': 'ُ', 'R': 'ٌ', 'T': 'لإ', 'Y': 'إ', 'U': ''', 'I': '÷', 'O': '×', 'P': '؛', '{': '<', '}': '>',
-            'A': 'ِ', 'S': 'ٍ', 'D': ']', 'F': '[', 'G': 'لأ', 'H': 'أ', 'J': 'ـ', 'K': '،', 'L': '/', ':': ':', '"': '"',
-            'Z': '~', 'X': 'ْ', 'C': '}', 'V': '{', 'B': 'لآ', 'N': 'آ', 'M': ''', '<': ',', '>': '.', '?': '؟',
-            '`': 'ذ', '~': 'ّ',
-        }
-        
-        result = ""
-        for char in text:
-            if char in eng_to_ar:
-                result += eng_to_ar[char]
-            else:
-                result += char
-        return result
-
     def on_client_text_change(self, e):
         """Update inline autocomplete suggestion when user types"""
         current_text = self.ent_client.value or ""
         
         # تحويل الحروف الإنجليزية إلى العربية
-        converted_text = self.convert_english_to_arabic(current_text)
+        converted_text = convert_english_to_arabic(current_text)
         
         # تحديث النص إذا تم التحويل
         if converted_text != current_text:
@@ -644,6 +662,18 @@ class InvoiceView:
             self.current_suggestion = ""
         
         self.page.update()
+
+    def on_driver_text_change(self, e):
+        """تحويل الحروف الإنجليزية إلى العربية عند كتابة اسم السائق"""
+        current_text = self.ent_driver.value or ""
+        
+        # تحويل الحروف الإنجليزية إلى العربية
+        converted_text = convert_english_to_arabic(current_text)
+        
+        # تحديث النص إذا تم التحويل
+        if converted_text != current_text:
+            self.ent_driver.value = converted_text
+            self.page.update()
 
     def on_client_submit(self, e):
         """Handle Tab or Enter - accept the autocomplete suggestion"""
@@ -705,8 +735,11 @@ class InvoiceView:
 
     def add_row(self, e=None):
         row_idx = len(self.rows)
-        new_row = InvoiceRow(self.page, row_idx, self.products, self.delete_row, self.scale_factor)
+        new_row = InvoiceRow(self.page, row_idx, self.products, self.delete_row, self.scale_factor, self._on_field_focus)
         self.rows.append(new_row)
+        
+        # Setup focus tracking for each editable field
+        self._setup_field_focus_tracking(new_row, row_idx)
         
         # Create a row container for the ListView with responsive layout
         row_controls = new_row.get_controls()
@@ -734,6 +767,27 @@ class InvoiceView:
         self.rows_container.controls.append(row_wrapper)
         
         self.page.update()
+
+    def _setup_field_focus_tracking(self, row, row_idx):
+        """Setup focus tracking for all editable fields in a row"""
+        editable_fields = row.get_editable_fields()
+        for field_idx, field in enumerate(editable_fields):
+            # Store original on_focus if exists
+            original_on_focus = field.on_focus if hasattr(field, 'on_focus') else None
+            
+            # Create closure to capture row_idx and field_idx
+            def make_focus_handler(r_idx, f_idx, orig_handler):
+                def handler(e):
+                    self._update_focus_tracking(r_idx, f_idx)
+                    if orig_handler:
+                        orig_handler(e)
+                return handler
+            
+            field.on_focus = make_focus_handler(row_idx, field_idx, original_on_focus)
+
+    def _on_field_focus(self, row_idx, field_idx):
+        """Callback when a field receives focus"""
+        self._update_focus_tracking(row_idx, field_idx)
         
     def delete_row(self, row_obj):
         if row_obj in self.rows:
@@ -747,6 +801,16 @@ class InvoiceView:
             
             # Remove the row from the data structure
             self.rows.remove(row_obj)
+            
+            # Update row indices for remaining rows
+            for idx, row in enumerate(self.rows):
+                row.row_index = idx
+                self._setup_field_focus_tracking(row, idx)
+            
+            # Reset focus tracking if needed
+            if hasattr(self, '_current_row_idx'):
+                if self._current_row_idx >= len(self.rows):
+                    self._current_row_idx = max(0, len(self.rows) - 1)
             
             # Update UI
             self.page.update()
@@ -922,6 +986,29 @@ class InvoiceView:
         fname = f"فاتورة رقم {sanitize(op_num)} - بتاريخ {date_str.replace('/', '-')}.xlsx"
         full_path = os.path.join(my_invoices_dir, fname)
         
+        # التحقق من أن الملف غير مفتوح
+        if is_file_locked(full_path):
+            DialogManager.show_error_dialog(self.page, "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            return
+        
+        # التحقق من كشف الحساب أيضاً
+        ledger_path = os.path.join(client_dir, "كشف حساب.xlsx")
+        if is_file_locked(ledger_path):
+            DialogManager.show_error_dialog(self.page, "ملف كشف الحساب مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            return
+        
+        # التحقق من ملف مخزون الشرائح
+        slides_inventory_path = os.path.join(self.documents_path, "الشرائح", "مخزون الشرائح.xlsx")
+        if is_file_locked(slides_inventory_path):
+            DialogManager.show_error_dialog(self.page, "ملف مخزون الشرائح مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            return
+        
+        # التحقق من ملف الإيرادات والمصروفات
+        income_expenses_file = os.path.join(self.documents_path, "ايرادات ومصروفات", "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
+        if is_file_locked(income_expenses_file):
+            DialogManager.show_error_dialog(self.page, "ملف الإيرادات والمصروفات مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            return
+        
         try:
             # Check if this is an update to an existing invoice
             invoice_already_exists = invoice_exists(self.db_path, op_num)
@@ -986,68 +1073,25 @@ class InvoiceView:
                 
                 # Save to database
                 save_invoice_to_db(self.db_path, op_num, client, driver, phone, date_str, full_path, items_data, total_amount)
-                
-                # If this is an update to an existing invoice, we need to update the ledger properly
-                if invoice_already_exists:
-                    # Update the invoice in the ledger instead of appending
-                    try:
-                        # Calculate invoice items for ledger
-                        invoice_items_details = []
-                        for item in items_data:
-                            try:
-                                desc = item[0] or ""
-                                material = item[3] or ""
-                                thickness = item[2] or ""
-                                count = int(float(item[4])) if item[4] else 0  # Convert to int (count should be whole number)
-                                length = float(item[5]) if item[5] else 0
-                                height = float(item[6]) if item[6] else 0
-                                price_val = float(item[7]) if item[7] else 0
-                                
-                                # Calculate area for this item
-                                area = count * length * height
-                                
-                                # Store item details for the ledger - format: (desc, material, thickness, area, total_price_for_item)
-                                # In the original code, the last element is the total price for the item, not the unit price
-                                item_total_price = area * price_val
-                                invoice_items_details.append((
-                                    desc,
-                                    material,
-                                    thickness,
-                                    area,
-                                    item_total_price  # This should be the total price for the item, not unit price
-                                ))
-                            except (ValueError, IndexError):
-                                continue
-                        
-                        # Update the invoice in the ledger
-                        success, error = update_invoice_in_ledger(
-                            client_dir,
-                            op_num,
-                            client,
-                            date_str,
-                            total_amount,
-                            driver,
-                            invoice_items_details
-                        )
-                        
-                        if not success:
-                            log_error(f"Could not update invoice in ledger: {error}")
-                    except Exception as ledger_ex:
-                        log_exception(f"Error updating invoice in ledger: {ledger_ex}")
-                else:
-                    # For new invoices, use the original save_callback to handle ledger update
-                    # Calculate items for original callback
-                    items_for_callback = []
-                    for item in items_data:
-                        # Take only the first 8 elements: description, block, thickness, material, count, length, height, price
-                        item_callback = tuple(item[:8]) if len(item) >= 8 else item
-                        items_for_callback.append(item_callback)
-                    
-                    # Call the original save callback which will handle ledger update
-                    self.save_callback(full_path, op_num, client, driver, date_str, phone, items_for_callback)
             except Exception as db_ex:
                 log_error(f"Error saving invoice to database: {db_ex}")
                 # Continue with the process even if database save fails
+            
+            # Add invoice to payments table and update client statement
+            # Skip for revenue clients
+            if "ايراد" not in client and "إيراد" not in client:
+                try:
+                    # First remove old invoice entry if updating
+                    if invoice_already_exists:
+                        remove_invoice_from_payments(self.db_path, client, op_num)
+                    
+                    # Add invoice as debt entry
+                    add_invoice_to_payments(self.db_path, client, op_num, date_str, total_amount)
+                    
+                    # Update client statement (كشف حساب.xlsx)
+                    update_client_statement(self.db_path, client, client_dir)
+                except Exception as payment_ex:
+                    log_error(f"Error updating client statement: {payment_ex}")
             
             # Disburse slides from inventory if invoice contains slide products
             try:
@@ -1060,42 +1104,6 @@ class InvoiceView:
             
             # Store the current invoice path for payment updates
             self.current_invoice_path = full_path
-            
-            # Send payment to Excel if payment field has a value
-            payment_str = self.ent_payment.value.strip() if self.ent_payment.value else ""
-            payment_amount = 0
-            if payment_str:
-                try:
-                    payment_amount = float(payment_str)
-                    # Update payment in invoice file
-                    payment_success = update_payment_in_invoice(full_path, payment_amount)
-                    if not payment_success:
-                        log_error(f"Failed to send payment to invoice")
-                    
-                    # Also update payment in client ledger
-                    ledger_success = update_payment_in_ledger(client_dir, op_num, payment_amount)
-                    if not ledger_success:
-                        log_error(f"Failed to send payment to client ledger")
-                except ValueError:
-                    log_error(f"Invalid payment value: {payment_str}")
-                except Exception as payment_ex:
-                    log_error(f"Error sending payment: {payment_ex}")
-            
-            # Add income record to purchases/income ledger (only if payment was made)
-            if payment_amount > 0:
-                try:
-                    purchases_folder = os.path.join(self.documents_path, "ايرادات ومصروفات")
-                    os.makedirs(purchases_folder, exist_ok=True)
-                    purchases_file = os.path.join(purchases_folder, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
-                    income_record = {
-                        'date': date_str,
-                        'invoice_number': op_num,
-                        'client': client if client else "بدون اسم",
-                        'amount': payment_amount,
-                    }
-                    result = add_income_record(purchases_file, income_record)
-                except Exception as income_ex:
-                    log_exception(f"Error adding income record: {income_ex}")
             
             def open_file(e):
                 # Use our universal function to open the file
@@ -1223,6 +1231,23 @@ class InvoiceView:
         fname = f"فاتورة رقم ({sanitize(op_num)}) _ ايراد _ بتاريخ {date_str.replace('/', '-')}.xlsx"
         full_path = os.path.join(my_invoices_dir, fname)
         
+        # التحقق من أن الملف غير مفتوح
+        if is_file_locked(full_path):
+            DialogManager.show_error_dialog(self.page, "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            return
+        
+        # التحقق من ملف مخزون الشرائح
+        slides_inventory_path = os.path.join(self.documents_path, "الشرائح", "مخزون الشرائح.xlsx")
+        if is_file_locked(slides_inventory_path):
+            DialogManager.show_error_dialog(self.page, "ملف مخزون الشرائح مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            return
+        
+        # التحقق من ملف الإيرادات والمصروفات
+        income_expenses_file = os.path.join(self.documents_path, "ايرادات ومصروفات", "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
+        if is_file_locked(income_expenses_file):
+            DialogManager.show_error_dialog(self.page, "ملف الإيرادات والمصروفات مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            return
+        
         try:
             # For revenue invoices, check if it already exists
             invoice_already_exists = invoice_exists(self.db_path, op_num)
@@ -1306,36 +1331,6 @@ class InvoiceView:
             # Store the current invoice path for payment updates
             self.current_invoice_path = full_path
             
-            # Send payment to Excel if payment field has a value
-            payment_str = self.ent_payment.value.strip() if self.ent_payment.value else ""
-            payment_amount = 0
-            if payment_str:
-                try:
-                    payment_amount = float(payment_str)
-                    payment_success = update_payment_in_invoice(full_path, payment_amount)
-                    if not payment_success:
-                        log_error(f"Failed to send payment to revenue invoice")
-                except ValueError:
-                    log_error(f"Invalid payment value: {payment_str}")
-                except Exception as payment_ex:
-                    log_error(f"Error sending payment: {payment_ex}")
-            
-            # Add income record to income/expenses ledger (only if payment was made)
-            if payment_amount > 0:
-                try:
-                    purchases_folder = os.path.join(self.documents_path, "ايرادات ومصروفات")
-                    os.makedirs(purchases_folder, exist_ok=True)
-                    purchases_file = os.path.join(purchases_folder, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
-                    income_record = {
-                        'date': date_str,
-                        'invoice_number': op_num,
-                        'client': client if client else "بدون اسم",
-                        'amount': payment_amount,
-                    }
-                    result = add_income_record(purchases_file, income_record)
-                except Exception as income_ex:
-                    log_exception(f"Error adding income record: {income_ex}")
-            
             def open_file(e):
                 try:
                     if platform.system() == 'Windows':
@@ -1416,18 +1411,8 @@ class InvoiceView:
                 self.ent_phone.value = invoice_data["phone"]
                 self.date_var.value = invoice_data["date"]
                 
-                # Store the invoice file path for payment updates
+                # Store the invoice file path
                 self.current_invoice_path = invoice_data.get("file_path", None)
-                
-                # Load payment from invoice file if exists
-                if self.current_invoice_path and os.path.exists(self.current_invoice_path):
-                    payment_value = get_payment_from_invoice(self.current_invoice_path)
-                    if payment_value > 0:
-                        self.ent_payment.value = str(int(payment_value)) if payment_value == int(payment_value) else str(payment_value)
-                    else:
-                        self.ent_payment.value = ""
-                else:
-                    self.ent_payment.value = ""
                 
                 # Clear existing rows
                 self.rows.clear()
@@ -1486,7 +1471,6 @@ class InvoiceView:
         self.ent_client.value = ""
         self.ent_driver.value = ""
         self.ent_phone.value = ""
-        self.ent_payment.value = ""
         
         # Reset invoice path
         self.current_invoice_path = None
@@ -1514,35 +1498,7 @@ class InvoiceView:
             row.update_scale(self.scale_factor)
         self.page.update()
 
-    def minimize_window(self, e):
-        """Minimize the application window"""
-        try:
-            # Try different approaches to minimize the window
-            # Approach 1: Direct attribute assignment
-            if hasattr(self.page, 'window_minimized'):
-                self.page.window_minimized = True
-            # Approach 2: Try to access through window object
-            elif hasattr(self.page, 'window') and hasattr(self.page.window, 'minimized'):
-                self.page.window.minimized = True
-            # Approach 3: Try setattr with different possible names
-            else:
-                success = False
-                possible_attrs = ['window_minimized', 'minimized']
-                for attr in possible_attrs:
-                    try:
-                        setattr(self.page, attr, True)
-                        success = True
-                        break
-                    except:
-                        continue
-                
-                # If all else fails, log for debugging
-                if not success:
-                    log_error("Could not minimize window - no compatible attribute found")
-        except Exception as ex:
-            log_error(f"Error minimizing window: {ex}")
-        self.page.update()
-
+   
     def close_window(self, e):
         """Close the application window"""
         try:
@@ -1551,11 +1507,190 @@ class InvoiceView:
             log_error(f"Error closing window: {ex}")
 
     def on_keyboard_event(self, e: ft.KeyboardEvent):
-        """Handle keyboard events"""
+        """Handle keyboard events for navigation like Excel"""
+        from utils.log_utils import log_error
+        
+        log_error(f"Keyboard event: key={e.key}, ctrl={e.ctrl}, shift={e.shift}, alt={e.alt}")
+        
         # Check if the '+' or '=' key was pressed
         if e.key == '+' or e.key == '=' and not e.ctrl and not e.shift and not e.alt:
             # Add a new row when '+' is pressed
             self.add_row()
+            return
+        
+        # Get current focused field to check if it's a Dropdown
+        current_row_idx, current_field_idx = self._get_current_focus()
+        log_error(f"Current focus: row={current_row_idx}, field={current_field_idx}")
+        
+        # Check if current field is a Dropdown
+        is_dropdown_focused = False
+        if current_row_idx >= 0 and current_row_idx < len(self.rows):
+            fields = self.rows[current_row_idx].get_editable_fields()
+            if current_field_idx >= 0 and current_field_idx < len(fields):
+                current_field = fields[current_field_idx]
+                is_dropdown_focused = isinstance(current_field, ft.Dropdown)
+                #log_error(f"Current field type: {type(current_field).__name__}, is_dropdown={is_dropdown_focused}")
+        
+        # Arrow key navigation - allow navigation to all fields including dropdowns
+        if e.key in ["Arrow Down", "Arrow Up", "Arrow Left", "Arrow Right"]:
+            self._handle_arrow_navigation(e.key)
+        
+        # Tab navigation (move to next field)
+        elif e.key == "Tab" and not e.ctrl and not e.alt:
+            if e.shift:
+                self._navigate_to_previous_field()
+            else:
+                self._navigate_to_next_field()
+        
+        # Enter key - move down to same field in next row
+        elif e.key == "Enter" and not e.ctrl and not e.shift and not e.alt:
+            self._navigate_down_same_field()
+
+    def _handle_arrow_navigation(self, key):
+        """Handle arrow key navigation between fields"""
+        if not self.rows:
+            return
+        
+        # Get current focused field info
+        current_row_idx, current_field_idx = self._get_current_focus()
+        
+        if current_row_idx == -1:
+            # No field focused, focus first editable field of first row
+            if self.rows:
+                self.rows[0].focus_field(0)
+                self._current_row_idx = 0
+                self._current_field_idx = 0
+            return
+        
+        new_row_idx = current_row_idx
+        new_field_idx = current_field_idx
+        should_add_row = False
+        
+        if key == "Arrow Down":
+            # Move to same field in next row
+            if current_row_idx < len(self.rows) - 1:
+                new_row_idx = current_row_idx + 1
+            else:
+                # At last row, create a new row
+                should_add_row = True
+        
+        elif key == "Arrow Up":
+            # Move to same field in previous row (don't create new row)
+            if current_row_idx > 0:
+                new_row_idx = current_row_idx - 1
+            # If at first row, do nothing (don't create row above)
+        
+        elif key == "Arrow Left":
+            # Move to next field (RTL - left means next)
+            fields_count = len(self.rows[current_row_idx].get_editable_fields())
+            if current_field_idx < fields_count - 1:
+                new_field_idx = current_field_idx + 1
+            elif current_row_idx < len(self.rows) - 1:
+                # Move to first field of next row
+                new_row_idx = current_row_idx + 1
+                new_field_idx = 0
+        
+        elif key == "Arrow Right":
+            # Move to previous field (RTL - right means previous)
+            if current_field_idx > 0:
+                new_field_idx = current_field_idx - 1
+            elif current_row_idx > 0:
+                # Move to last field of previous row
+                new_row_idx = current_row_idx - 1
+                new_field_idx = len(self.rows[new_row_idx].get_editable_fields()) - 1
+        
+        # Add new row if needed
+        if should_add_row:
+            self.add_row()
+            new_row_idx = len(self.rows) - 1
+        
+        # Focus the new field
+        if new_row_idx != current_row_idx or new_field_idx != current_field_idx or should_add_row:
+            self.rows[new_row_idx].focus_field(new_field_idx)
+            self._current_row_idx = new_row_idx
+            self._current_field_idx = new_field_idx
+            self.page.update()
+
+    def _navigate_to_next_field(self):
+        """Navigate to the next editable field (Tab behavior)"""
+        if not self.rows:
+            return
+        
+        current_row_idx, current_field_idx = self._get_current_focus()
+        
+        if current_row_idx == -1:
+            # No field focused, focus first field
+            if self.rows:
+                self.rows[0].focus_field(0)
+                self._current_row_idx = 0
+                self._current_field_idx = 0
+            return
+        
+        fields_count = len(self.rows[current_row_idx].get_editable_fields())
+        
+        if current_field_idx < fields_count - 1:
+            # Move to next field in same row
+            self.rows[current_row_idx].focus_field(current_field_idx + 1)
+            self._current_field_idx = current_field_idx + 1
+        elif current_row_idx < len(self.rows) - 1:
+            # Move to first field of next row
+            self.rows[current_row_idx + 1].focus_field(0)
+            self._current_row_idx = current_row_idx + 1
+            self._current_field_idx = 0
+        
+        self.page.update()
+
+    def _navigate_to_previous_field(self):
+        """Navigate to the previous editable field (Shift+Tab behavior)"""
+        if not self.rows:
+            return
+        
+        current_row_idx, current_field_idx = self._get_current_focus()
+        
+        if current_row_idx == -1:
+            return
+        
+        if current_field_idx > 0:
+            # Move to previous field in same row
+            self.rows[current_row_idx].focus_field(current_field_idx - 1)
+            self._current_field_idx = current_field_idx - 1
+        elif current_row_idx > 0:
+            # Move to last field of previous row
+            prev_fields_count = len(self.rows[current_row_idx - 1].get_editable_fields())
+            self.rows[current_row_idx - 1].focus_field(prev_fields_count - 1)
+            self._current_row_idx = current_row_idx - 1
+            self._current_field_idx = prev_fields_count - 1
+        
+        self.page.update()
+
+    def _navigate_down_same_field(self):
+        """Navigate to the same field in the next row (Enter behavior) - no new row creation"""
+        if not self.rows:
+            return
+        
+        current_row_idx, current_field_idx = self._get_current_focus()
+        
+        if current_row_idx == -1:
+            return
+        
+        if current_row_idx < len(self.rows) - 1:
+            # Move to same field in next row
+            self.rows[current_row_idx + 1].focus_field(current_field_idx)
+            self._current_row_idx = current_row_idx + 1
+            self.page.update()
+        # If at last row, do nothing (don't create new row)
+
+    def _get_current_focus(self):
+        """Get the currently focused row and field indices"""
+        # Return stored indices if available
+        if hasattr(self, '_current_row_idx') and hasattr(self, '_current_field_idx'):
+            return self._current_row_idx, self._current_field_idx
+        return -1, -1
+
+    def _update_focus_tracking(self, row_idx, field_idx):
+        """Update the tracked focus position"""
+        self._current_row_idx = row_idx
+        self._current_field_idx = field_idx
             
     def zoom_in(self, e):
         if self.scale_factor < 2.0:  # Upper limit for zoom
@@ -1649,10 +1784,6 @@ class InvoiceView:
                          spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 ft.Column([ft.Icon(ft.Icons.PHONE, color=ft.Colors.BLUE_300, size=20), self.ent_phone], 
                          spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                ft.Column([
-                    ft.Icon(ft.Icons.PAYMENTS, color=ft.Colors.GREEN_300, size=20),
-                    self.ent_payment
-                ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             ], spacing=10, alignment=ft.MainAxisAlignment.SPACE_EVENLY),
         ], spacing=5)
         

@@ -148,6 +148,12 @@ def initialize_slides_inventory_excel(file_path):
         for col_num, width in enumerate(inventory_column_widths, 1):
             inventory_sheet.column_dimensions[get_column_letter(col_num)].width = width
         
+        # Set header row height for all sheets to make headers taller
+        header_row_height = 25  # Increased from default (~15) to 25
+        add_sheet.row_dimensions[1].height = header_row_height
+        disburse_sheet.row_dimensions[1].height = header_row_height
+        inventory_sheet.row_dimensions[1].height = header_row_height
+        
         # Save the workbook
         wb.save(file_path)
         return wb

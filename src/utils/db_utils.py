@@ -116,6 +116,30 @@ def init_db(db_path: str):
         except sqlite3.OperationalError:
             # Column already exists
             pass
+        
+        # Create payments table for tracking client payments
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_name TEXT NOT NULL,
+                payment_date TEXT NOT NULL,
+                amount REAL NOT NULL,
+                payment_type TEXT DEFAULT 'سداد',
+                invoice_number TEXT,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        
+        # Create index for faster client lookups
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_payments_client 
+            ON payments (client_name)
+            """
+        )
 
 
 def get_counter(db_path: str, key: str = "invoice") -> int:
@@ -220,6 +244,51 @@ def set_zoom_level(db_path: str, zoom_level: float) -> None:
                 INSERT OR REPLACE INTO settings (key, value)
                 VALUES (?, ?)
             ''', ('zoom_level', str(zoom_level)))
+    except Exception as e:
+        pass
+
+
+def get_purchases_zoom_level(db_path: str) -> float:
+    """
+    Get the saved zoom level for purchases view from database.
+    
+    Args:
+        db_path: Path to the SQLite database
+        
+    Returns:
+        float: Saved zoom level (default: 1.0)
+    """
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT value FROM settings WHERE key = ?', ('purchases_zoom_level',))
+            result = cursor.fetchone()
+            
+            if result:
+                return float(result[0])
+            return 1.0  # Default zoom level
+    except Exception as e:
+        return 1.0
+
+
+def set_purchases_zoom_level(db_path: str, zoom_level: float) -> None:
+    """
+    Save purchases zoom level to database.
+    
+    Args:
+        db_path: Path to the SQLite database
+        zoom_level: Zoom level to save
+    """
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Insert or update purchases_zoom_level
+            cursor.execute('''
+                INSERT OR REPLACE INTO settings (key, value)
+                VALUES (?, ?)
+            ''', ('purchases_zoom_level', str(zoom_level)))
     except Exception as e:
         pass
 

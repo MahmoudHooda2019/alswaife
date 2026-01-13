@@ -264,7 +264,8 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
                 
                 # Calculate area and total for this item
                 area = count * length * height
-                total = area * price_val
+                # تقريب الإجمالي لأقرب عدد صحيح (مثل الجدول الأول)
+                total = round(area * price_val, 0)
                 
                 key = (desc, material, thickness)
                 if key not in aggregated_data:
@@ -297,12 +298,12 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
 
             # Area and total values
             worksheet.write_number(row_num, 3, data["area"], area_fmt)
-            worksheet.write_number(row_num, 4, data["total"], money_fmt)
+            worksheet.write_number(row_num, 4, int(data["total"]), money_fmt)  # تحويل لعدد صحيح
 
             # Price per meter = total / area (avoid division by zero)
             if data["area"] > 0:
                 price_per_meter = data["total"] / data["area"]
-                worksheet.write_number(row_num, 6, price_per_meter, money_fmt)
+                worksheet.write_number(row_num, 6, round(price_per_meter, 0), money_fmt)
             else:
                 worksheet.write(row_num, 6, 0, money_fmt)
 
@@ -326,33 +327,9 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
         worksheet.write_formula(summary_total_row, 4, price_sum_formula, money_fmt)
 
         # ==========================
-        #   جدول المدفوعات
-        # ==========================
-        payments_start_row = summary_total_row - 3
-        worksheet.merge_range(payments_start_row, 8, payments_start_row, 10, "المدفوعات", header_fmt)
-
-        # Write payments table headers
-        payments_header_row = payments_start_row + 1
-        worksheet.write(payments_header_row, 8, "المبلغ", header_fmt)
-        worksheet.write(payments_header_row, 9, "المدفوع", header_fmt)
-        worksheet.write(payments_header_row, 10, "المتبقي", header_fmt)
-
-        # Payments data row
-        payments_data_row = payments_header_row + 1
-
-        # Total amount (from invoice total)
-        worksheet.write_formula(payments_data_row, 8, f"=E{summary_total_row+1}", money_fmt)
-
-        # Paid amount (leave empty for user to fill)
-        worksheet.write(payments_data_row, 9, "", money_fmt)
-
-        # Remaining amount (Amount - Paid)
-        worksheet.write_formula(payments_data_row, 10, f"=J{payments_data_row+1}-I{payments_data_row+1}", money_fmt)
-
-        # ==========================
         #   Signature Section
         # ==========================
-        signature_row = payments_data_row + 4  # Position after the payments table
+        signature_row = summary_total_row + 3
         
         # Create a format for centered text (both vertically and horizontally)
         center_fmt = workbook.add_format({
@@ -363,7 +340,7 @@ def save_invoice(filepath: str, op_num: str, client: str, driver: str,
         })
         
         # Merge cells for signature section on the right side (columns 8-10, three columns wide) with centering
-        worksheet.merge_range(signature_row, 8, signature_row, 10, "التوقيع(_____________)", center_fmt)
+        worksheet.merge_range(signature_row, 8, signature_row, 10, "التوقيع (            )", center_fmt)
         
         # Merge cells for name on the right side (columns 8-10, same position) with centering
         signature_name_row = signature_row + 1

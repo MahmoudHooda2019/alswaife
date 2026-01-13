@@ -8,7 +8,7 @@ import flet as ft
 import os
 import traceback
 from datetime import datetime
-from utils.utils import resource_path, is_excel_running, get_current_date
+from utils.utils import resource_path, is_excel_running, get_current_date, is_file_locked
 from utils.inventory_utils import (
     initialize_inventory_excel,
     disburse_inventory_entry,
@@ -373,6 +373,15 @@ class InventoryDisburseView:
 
     def _do_save(self):
         """تنفيذ عملية الحفظ الفعلية"""
+        # التحقق من أن الملف غير مفتوح
+        if is_file_locked(self.excel_file):
+            self._show_dialog(
+                "خطأ",
+                "الملف مفتوح في Excel. أغلقه وحاول مرة أخرى.",
+                ft.Colors.RED_400,
+            )
+            return
+        
         # Validate all rows first
         for row in self.rows:
             if row.has_data():

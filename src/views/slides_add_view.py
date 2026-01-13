@@ -462,108 +462,138 @@ class SlideRow:
         
         self._calculate_values()
 
-    def _format_datetime_auto(self, value, field):
+    def _format_datetime_auto(self, value, current_period=None):
         """
         Auto-format datetime input as user types
         Format: HH:MM ص/م DD/MM/YYYY
+        لا يضيف ص/م تلقائياً - ينتظر المستخدم
         """
         if not value:
-            return ""
+            return "", None
         
-        # Remove all non-digit characters except what we need
-        # Keep only digits and track position
+        # Extract period if exists (ص or م)
+        period = None
+        if 'ص' in value:
+            period = 'ص'
+        elif 'م' in value:
+            period = 'م'
+        elif current_period:
+            period = current_period
+        
+        # Remove all non-digit characters
         digits_only = ''.join(c for c in value if c.isdigit())
+        
+        # If no digits, return empty
+        if not digits_only:
+            return "", period
         
         # Build formatted string based on number of digits
         result = ""
         
+        # Hour (positions 0-1)
         if len(digits_only) >= 1:
-            # Hour first digit
             h1 = digits_only[0]
-            result = h1
+            # Allow 0 or 1 as first digit for hours (00-12)
+            if int(h1) > 1:
+                # If first digit > 1, treat as single digit hour (e.g., 8 -> 08)
+                result = f"0{h1}:"
+                # Shift remaining digits
+                digits_only = "0" + digits_only
+            else:
+                result = h1
         
         if len(digits_only) >= 2:
-            # Hour second digit
             hour = int(digits_only[0:2])
             if hour > 12:
                 hour = 12
             result = f"{hour:02d}:"
         
+        # Minutes (positions 2-3)
         if len(digits_only) >= 3:
-            # Minute first digit
             m1 = digits_only[2]
             if int(m1) > 5:
                 m1 = "5"
             result += m1
         
         if len(digits_only) >= 4:
-            # Minute second digit
             minute = int(digits_only[2:4])
             if minute > 59:
                 minute = 59
             result = result[:-1] + f"{minute:02d}"
-            # Default to ص, user can change
-            result += " ص "
+            # Add period if exists, otherwise add space for user to type
+            if period:
+                result += f" {period} "
+            else:
+                result += " "  # Space waiting for ص or م
         
-        if len(digits_only) >= 5:
-            # Day first digit
-            d1 = digits_only[4]
-            if int(d1) > 3:
-                d1 = "3"
-            result += d1
+        # Only continue with date if period is set
+        if period and len(digits_only) >= 4:
+            # Day (positions 4-5)
+            if len(digits_only) >= 5:
+                d1 = digits_only[4]
+                if int(d1) > 3:
+                    d1 = "3"
+                result += d1
+            
+            if len(digits_only) >= 6:
+                day = int(digits_only[4:6])
+                if day > 31:
+                    day = 31
+                if day == 0:
+                    day = 1
+                result = result[:-1] + f"{day:02d}/"
+            
+            # Month (positions 6-7)
+            if len(digits_only) >= 7:
+                m1 = digits_only[6]
+                if int(m1) > 1:
+                    m1 = "1"
+                result += m1
+            
+            if len(digits_only) >= 8:
+                month = int(digits_only[6:8])
+                if month > 12:
+                    month = 12
+                if month == 0:
+                    month = 1
+                result = result[:-1] + f"{month:02d}/"
+            
+            # Year (positions 8-11)
+            if len(digits_only) >= 9:
+                year_digits = digits_only[8:12]
+                result += year_digits
         
-        if len(digits_only) >= 6:
-            # Day second digit
-            day = int(digits_only[4:6])
-            if day > 31:
-                day = 31
-            if day == 0:
-                day = 1
-            result = result[:-1] + f"{day:02d}/"
-        
-        if len(digits_only) >= 7:
-            # Month first digit
-            m1 = digits_only[6]
-            if int(m1) > 1:
-                m1 = "1"
-            result += m1
-        
-        if len(digits_only) >= 8:
-            # Month second digit
-            month = int(digits_only[6:8])
-            if month > 12:
-                month = 12
-            if month == 0:
-                month = 1
-            result = result[:-1] + f"{month:02d}/"
-        
-        if len(digits_only) >= 9:
-            # Year digits (up to 4)
-            year_digits = digits_only[8:12]
-            result += year_digits
-        
-        return result
+        return result, period
 
     def _on_entry_time_change(self, e=None):
         """Handle entry time field changes with auto-formatting"""
         if e and e.control:
             current = e.control.value or ""
             
-            # Check if user typed ص or م to change period
-            if 'ص' in current or 'م' in current:
-                # Extract the period and keep it
-                has_period = 'م' in current
-                # Remove the typed character and reformat
-                clean = current.replace('ص', '').replace('م', '')
-                formatted = self._format_datetime_auto(clean, e.control)
-                if ' ص ' in formatted or ' م ' in formatted:
-                    if has_period:
-                        formatted = formatted.replace(' ص ', ' م ')
+            # Check if user is deleting
+            digits_only = ''.join(c for c in current if c.isdigit())
+            has_period = 'ص' in current or 'م' in current
+            
+            # Allow deletion
+            if not digits_only and not has_period:
+                e.control.value = ""
+                self._calculate_hours()
+                self.page.update()
+                return
+            
+            # Get current period from the field
+            current_period = None
+            if hasattr(self, '_entry_period'):
+                current_period = self._entry_period
+            
+            formatted, period = self._format_datetime_auto(current, current_period)
+            
+            # Store the period
+            if period:
+                self._entry_period = period
+            
+            if formatted != current:
                 e.control.value = formatted
-            else:
-                formatted = self._format_datetime_auto(current, e.control)
-                if formatted != current:
-                    e.control.value = formatted
         
         self._calculate_hours()
         self.page.update()
@@ -573,21 +603,30 @@ class SlideRow:
         if e and e.control:
             current = e.control.value or ""
             
-            # Check if user typed ص or م to change period
-            if 'ص' in current or 'م' in current:
-                # Extract the period and keep it
-                has_period = 'م' in current
-                # Remove the typed character and reformat
-                clean = current.replace('ص', '').replace('م', '')
-                formatted = self._format_datetime_auto(clean, e.control)
-                if ' ص ' in formatted or ' م ' in formatted:
-                    if has_period:
-                        formatted = formatted.replace(' ص ', ' م ')
+            # Check if user is deleting
+            digits_only = ''.join(c for c in current if c.isdigit())
+            has_period = 'ص' in current or 'م' in current
+            
+            # Allow deletion
+            if not digits_only and not has_period:
+                e.control.value = ""
+                self._calculate_hours()
+                self.page.update()
+                return
+            
+            # Get current period from the field
+            current_period = None
+            if hasattr(self, '_exit_period'):
+                current_period = self._exit_period
+            
+            formatted, period = self._format_datetime_auto(current, current_period)
+            
+            # Store the period
+            if period:
+                self._exit_period = period
+            
+            if formatted != current:
                 e.control.value = formatted
-            else:
-                formatted = self._format_datetime_auto(current, e.control)
-                if formatted != current:
-                    e.control.value = formatted
         
         self._calculate_hours()
         self.page.update()
@@ -669,14 +708,8 @@ class SlideRow:
         """Handle block number changes and replace Arabic characters with English equivalents"""
         val = self.block_number.value
         if val:
-            # تحويل الحروف إلى A, B, F
-            # A: ِ, ش, a
-            # B: لآ, لا, b
-            # F: f, [, ب
-            new_val = val.replace('ِ', 'A').replace('ش', 'A').replace('a', 'A')
-            new_val = new_val.replace('لآ', 'B').replace('لا', 'B').replace('b', 'B')
-            new_val = new_val.replace('f', 'F').replace('[', 'F').replace('ب', 'F')
-            new_val = new_val.upper()
+            from utils.utils import normalize_block_number
+            new_val = normalize_block_number(val, reorder=False)  # Only normalize, don't reorder on change
             
             if new_val != val:
                 self.block_number.value = new_val
@@ -687,23 +720,11 @@ class SlideRow:
         self._calculate_values()
 
     def on_block_blur(self, e):
-        """Reorder block number when focus leaves - move letter to beginning if at end"""
+        """Normalize and reorder block number when focus leaves"""
         val = self.block_number.value
         if val:
-            # تحويل الحروف إلى A, B, F
-            new_val = val.replace('ِ', 'A').replace('ش', 'A').replace('a', 'A')
-            new_val = new_val.replace('لآ', 'B').replace('لا', 'B').replace('b', 'B')
-            new_val = new_val.replace('f', 'F').replace('[', 'F').replace('ب', 'F')
-            new_val = new_val.upper()
-            
-            # Check if ends with letter(s) and starts with number - reorder to put letter first
-            # Pattern: digits followed by letters at the end (e.g., "12B" -> "B12")
-            import re
-            match = re.match(r'^(\d+)([A-Za-z]+)$', new_val)
-            if match:
-                numbers = match.group(1)
-                letters = match.group(2).upper()
-                new_val = letters + numbers
+            from utils.utils import normalize_block_number
+            new_val = normalize_block_number(val, reorder=True)  # Full normalization with reordering
             
             if new_val != val:
                 self.block_number.value = new_val

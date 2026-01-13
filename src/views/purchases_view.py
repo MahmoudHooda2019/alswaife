@@ -1,7 +1,8 @@
 import os
 import flet as ft
 from utils.purchases_utils import export_purchases_to_excel, load_item_names_from_excel
-from utils.utils import is_excel_running, get_current_date
+from utils.utils import is_excel_running, get_current_date, is_file_locked
+from utils.db_utils import get_purchases_zoom_level, set_purchases_zoom_level
 
 
 class PurchaseRow:
@@ -115,50 +116,25 @@ class PurchaseRow:
             )
         
         # Create the main card
-        self.card = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
-                    controls=[
-                        # Header with delete button
-                        ft.Row(
-                            controls=[
-                                ft.Container(expand=True),
-                                self.delete_btn
-                            ],
-                            alignment=ft.MainAxisAlignment.END
-                        ),
-                        
-                        ft.Divider(height=20, color=ft.Colors.GREY_700),
-                        
-                        # Expense Information Section
-                        create_section_header("بيانات المصروف", ft.Colors.RED_400),
-                        
-                        ft.Row(
-                            controls=[
-                                self.date_field,
-                                self.quantity_field,
-                                ft.Column([
-                                    self.item_name_field,
-                                    self.item_suggestions,
-                                ], spacing=0),
-                                self.total_price_field,
-                            ],
-                            spacing=15,
-                            wrap=True
-                        ),
-                    ],
-                    spacing=12
-                ),
-                padding=20,
-                gradient=ft.LinearGradient(
-                    begin=ft.alignment.top_left,
-                    end=ft.alignment.bottom_right,
-                    colors=[ft.Colors.GREY_900, ft.Colors.GREY_800]
-                ),
-                border_radius=15,
-                border=ft.border.all(1, ft.Colors.RED_900)
+        self.card = ft.Container(
+            content=ft.Row(
+                controls=[
+                    self.date_field,
+                    self.quantity_field,
+                    ft.Column([
+                        self.item_name_field,
+                        self.item_suggestions,
+                    ], spacing=0),
+                    self.total_price_field,
+                    self.delete_btn,
+                ],
+                spacing=12,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER
             ),
-            elevation=8,
+            padding=ft.padding.symmetric(horizontal=15, vertical=10),
+            bgcolor=ft.Colors.GREY_900,
+            border_radius=12,
+            border=ft.border.all(1, ft.Colors.GREY_700),
         )
         
         self.row = self.card
@@ -215,6 +191,36 @@ class PurchaseRow:
         self.item_name_field.value = ""
         self.total_price_field.value = ""
 
+    def update_scale(self, scale_factor):
+        """Update the scale of all fields"""
+        base_text_size = 14
+        new_text_size = base_text_size * scale_factor
+        
+        # Default widths
+        width_small = 130
+        width_medium = 160
+        width_large = 440
+        
+        # Update text fields
+        fields = [
+            (self.date_field, width_medium),
+            (self.quantity_field, width_small),
+            (self.item_name_field, width_large),
+            (self.total_price_field, width_medium),
+        ]
+        
+        for field, base_width in fields:
+            field.width = base_width * scale_factor
+            field.text_style = ft.TextStyle(
+                size=new_text_size,
+                weight=ft.FontWeight.W_500,
+                color=ft.Colors.WHITE
+            )
+            field.label_style = ft.TextStyle(
+                color=ft.Colors.GREY_400,
+                size=new_text_size * 0.9
+            )
+
 
 class PurchasesView:
     """Main view for expenses management"""
@@ -232,6 +238,12 @@ class PurchasesView:
         self.documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
         self.purchases_path = os.path.join(self.documents_path, "ايرادات ومصروفات")
         os.makedirs(self.purchases_path, exist_ok=True)
+        
+        # Database path for zoom level
+        self.db_path = os.path.join(self.documents_path, 'invoice.db')
+        
+        # Load saved zoom level
+        self.scale_factor = get_purchases_zoom_level(self.db_path)
         
         # Load existing items for auto-complete
         self.excel_file = os.path.join(self.purchases_path, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
@@ -294,6 +306,28 @@ class PurchasesView:
                     tooltip="إضافة صف جديد"
                 ),
                 ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.IconButton(
+                                ft.Icons.ZOOM_IN,
+                                on_click=self.zoom_in,
+                                tooltip="تكبير",
+                                icon_color=ft.Colors.BLUE_300,
+                            ),
+                            ft.IconButton(
+                                ft.Icons.ZOOM_OUT,
+                                on_click=self.zoom_out,
+                                tooltip="تصغير",
+                                icon_color=ft.Colors.BLUE_300,
+                            ),
+                        ],
+                        spacing=0,
+                    ),
+                    bgcolor=ft.Colors.GREY_800,
+                    border_radius=20,
+                    padding=ft.padding.symmetric(horizontal=5),
+                ),
+                ft.Container(
                     content=ft.IconButton(
                         icon=ft.Icons.SAVE,
                         on_click=self.save_to_excel,
@@ -337,6 +371,8 @@ class PurchasesView:
             delete_callback=self.delete_row,
             items_list=self.items_list
         )
+        # Apply current zoom level to new row
+        row.update_scale(self.scale_factor)
         self.rows.append(row)
         self.rows_container.controls.append(row.row)
         self.page.update()
@@ -363,6 +399,11 @@ class PurchasesView:
 
     def _do_save(self):
         """تنفيذ عملية الحفظ الفعلية"""
+        # التحقق من أن الملف غير مفتوح
+        if is_file_locked(self.excel_file):
+            self._show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
+            return
+        
         try:
             data = [row.to_dict() for row in self.rows if self._row_has_data(row)]
             export_purchases_to_excel(data, self.excel_file)
@@ -523,4 +564,26 @@ class PurchasesView:
         )
         self.page.overlay.append(dlg)
         dlg.open = True
+        self.page.update()
+
+    def zoom_in(self, e=None):
+        """Increase the scale factor"""
+        if self.scale_factor < 2.0:
+            self.scale_factor += 0.05
+            self._apply_zoom()
+            # Save zoom level to database
+            set_purchases_zoom_level(self.db_path, self.scale_factor)
+
+    def zoom_out(self, e=None):
+        """Decrease the scale factor"""
+        if self.scale_factor > 0.5:
+            self.scale_factor -= 0.05
+            self._apply_zoom()
+            # Save zoom level to database
+            set_purchases_zoom_level(self.db_path, self.scale_factor)
+
+    def _apply_zoom(self):
+        """Apply the current zoom level to all rows"""
+        for row in self.rows:
+            row.update_scale(self.scale_factor)
         self.page.update()

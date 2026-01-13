@@ -10,6 +10,7 @@ from views.inventory_add_view import InventoryAddView
 from views.inventory_disburse_view import InventoryDisburseView
 from views.slides_add_view import SlidesAddView
 from views.reports_view import ReportsView
+from views.payments_view import PaymentsView
 from utils.update_utils import check_for_updates, download_update, install_update
 from utils.invoice_utils import save_invoice, update_client_ledger
 from utils.log_utils import log_error, log_exception
@@ -122,7 +123,8 @@ class DashboardView:
                 ft.GridView(
                     controls=[
                         self.create_menu_card("إدارة الفواتير", ft.Icons.RECEIPT_LONG, self.open_invoices, ft.Colors.BLUE_700),
-                        self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.GREEN_700),
+                        self.create_menu_card("إدارة الدفعات", ft.Icons.PAYMENTS, self.open_payments, ft.Colors.GREEN_700),
+                        self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.LIME_700),
                         self.create_menu_card("إضافة بلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
                         self.create_menu_card("مشتري", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
                         self.create_menu_card("المخزون", ft.Icons.INVENTORY, self.open_inventory, ft.Colors.DEEP_PURPLE_700),
@@ -159,7 +161,8 @@ class DashboardView:
                 ft.GridView(
                     controls=[
                         self.create_menu_card("إدارة الفواتير", ft.Icons.RECEIPT_LONG, self.open_invoices, ft.Colors.BLUE_700),
-                        self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.GREEN_700),
+                        self.create_menu_card("إدارة الدفعات", ft.Icons.PAYMENTS, self.open_payments, ft.Colors.GREEN_700),
+                        self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.LIME_700),
                         self.create_menu_card("إضافة بلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
                         self.create_menu_card("مشتري", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
                         self.create_menu_card("المخزون", ft.Icons.INVENTORY, self.open_inventory, ft.Colors.DEEP_PURPLE_700),
@@ -1096,6 +1099,12 @@ class DashboardView:
         # Use save_callback from dashboard_view module
         app = InvoiceView(self.page, save_callback)
         app.build_ui()
+
+    def open_payments(self, e):
+        """Open payments management view"""
+        self.page.clean()
+        payments_view = PaymentsView(self.page, on_back=self.show)
+        payments_view.build_ui()
 
     def open_attendance(self, e):
         # Clear page and load AttendanceView directly without animation
