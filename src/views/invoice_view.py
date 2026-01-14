@@ -1092,6 +1092,30 @@ class InvoiceView:
                     update_client_statement(self.db_path, client, client_dir)
                 except Exception as payment_ex:
                     log_error(f"Error updating client statement: {payment_ex}")
+            else:
+                # For revenue invoices, add to income file automatically
+                try:
+                    from utils.purchases_utils import add_income_record
+                    
+                    # Get the correct documents path
+                    documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
+                    income_dir = os.path.join(documents_path, "ايرادات ومصروفات")
+                    income_file_path = os.path.join(income_dir, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
+                    
+                    # Create income record
+                    income_record = {
+                        'client': client,
+                        'amount': total_amount,
+                        'date': date_str
+                    }
+                    
+                    # Add to income file
+                    add_income_record(income_file_path, income_record)
+                    log_error(f"Revenue invoice added to income file: {client} - {total_amount}")
+                    
+                except Exception as income_ex:
+                    log_error(f"Error adding revenue invoice to income file: {income_ex}")
+                    # Continue with the process even if income recording fails
             
             # Disburse slides from inventory if invoice contains slide products
             try:
@@ -1318,6 +1342,30 @@ class InvoiceView:
             except Exception as db_ex:
                 log_error(f"Error saving revenue invoice to database: {db_ex}")
                 # Continue with the process even if database save fails
+            
+            # For revenue invoices, add to income file automatically
+            try:
+                from utils.purchases_utils import add_income_record
+                
+                # Get the correct documents path
+                documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
+                income_dir = os.path.join(documents_path, "ايرادات ومصروفات")
+                income_file_path = os.path.join(income_dir, "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
+                
+                # Create income record
+                income_record = {
+                    'client': client,
+                    'amount': total_amount,
+                    'date': date_str
+                }
+                
+                # Add to income file
+                add_income_record(income_file_path, income_record)
+                log_error(f"Revenue invoice added to income file: {client} - {total_amount}")
+                
+            except Exception as income_ex:
+                log_error(f"Error adding revenue invoice to income file: {income_ex}")
+                # Continue with the process even if income recording fails
             
             # Disburse slides from inventory if invoice contains slide products
             try:
