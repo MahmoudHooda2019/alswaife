@@ -48,6 +48,9 @@ class PaymentsView:
     def build_ui(self):
         """Build the payments management UI with AppBar"""
         
+        # Add keyboard event handler
+        self.page.on_keyboard_event = self.on_keyboard_event
+        
         # Load clients
         clients = self.load_clients()
         
@@ -412,3 +415,53 @@ class PaymentsView:
         """Go back to dashboard"""
         if self.on_back:
             self.on_back()
+
+    def on_keyboard_event(self, e: ft.KeyboardEvent):
+        """Handle keyboard events for navigation"""
+        # Handle Ctrl+S for save
+        if e.key == "s" and e.ctrl:
+            self.save_payment(None)
+            return
+        
+        # Handle arrow keys for navigation between fields
+        if e.key not in ["Arrow Down", "Arrow Up", "Enter"]:
+            return
+        
+        # Get all input fields in order
+        fields = []
+        if self.client_dropdown:
+            fields.append(self.client_dropdown)
+        if self.date_field:
+            fields.append(self.date_field)
+        if self.amount_field:
+            fields.append(self.amount_field)
+        if self.notes_field:
+            fields.append(self.notes_field)
+        
+        # Find currently focused field
+        focused_idx = None
+        for idx, field in enumerate(fields):
+            try:
+                if field == self.page.focused_control:
+                    focused_idx = idx
+                    break
+            except:
+                pass
+        
+        if focused_idx is None:
+            return
+        
+        # Calculate new position
+        new_idx = focused_idx
+        if e.key == "Arrow Down" or e.key == "Enter":
+            new_idx = min(focused_idx + 1, len(fields) - 1)
+        elif e.key == "Arrow Up":
+            new_idx = max(focused_idx - 1, 0)
+        
+        # Focus the new field
+        if new_idx != focused_idx and new_idx < len(fields):
+            try:
+                fields[new_idx].focus()
+                self.page.update()
+            except:
+                pass

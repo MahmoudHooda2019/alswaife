@@ -458,6 +458,7 @@ def append_to_existing_attendance(filepath: str, new_employees_data: List[Dict])
             # Date
             cell = worksheet.cell(row=last_row, column=17, value=emp.get('date', ''))
             cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.number_format = 'DD/MM/YYYY'
             
             # Advance
             advance = emp.get('advance', 0)

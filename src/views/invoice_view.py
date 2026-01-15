@@ -83,15 +83,26 @@ class InvoiceRow:
             border_color=ft.Colors.GREY_700,
             focused_border_color=ft.Colors.BLUE_400,
             focused_bgcolor=ft.Colors.BLUE_GREY_900,
-            on_focus=lambda e: self._on_field_focus(2)
+            on_focus=lambda e: self._on_field_focus(2),
+            on_change=self.on_thickness_change
         )
+        
+        # Create suffix text for showing available quantity in count field
+        self.count_quantity_hint = ft.Text(
+            "",
+            color=ft.Colors.GREY_500,
+            size=11,
+            italic=True
+        )
+        
         self.count_var = ft.TextField(
             label="العدد", 
             width=self.default_widths['count'],
             keyboard_type=ft.KeyboardType.NUMBER,
             input_filter=ft.InputFilter(regex_string=r"^[0-9]*\.?[0-9]*ز?$"),  # Allow numbers, decimal point, and 'ز' character
             on_change=self.calculate,
-            on_focus=lambda e: self._on_field_focus(3)
+            on_focus=lambda e: self._on_field_focus(3),
+            hint_text="0"  # Default hint
         )
         # New field for length before discount
         self.len_before_var = ft.TextField(
@@ -180,8 +191,12 @@ class InvoiceRow:
             
             if new_val != val:
                 self.block_var.value = new_val
-                if hasattr(self, 'page') and self.page:
-                    self.page.update()
+            
+            # Update hint with available quantity from slides inventory
+            self.update_block_quantity_hint()
+            
+            if hasattr(self, 'page') and self.page:
+                self.page.update()
 
     def on_block_blur(self, e):
         """Normalize and reorder block number when focus leaves"""
@@ -192,13 +207,44 @@ class InvoiceRow:
             
             if new_val != val:
                 self.block_var.value = new_val
-                if hasattr(self, 'page') and self.page:
-                    self.page.update()
+            
+            # Update hint with available quantity
+            self.update_block_quantity_hint()
+            
+            if hasattr(self, 'page') and self.page:
+                self.page.update()
+    
+    def update_block_quantity_hint(self):
+        """Update the hint text in count field to show available quantity from slides inventory"""
+        try:
+            block_number = self.block_var.value
+            
+            if not block_number or not block_number.strip():
+                self.count_var.hint_text = "0"
+                return
+            
+            # Get available quantity from slides inventory (ignores thickness)
+            from utils.slides_utils import get_slide_quantity_by_block
+            available_qty = get_slide_quantity_by_block(block_number)
+            
+            # Update hint text in count field
+            self.count_var.hint_text = f"{available_qty}"
+            
+        except Exception:
+            # If any error occurs, just show 0
+            self.count_var.hint_text = "0"
 
     def handle_arabic_decimal_input(self, text_field):
         """Handle Arabic decimal separator (Zein letter) and replace with decimal point"""
-        from utils.utils import handle_arabic_decimal_input
-        return handle_arabic_decimal_input(text_field)
+        from utils.utils import normalize_numeric_input
+        if not text_field or not text_field.value:
+            return False
+        original_value = text_field.value
+        new_value = normalize_numeric_input(original_value)
+        if new_value != original_value:
+            text_field.value = new_value
+            return True
+        return False
 
     def on_len_before_change(self, e):
         """Handle input changes for length before field with Arabic decimal handling"""
@@ -442,17 +488,12 @@ class InvoiceRow:
 
     def focus_field(self, field_index):
         """Focus a specific field by index, handles both TextField and Dropdown"""
-        from utils.log_utils import log_error
-        
         fields = self.get_editable_fields()
-        log_error(f"focus_field called: field_index={field_index}, total_fields={len(fields)}")
         
         if 0 <= field_index < len(fields):
             field = fields[field_index]
-            log_error(f"Focusing field type: {type(field).__name__}")
             try:
                 field.focus()
-                log_error(f"focus() called successfully on {type(field).__name__}")
                 
                 # Always update focus tracking manually for reliable navigation
                 if self.navigation_callback:
@@ -462,8 +503,7 @@ class InvoiceRow:
                 if self.page:
                     self.page.update()
                 return True
-            except Exception as ex:
-                log_error(f"Error focusing field: {ex}")
+            except Exception:
                 return False
         return False
 
@@ -824,44 +864,22 @@ class InvoiceView:
         self._perform_save()
     
     def _show_excel_warning_dialog(self):
-        """Show warning dialog when Excel is open"""
-        def on_skip(e):
-            DialogManager.close_dialog(self.page, dlg)
+        """Show warning bottom sheet when Excel is open"""
+        from utils.bottom_sheet_utils import BottomSheetManager
+        
+        def on_skip():
             self._perform_save()
         
-        def on_cancel(e):
-            DialogManager.close_dialog(self.page, dlg)
-        
-        actions = [
-            ft.TextButton(
-                "تخطي والمتابعة",
-                on_click=on_skip,
-                style=ft.ButtonStyle(color=ft.Colors.ORANGE_400)
-            ),
-            ft.TextButton(
-                "إلغاء",
-                on_click=on_cancel,
-                style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-            ),
-        ]
-        
-        dlg = DialogManager.show_custom_dialog(
-            self.page,
-            "تنبيه - برنامج Excel مفتوح",
-            ft.Column(
-                controls=[
-                    ft.Text("تم اكتشاف أن برنامج Microsoft Excel مفتوح حالياً.", size=14),
-                    ft.Container(height=10),
-                    ft.Text("قد يؤدي ذلك إلى فشل حفظ الملفات إذا كانت مفتوحة في Excel.", size=14, rtl=True, color=ft.Colors.GREY_400),
-                    ft.Container(height=10),
-                    ft.Text("يُنصح بإغلاق جميع ملفات Excel قبل المتابعة.", size=14, rtl=True, weight=ft.FontWeight.W_500),
-                ],
-                tight=True
-            ),
-            actions,
+        BottomSheetManager.show_options_bottom_sheet(
+            page=self.page,
+            title="تنبيه - برنامج Excel مفتوح",
+            message="تم اكتشاف أن برنامج Microsoft Excel مفتوح حالياً.\n\nقد يؤدي ذلك إلى فشل حفظ الملفات إذا كانت مفتوحة في Excel.\n\nيُنصح بإغلاق جميع ملفات Excel قبل المتابعة.",
+            options=[
+                ("تخطي والمتابعة", on_skip),
+                ("إلغاء", None)
+            ],
             icon=ft.Icons.WARNING_AMBER_ROUNDED,
-            icon_color=ft.Colors.ORANGE_400,
-            title_color=ft.Colors.ORANGE_400
+            icon_color=ft.Colors.ORANGE_400
         )
     
     def _perform_save(self):
@@ -880,24 +898,45 @@ class InvoiceView:
             is_revenue = "ايراد" in client
         
             if is_revenue:
-                # Show confirmation dialog
+                # Show confirmation bottom sheet
+                from utils.bottom_sheet_utils import BottomSheetManager
+                
                 def on_confirm_revenue():
                     self._save_revenue_invoice(op_num, client, date_str, driver, phone)
                 
-                DialogManager.show_confirm_dialog(
-                    self.page,
-                    "العميل فارغ أو يحتوي على كلمة 'ايراد'. سيتم حفظ الفاتورة في مجلد الإيرادات دون إنشاء كشف حساب. هل توافق؟",
-                    on_confirm_revenue,
-                    title="تنبيه"
+                BottomSheetManager.show_options_bottom_sheet(
+                    page=self.page,
+                    title="تنبيه",
+                    message="العميل فارغ أو يحتوي على كلمة 'ايراد'.\n\nسيتم حفظ الفاتورة في مجلد الإيرادات دون إنشاء كشف حساب.\n\nهل توافق؟",
+                    options=[
+                        ("موافق", on_confirm_revenue),
+                        ("إلغاء", None)
+                    ],
+                    icon=ft.Icons.INFO_OUTLINE,
+                    icon_color=ft.Colors.BLUE_400
                 )
                 return
 
             if not op_num:
-                DialogManager.show_error_dialog(self.page, "يرجى إدخال رقم العملية")
+                from utils.bottom_sheet_utils import BottomSheetManager
+                BottomSheetManager.show_bottom_sheet(
+                    page=self.page,
+                    title="خطأ",
+                    message="يرجى إدخال رقم العملية",
+                    icon=ft.Icons.ERROR_OUTLINE,
+                    icon_color=ft.Colors.RED_400
+                )
                 return
 
         except Exception as ex:
-            DialogManager.show_error_dialog(self.page, f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message=f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
             return
 
         # Validate items before saving
@@ -946,20 +985,30 @@ class InvoiceView:
 
         # Show validation errors if any
         if validation_errors:
+            from utils.bottom_sheet_utils import BottomSheetManager
+            
             error_message = "\n".join(validation_errors[:10])  # Show max 10 errors
             if len(validation_errors) > 10:
                 error_message += f"\n... و {len(validation_errors) - 10} أخطاء أخرى"
             
-            dlg = ft.AlertDialog(
-                title=ft.Text("تنبيه - خانات فارغة"),
-                content=ft.Text(error_message))
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="تنبيه - خانات فارغة",
+                message=error_message,
+                icon=ft.Icons.WARNING_AMBER,
+                icon_color=ft.Colors.ORANGE_400
+            )
             return
 
         if not items_data:
-            DialogManager.show_warning_dialog(self.page, "لا توجد بنود للحفظ")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="تحذير",
+                message="لا توجد بنود للحفظ",
+                icon=ft.Icons.WARNING_OUTLINE,
+                icon_color=ft.Colors.ORANGE_400
+            )
             return
 
         def sanitize(s):
@@ -979,8 +1028,15 @@ class InvoiceView:
         try:
             os.makedirs(my_invoices_dir, exist_ok=True)
         except OSError as ex:
-             DialogManager.show_error_dialog(self.page, f"فشل إنشاء المجلد: {ex}")
-             return
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message=f"فشل إنشاء المجلد: {ex}",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
+            return
 
         # Update filename format
         fname = f"فاتورة رقم {sanitize(op_num)} - بتاريخ {date_str.replace('/', '-')}.xlsx"
@@ -988,25 +1044,53 @@ class InvoiceView:
         
         # التحقق من أن الملف غير مفتوح
         if is_file_locked(full_path):
-            DialogManager.show_error_dialog(self.page, "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message="الملف مفتوح حالياً في برنامج Excel.\n\nيرجى إغلاق الملف والمحاولة مرة أخرى.",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
             return
         
         # التحقق من كشف الحساب أيضاً
         ledger_path = os.path.join(client_dir, "كشف حساب.xlsx")
         if is_file_locked(ledger_path):
-            DialogManager.show_error_dialog(self.page, "ملف كشف الحساب مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message="ملف كشف الحساب مفتوح حالياً في برنامج Excel.\n\nيرجى إغلاق الملف والمحاولة مرة أخرى.",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
             return
         
         # التحقق من ملف مخزون الشرائح
         slides_inventory_path = os.path.join(self.documents_path, "الشرائح", "مخزون الشرائح.xlsx")
         if is_file_locked(slides_inventory_path):
-            DialogManager.show_error_dialog(self.page, "ملف مخزون الشرائح مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message="ملف مخزون الشرائح مفتوح حالياً في برنامج Excel.\n\nيرجى إغلاق الملف والمحاولة مرة أخرى.",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
             return
         
         # التحقق من ملف الإيرادات والمصروفات
         income_expenses_file = os.path.join(self.documents_path, "ايرادات ومصروفات", "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
         if is_file_locked(income_expenses_file):
-            DialogManager.show_error_dialog(self.page, "ملف الإيرادات والمصروفات مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message="ملف الإيرادات والمصروفات مفتوح حالياً في برنامج Excel.\n\nيرجى إغلاق الملف والمحاولة مرة أخرى.",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
             return
         
         try:
@@ -1129,48 +1213,63 @@ class InvoiceView:
             # Store the current invoice path for payment updates
             self.current_invoice_path = full_path
             
-            def open_file(e):
-                # Use our universal function to open the file
+            # Show success bottom sheet
+            from utils.bottom_sheet_utils import BottomSheetManager
+            
+            def open_file():
                 open_path(full_path)
-            def open_folder(e):
-                # Use our universal function to open the folder
+            
+            def open_folder():
                 open_path(client_dir)
-
-            def open_ledger(e):
-                # Use the correct ledger file name
+            
+            def open_ledger():
                 ledger_path = os.path.join(client_dir, "كشف حساب.xlsx")
-                # Use our universal function to open the ledger file
                 open_path(ledger_path)
-
-            def close_dlg(e):
-                DialogManager.close_dialog(self.page, dlg)
-
-            actions = [
-                ft.TextButton("فتح الفاتورة", on_click=open_file),
-                ft.TextButton("فتح كشف الحساب", on_click=open_ledger),
-                ft.TextButton("فتح المجلد", on_click=open_folder),
-                ft.TextButton("حسنا", on_click=close_dlg)
-            ]
-
-            dlg = DialogManager.show_custom_dialog(
-                self.page,
-                "نجاح",
-                ft.Text(f"تم حفظ الفاتورة وتحديث كشف الحساب بنجاح.\nالمسار: {full_path}"),
-                actions,
+            
+            BottomSheetManager.show_options_bottom_sheet(
+                page=self.page,
+                title="نجاح",
+                message=f"تم حفظ الفاتورة وتحديث كشف الحساب بنجاح.\n\nالمسار: {full_path}",
+                options=[
+                    ("فتح الفاتورة", open_file),
+                    ("فتح كشف الحساب", open_ledger),
+                    ("فتح المجلد", open_folder),
+                    ("حسنا", None)
+                ],
                 icon=ft.Icons.CHECK_CIRCLE,
-                icon_color=ft.Colors.GREEN_400,
-                title_color=ft.Colors.GREEN_300
+                icon_color=ft.Colors.GREEN_400
             )
             
         except PermissionError as ex:
-            DialogManager.show_error_dialog(self.page, "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message="الملف مفتوح حالياً في برنامج Excel.\n\nيرجى إغلاق الملف والمحاولة مرة أخرى.",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
         except Exception as ex:
-            DialogManager.show_error_dialog(self.page, f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message=f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
 
     def _save_revenue_invoice(self, op_num, client, date_str, driver, phone):
         """Save revenue invoice to a separate directory without creating a ledger"""
         if not op_num:
-            DialogManager.show_error_dialog(self.page, "يرجى إدخال رقم العملية")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message="يرجى إدخال رقم العملية",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
             return
 
         # Validate items before saving
@@ -1220,20 +1319,30 @@ class InvoiceView:
 
         # Show validation errors if any
         if validation_errors:
+            from utils.bottom_sheet_utils import BottomSheetManager
+            
             error_message = "\n".join(validation_errors[:10])  # Show max 10 errors
             if len(validation_errors) > 10:
                 error_message += f"\n... و {len(validation_errors) - 10} أخطاء أخرى"
             
-            dlg = ft.AlertDialog(
-                title=ft.Text("تنبيه - خانات فارغة"),
-                content=ft.Text(error_message))
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="تنبيه - خانات فارغة",
+                message=error_message,
+                icon=ft.Icons.WARNING_AMBER,
+                icon_color=ft.Colors.ORANGE_400
+            )
             return
 
         if not items_data:
-            DialogManager.show_warning_dialog(self.page, "لا توجد بنود للحفظ")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="تحذير",
+                message="لا توجد بنود للحفظ",
+                icon=ft.Icons.WARNING_OUTLINE,
+                icon_color=ft.Colors.ORANGE_400
+            )
             return
 
         def sanitize(s):
@@ -1249,27 +1358,55 @@ class InvoiceView:
         try:
             os.makedirs(my_invoices_dir, exist_ok=True)
         except OSError as ex:
-             DialogManager.show_error_dialog(self.page, f"فشل إنشاء المجلد: {ex}")
-             return
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message=f"فشل إنشاء المجلد: {ex}",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
+            return
 
         fname = f"فاتورة رقم ({sanitize(op_num)}) _ ايراد _ بتاريخ {date_str.replace('/', '-')}.xlsx"
         full_path = os.path.join(my_invoices_dir, fname)
         
         # التحقق من أن الملف غير مفتوح
         if is_file_locked(full_path):
-            DialogManager.show_error_dialog(self.page, "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message="الملف مفتوح حالياً في برنامج Excel.\n\nيرجى إغلاق الملف والمحاولة مرة أخرى.",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
             return
         
         # التحقق من ملف مخزون الشرائح
         slides_inventory_path = os.path.join(self.documents_path, "الشرائح", "مخزون الشرائح.xlsx")
         if is_file_locked(slides_inventory_path):
-            DialogManager.show_error_dialog(self.page, "ملف مخزون الشرائح مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message="ملف مخزون الشرائح مفتوح حالياً في برنامج Excel.\n\nيرجى إغلاق الملف والمحاولة مرة أخرى.",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
             return
         
         # التحقق من ملف الإيرادات والمصروفات
         income_expenses_file = os.path.join(self.documents_path, "ايرادات ومصروفات", "بيان مصروفات وايرادات مصنع جرانيت السويفى.xlsx")
         if is_file_locked(income_expenses_file):
-            DialogManager.show_error_dialog(self.page, "ملف الإيرادات والمصروفات مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message="ملف الإيرادات والمصروفات مفتوح حالياً في برنامج Excel.\n\nيرجى إغلاق الملف والمحاولة مرة أخرى.",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
             return
         
         try:
@@ -1379,56 +1516,46 @@ class InvoiceView:
             # Store the current invoice path for payment updates
             self.current_invoice_path = full_path
             
-            def open_file(e):
-                try:
-                    if platform.system() == 'Windows':
-                        # Use subprocess with Excel-specific parameters to ensure normal window state
-                        import winreg
-                        try:
-                            # Get Excel path from registry
-                            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"Excel.Application\CLSID") as key:
-                                clsid = winreg.QueryValue(key, "")
-                            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, f"CLSID\\{clsid}\\LocalServer32") as key:
-                                excel_path = winreg.QueryValue(key, "")
-                            # Open with Excel in normal window state
-                            subprocess.Popen([excel_path, '/e', full_path], shell=False)
-                        except:
-                            # Fallback to default method if registry lookup fails
-                            os.startfile(full_path)
-                    elif platform.system() == 'Darwin':
-                        subprocess.call(('open', full_path))
-                    else:
-                        subprocess.call(('xdg-open', full_path))
-                except Exception as ex:
-                    log_error(f"Error opening file: {ex}")
-
-            def open_folder(e):
-                # Use our universal function to open the folder
+            # Show success bottom sheet
+            from utils.bottom_sheet_utils import BottomSheetManager
+            
+            def open_file():
+                open_path(full_path)
+            
+            def open_folder():
                 open_path(revenue_dir)
-
-            def close_dlg(e):
-                DialogManager.close_dialog(self.page, dlg)
-
-            actions = [
-                ft.TextButton("فتح الفاتورة", on_click=open_file),
-                ft.TextButton("فتح المجلد", on_click=open_folder),
-                ft.TextButton("حسنا", on_click=close_dlg)
-            ]
-
-            dlg = DialogManager.show_custom_dialog(
-                self.page,
-                "نجاح",
-                ft.Text(f"تم حفظ فاتورة الإيراد بنجاح.\nالمسار: {full_path}"),
-                actions,
+            
+            BottomSheetManager.show_options_bottom_sheet(
+                page=self.page,
+                title="نجاح",
+                message=f"تم حفظ فاتورة الإيراد بنجاح.\n\nالمسار: {full_path}",
+                options=[
+                    ("فتح الفاتورة", open_file),
+                    ("فتح المجلد", open_folder),
+                    ("حسنا", None)
+                ],
                 icon=ft.Icons.CHECK_CIRCLE,
-                icon_color=ft.Colors.GREEN_400,
-                title_color=ft.Colors.GREEN_300
+                icon_color=ft.Colors.GREEN_400
             )
             
         except PermissionError as ex:
-            DialogManager.show_error_dialog(self.page, "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message="الملف مفتوح حالياً في برنامج Excel.\n\nيرجى إغلاق الملف والمحاولة مرة أخرى.",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
         except Exception as ex:
-            DialogManager.show_error_dialog(self.page, f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message=f"حدث خطأ أثناء الحفظ:\n{ex}\n{traceback.format_exc()}",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
 
     def on_op_number_blur(self, e):
         """Handle when focus leaves the invoice number field"""
@@ -1437,14 +1564,21 @@ class InvoiceView:
             # Check if invoice exists in database
             if invoice_exists(self.db_path, op_num):
                 # Ask user if they want to load the existing invoice
+                from utils.bottom_sheet_utils import BottomSheetManager
+                
                 def on_confirm_load():
                     self.load_invoice_data(op_num)
                 
-                DialogManager.show_confirm_dialog(
-                    self.page,
-                    f"يوجد فاتورة برقم {op_num} محفوظة مسبقاً. هل تريد تحميل بياناتها؟",
-                    on_confirm_load,
-                    title="تنبيه"
+                BottomSheetManager.show_options_bottom_sheet(
+                    page=self.page,
+                    title="تنبيه",
+                    message=f"يوجد فاتورة برقم {op_num} محفوظة مسبقاً.\n\nهل تريد تحميل بياناتها؟",
+                    options=[
+                        ("نعم", on_confirm_load),
+                        ("لا", None)
+                    ],
+                    icon=ft.Icons.INFO_OUTLINE,
+                    icon_color=ft.Colors.BLUE_400
                 )
         
     def load_invoice_data(self, op_num):
@@ -1502,7 +1636,14 @@ class InvoiceView:
             
         except Exception as ex:
             log_error(f"Error loading invoice data: {ex}")
-            DialogManager.show_error_dialog(self.page, f"حدث خطأ أثناء تحميل بيانات الفاتورة:\n{ex}")
+            from utils.bottom_sheet_utils import BottomSheetManager
+            BottomSheetManager.show_bottom_sheet(
+                page=self.page,
+                title="خطأ",
+                message=f"حدث خطأ أثناء تحميل بيانات الفاتورة:\n{ex}",
+                icon=ft.Icons.ERROR_OUTLINE,
+                icon_color=ft.Colors.RED_400
+            )
 
     def increment_op(self):
         try:
@@ -1558,8 +1699,6 @@ class InvoiceView:
         """Handle keyboard events for navigation like Excel"""
         from utils.log_utils import log_error
         
-        log_error(f"Keyboard event: key={e.key}, ctrl={e.ctrl}, shift={e.shift}, alt={e.alt}")
-        
         # Check if the '+' or '=' key was pressed
         if e.key == '+' or e.key == '=' and not e.ctrl and not e.shift and not e.alt:
             # Add a new row when '+' is pressed
@@ -1568,7 +1707,6 @@ class InvoiceView:
         
         # Get current focused field to check if it's a Dropdown
         current_row_idx, current_field_idx = self._get_current_focus()
-        log_error(f"Current focus: row={current_row_idx}, field={current_field_idx}")
         
         # Check if current field is a Dropdown
         is_dropdown_focused = False
@@ -1577,7 +1715,6 @@ class InvoiceView:
             if current_field_idx >= 0 and current_field_idx < len(fields):
                 current_field = fields[current_field_idx]
                 is_dropdown_focused = isinstance(current_field, ft.Dropdown)
-                #log_error(f"Current field type: {type(current_field).__name__}, is_dropdown={is_dropdown_focused}")
         
         # Arrow key navigation - allow navigation to all fields including dropdowns
         if e.key in ["Arrow Down", "Arrow Up", "Arrow Left", "Arrow Right"]:
@@ -1594,8 +1731,57 @@ class InvoiceView:
         elif e.key == "Enter" and not e.ctrl and not e.shift and not e.alt:
             self._navigate_down_same_field()
 
+    def _skip_to_next_non_dropdown(self, row_idx, field_idx):
+        """Skip to next non-dropdown field"""
+        if row_idx < 0 or row_idx >= len(self.rows):
+            return row_idx, field_idx
+        
+        row = self.rows[row_idx]
+        fields = row.get_editable_fields()
+        
+        # Try to find next non-dropdown field in current row
+        for i in range(field_idx, len(fields)):
+            if not isinstance(fields[i], ft.Dropdown):
+                return row_idx, i
+        
+        # If no non-dropdown found in current row, try next row
+        if row_idx < len(self.rows) - 1:
+            return self._skip_to_next_non_dropdown(row_idx + 1, 0)
+        
+        # If at last row, return last non-dropdown field
+        for i in range(len(fields) - 1, -1, -1):
+            if not isinstance(fields[i], ft.Dropdown):
+                return row_idx, i
+        
+        return row_idx, field_idx
+    
+    def _skip_to_prev_non_dropdown(self, row_idx, field_idx):
+        """Skip to previous non-dropdown field"""
+        if row_idx < 0 or row_idx >= len(self.rows):
+            return row_idx, field_idx
+        
+        row = self.rows[row_idx]
+        fields = row.get_editable_fields()
+        
+        # Try to find previous non-dropdown field in current row
+        for i in range(field_idx, -1, -1):
+            if not isinstance(fields[i], ft.Dropdown):
+                return row_idx, i
+        
+        # If no non-dropdown found in current row, try previous row
+        if row_idx > 0:
+            prev_fields = self.rows[row_idx - 1].get_editable_fields()
+            return self._skip_to_prev_non_dropdown(row_idx - 1, len(prev_fields) - 1)
+        
+        # If at first row, return first non-dropdown field
+        for i in range(len(fields)):
+            if not isinstance(fields[i], ft.Dropdown):
+                return row_idx, i
+        
+        return row_idx, field_idx
+    
     def _handle_arrow_navigation(self, key):
-        """Handle arrow key navigation between fields"""
+        """Handle arrow key navigation between fields (skipping dropdowns)"""
         if not self.rows:
             return
         
@@ -1603,11 +1789,12 @@ class InvoiceView:
         current_row_idx, current_field_idx = self._get_current_focus()
         
         if current_row_idx == -1:
-            # No field focused, focus first editable field of first row
+            # No field focused, focus first non-dropdown field of first row
             if self.rows:
-                self.rows[0].focus_field(0)
-                self._current_row_idx = 0
-                self._current_field_idx = 0
+                new_row, new_field = self._skip_to_next_non_dropdown(0, 0)
+                self.rows[new_row].focus_field(new_field)
+                self._current_row_idx = new_row
+                self._current_field_idx = new_field
             return
         
         new_row_idx = current_row_idx
@@ -1618,6 +1805,8 @@ class InvoiceView:
             # Move to same field in next row
             if current_row_idx < len(self.rows) - 1:
                 new_row_idx = current_row_idx + 1
+                # Skip dropdown if needed
+                new_row_idx, new_field_idx = self._skip_to_next_non_dropdown(new_row_idx, new_field_idx)
             else:
                 # At last row, create a new row
                 should_add_row = True
@@ -1626,31 +1815,39 @@ class InvoiceView:
             # Move to same field in previous row (don't create new row)
             if current_row_idx > 0:
                 new_row_idx = current_row_idx - 1
-            # If at first row, do nothing (don't create row above)
+                # Skip dropdown if needed
+                new_row_idx, new_field_idx = self._skip_to_prev_non_dropdown(new_row_idx, new_field_idx)
         
         elif key == "Arrow Left":
             # Move to next field (RTL - left means next)
             fields_count = len(self.rows[current_row_idx].get_editable_fields())
             if current_field_idx < fields_count - 1:
                 new_field_idx = current_field_idx + 1
+                # Skip dropdown if needed
+                new_row_idx, new_field_idx = self._skip_to_next_non_dropdown(new_row_idx, new_field_idx)
             elif current_row_idx < len(self.rows) - 1:
-                # Move to first field of next row
+                # Move to first non-dropdown field of next row
                 new_row_idx = current_row_idx + 1
                 new_field_idx = 0
+                new_row_idx, new_field_idx = self._skip_to_next_non_dropdown(new_row_idx, new_field_idx)
         
         elif key == "Arrow Right":
             # Move to previous field (RTL - right means previous)
             if current_field_idx > 0:
                 new_field_idx = current_field_idx - 1
+                # Skip dropdown if needed
+                new_row_idx, new_field_idx = self._skip_to_prev_non_dropdown(new_row_idx, new_field_idx)
             elif current_row_idx > 0:
-                # Move to last field of previous row
+                # Move to last non-dropdown field of previous row
                 new_row_idx = current_row_idx - 1
                 new_field_idx = len(self.rows[new_row_idx].get_editable_fields()) - 1
+                new_row_idx, new_field_idx = self._skip_to_prev_non_dropdown(new_row_idx, new_field_idx)
         
         # Add new row if needed
         if should_add_row:
             self.add_row()
             new_row_idx = len(self.rows) - 1
+            new_row_idx, new_field_idx = self._skip_to_next_non_dropdown(new_row_idx, 0)
         
         # Focus the new field
         if new_row_idx != current_row_idx or new_field_idx != current_field_idx or should_add_row:

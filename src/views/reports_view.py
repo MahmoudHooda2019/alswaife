@@ -88,6 +88,10 @@ class ReportsView:
         
     def build_ui(self):
         """Build the reports UI"""
+        
+        # Add keyboard event handler
+        self.page.on_keyboard_event = self.on_keyboard_event
+        
         # AppBar
         app_bar = ft.AppBar(
             leading=ft.IconButton(
@@ -723,3 +727,20 @@ class ReportsView:
             shape=ft.RoundedRectangleBorder(radius=15),
         )
         self.page.open(dlg)
+
+    def on_keyboard_event(self, e: ft.KeyboardEvent):
+        """Handle keyboard events for shortcuts"""
+        # Handle Ctrl+S for generate reports
+        if e.key == "s" and e.ctrl:
+            self._generate_reports(None)
+            return
+        
+        # Handle Ctrl+A for select all
+        if e.key == "a" and e.ctrl:
+            self._select_all(None)
+            return
+        
+        # Handle Ctrl+D for deselect all
+        if e.key == "d" and e.ctrl:
+            self._deselect_all(None)
+            return

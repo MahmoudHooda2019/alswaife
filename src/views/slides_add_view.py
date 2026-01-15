@@ -569,17 +569,34 @@ class SlideRow:
         """Handle entry time field changes with auto-formatting"""
         if e and e.control:
             current = e.control.value or ""
+            original = current  # Store original for comparison
+            
+            # Convert English letters to Arabic period markers
+            # w → ص (morning), l → م (evening)
+            current = current.replace('w', 'ص').replace('W', 'ص')
+            current = current.replace('l', 'م').replace('L', 'م')
             
             # Check if user is deleting
             digits_only = ''.join(c for c in current if c.isdigit())
             has_period = 'ص' in current or 'م' in current
             
-            # Allow deletion
+            # Allow deletion - if field is empty or only has spaces
             if not digits_only and not has_period:
                 e.control.value = ""
+                if hasattr(self, '_entry_period'):
+                    delattr(self, '_entry_period')
                 self._calculate_hours()
                 self.page.update()
                 return
+            
+            # Detect if user deleted the period marker (ص or م)
+            # If previous value had period but current doesn't, clear the stored period
+            if hasattr(self, '_entry_last_value'):
+                last_had_period = 'ص' in self._entry_last_value or 'م' in self._entry_last_value
+                if last_had_period and not has_period:
+                    # User deleted the period marker
+                    if hasattr(self, '_entry_period'):
+                        delattr(self, '_entry_period')
             
             # Get current period from the field
             current_period = None
@@ -591,9 +608,20 @@ class SlideRow:
             # Store the period
             if period:
                 self._entry_period = period
+            elif not period and has_period:
+                # Keep the existing period if formatting didn't extract one
+                pass
+            else:
+                # Clear period if none found
+                if hasattr(self, '_entry_period'):
+                    delattr(self, '_entry_period')
             
-            if formatted != current:
+            # Only update if value actually changed
+            if formatted != original:
                 e.control.value = formatted
+            
+            # Store current value for next comparison
+            self._entry_last_value = formatted
         
         self._calculate_hours()
         self.page.update()
@@ -602,17 +630,34 @@ class SlideRow:
         """Handle exit time field changes with auto-formatting"""
         if e and e.control:
             current = e.control.value or ""
+            original = current  # Store original for comparison
+            
+            # Convert English letters to Arabic period markers
+            # w → ص (morning), l → م (evening)
+            current = current.replace('w', 'ص').replace('W', 'ص')
+            current = current.replace('l', 'م').replace('L', 'م')
             
             # Check if user is deleting
             digits_only = ''.join(c for c in current if c.isdigit())
             has_period = 'ص' in current or 'م' in current
             
-            # Allow deletion
+            # Allow deletion - if field is empty or only has spaces
             if not digits_only and not has_period:
                 e.control.value = ""
+                if hasattr(self, '_exit_period'):
+                    delattr(self, '_exit_period')
                 self._calculate_hours()
                 self.page.update()
                 return
+            
+            # Detect if user deleted the period marker (ص or م)
+            # If previous value had period but current doesn't, clear the stored period
+            if hasattr(self, '_exit_last_value'):
+                last_had_period = 'ص' in self._exit_last_value or 'م' in self._exit_last_value
+                if last_had_period and not has_period:
+                    # User deleted the period marker
+                    if hasattr(self, '_exit_period'):
+                        delattr(self, '_exit_period')
             
             # Get current period from the field
             current_period = None
@@ -624,9 +669,20 @@ class SlideRow:
             # Store the period
             if period:
                 self._exit_period = period
+            elif not period and has_period:
+                # Keep the existing period if formatting didn't extract one
+                pass
+            else:
+                # Clear period if none found
+                if hasattr(self, '_exit_period'):
+                    delattr(self, '_exit_period')
             
-            if formatted != current:
+            # Only update if value actually changed
+            if formatted != original:
                 e.control.value = formatted
+            
+            # Store current value for next comparison
+            self._exit_last_value = formatted
         
         self._calculate_hours()
         self.page.update()
@@ -826,6 +882,36 @@ class SlideRow:
         
         self._on_material_change()
 
+    def get_editable_fields(self):
+        """Return list of editable fields in order for navigation"""
+        return [
+            self.publishing_date,      # 0
+            self.block_number,         # 1
+            self.material_dropdown,    # 2
+            self.machine_number,       # 3
+            self.quantity_field,       # 4
+            self.length_field,         # 5
+            self.height_field,         # 6
+            self.thickness_dropdown,   # 7
+            self.price_per_meter_field,  # 8
+            self.entry_time,           # 9
+            self.exit_time,            # 10
+        ]
+    
+    def focus_field(self, field_index):
+        """Focus a specific field by index"""
+        fields = self.get_editable_fields()
+        if 0 <= field_index < len(fields):
+            field = fields[field_index]
+            try:
+                field.focus()
+                if self.page:
+                    self.page.update()
+                return True
+            except Exception:
+                return False
+        return False
+    
     def to_dict(self):
         """Convert row data to dictionary for export"""
         return {
@@ -867,6 +953,10 @@ class SlidesAddView:
             scroll=ft.ScrollMode.AUTO,
             expand=True
         )
+        
+        # Navigation tracking
+        self._current_row_idx = 0
+        self._current_field_idx = 0
 
     def _row_has_data(self, row) -> bool:
         """Check if a row has any meaningful data"""
@@ -882,6 +972,9 @@ class SlidesAddView:
 
     def build_ui(self):
         """Build the slides add UI with design similar to blocks section"""
+        
+        # Add keyboard event handler for arrow navigation
+        self.page.on_keyboard_event = self.on_keyboard_event
         
         # Create AppBar with title and actions
         app_bar = ft.AppBar(
@@ -941,6 +1034,107 @@ class SlidesAddView:
         
         self.page.update()
         return main_column
+    
+    def on_keyboard_event(self, e: ft.KeyboardEvent):
+        """Handle keyboard events for arrow navigation"""
+        # Check if the '+' key was pressed to add a new row
+        if e.key == '+' or e.key == '=':
+            if not e.ctrl and not e.shift and not e.alt:
+                self.add_row()
+                return
+        
+        # Arrow key navigation
+        if e.key in ["Arrow Down", "Arrow Up", "Arrow Left", "Arrow Right"]:
+            self._handle_arrow_navigation(e.key)
+    
+    def _skip_dropdown(self, row_idx, field_idx, direction=1):
+        """Skip dropdown fields in the given direction (1=forward, -1=backward)"""
+        if row_idx < 0 or row_idx >= len(self.rows):
+            return row_idx, field_idx
+        
+        fields = self.rows[row_idx].get_editable_fields()
+        
+        # Check current field
+        while 0 <= field_idx < len(fields):
+            if not isinstance(fields[field_idx], ft.Dropdown):
+                return row_idx, field_idx
+            field_idx += direction
+        
+        # If we've exhausted current row, return boundary
+        if direction > 0:
+            return row_idx, len(fields) - 1
+        else:
+            return row_idx, 0
+    
+    def _handle_arrow_navigation(self, key):
+        """Handle arrow key navigation between fields (skipping dropdowns)"""
+        if not self.rows:
+            return
+        
+        # Ensure indices are valid
+        if self._current_row_idx < 0 or self._current_row_idx >= len(self.rows):
+            self._current_row_idx = 0
+        
+        current_row = self.rows[self._current_row_idx]
+        fields = current_row.get_editable_fields()
+        
+        if self._current_field_idx < 0 or self._current_field_idx >= len(fields):
+            self._current_field_idx = 0
+            # Skip dropdown if starting field is dropdown
+            self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+        
+        if key == "Arrow Right":
+            # Move to previous field (RTL)
+            self._current_field_idx -= 1
+            if self._current_field_idx < 0:
+                # Move to previous row, last non-dropdown field
+                if self._current_row_idx > 0:
+                    self._current_row_idx -= 1
+                    self._current_field_idx = len(self.rows[self._current_row_idx].get_editable_fields()) - 1
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+                else:
+                    self._current_field_idx = 0
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+            else:
+                # Skip dropdown if needed
+                self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+        
+        elif key == "Arrow Left":
+            # Move to next field (RTL)
+            self._current_field_idx += 1
+            if self._current_field_idx >= len(fields):
+                # Move to next row, first non-dropdown field
+                if self._current_row_idx < len(self.rows) - 1:
+                    self._current_row_idx += 1
+                    self._current_field_idx = 0
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+                else:
+                    # Stay at last non-dropdown field
+                    self._current_field_idx = len(fields) - 1
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+            else:
+                # Skip dropdown if needed
+                self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+        
+        elif key == "Arrow Down":
+            # Move to next non-dropdown field in same row
+            self._current_field_idx += 1
+            if self._current_field_idx >= len(fields):
+                # Wrap to first non-dropdown field in same row
+                self._current_field_idx = 0
+            self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+        
+        elif key == "Arrow Up":
+            # Move to previous non-dropdown field in same row
+            self._current_field_idx -= 1
+            if self._current_field_idx < 0:
+                # Wrap to last non-dropdown field in same row
+                self._current_field_idx = len(fields) - 1
+            self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+        
+        # Focus the target field
+        if 0 <= self._current_row_idx < len(self.rows):
+            self.rows[self._current_row_idx].focus_field(self._current_field_idx)
 
     def go_back(self, e):
         """Navigate back to previous view"""
@@ -1051,13 +1245,13 @@ class SlidesAddView:
             
             # Add inventory entries using utility function
             from utils.slides_utils import add_slides_inventory_from_publishing
-            add_slides_inventory_from_publishing(excel_file, data)
+            entries_added, blocks_warnings = add_slides_inventory_from_publishing(excel_file, data)
             
             # Reset rows after save
             for row in self.rows:
                 row._set_default_values()
             
-            self._show_success_dialog(excel_file)
+            self._show_success_dialog(excel_file, blocks_warnings)
             
         except Exception as e:
             self._show_dialog("خطأ", f"حدث خطأ أثناء حفظ الملف:\n{str(e)}", ft.Colors.RED_400)
@@ -1092,84 +1286,75 @@ class SlidesAddView:
         dlg.open = True
         self.page.update()
 
-    def _show_success_dialog(self, filepath: str):
-        """Show success dialog with file actions"""
-        def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-            if dlg in self.page.overlay:
-                self.page.overlay.remove(dlg)
-            self.page.update()
-
-        def open_file(e=None):
-            close_dlg()
+    def _show_success_dialog(self, filepath: str, blocks_warnings: list = None):
+        """Show success bottom sheet with optional warnings and file open options"""
+        from utils.bottom_sheet_utils import BottomSheetManager
+        import os
+        
+        # Build message
+        message = "تم إنشاء الملف بنجاح"
+        
+        # Add warnings if any
+        if blocks_warnings and len(blocks_warnings) > 0:
+            message += "\n\n⚠️ تحذير: لم يتم حفظ بعض الشرائح في مخزون البلوكات:\n"
+            for warning in blocks_warnings:
+                message += f"• {warning}\n"
+        
+        # Get blocks file path
+        blocks_file = os.path.join(os.path.expanduser("~"), "Documents", "alswaife", "البلوكات", "مخزون البلوكات.xlsx")
+        
+        # Define open file callbacks
+        def open_slides_file(e):
             try:
                 os.startfile(filepath)
             except Exception:
                 pass
-
-        def open_folder(e=None):
-            close_dlg()
+        
+        def open_blocks_file(e):
+            try:
+                if os.path.exists(blocks_file):
+                    os.startfile(blocks_file)
+            except Exception:
+                pass
+        
+        def open_folder(e):
             try:
                 folder = os.path.dirname(filepath)
                 os.startfile(folder)
             except Exception:
                 pass
-
-        dlg = ft.AlertDialog(
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=30),
-                    ft.Text("تم الحفظ بنجاح", color=ft.Colors.GREEN_300, weight=ft.FontWeight.BOLD),
-                ], 
-                rtl=True,
-                spacing=10
-            ),
-            content=ft.Column(
-                rtl=True,
-                controls=[
-                    ft.Text("تم إنشاء الملف بنجاح:", size=14, rtl=True),
-                    ft.Container(
-                        content=ft.Text(
-                            os.path.basename(filepath),
-                            size=13,
-                            color=ft.Colors.BLUE_200,
-                            weight=ft.FontWeight.W_500
-                        ),
-                        bgcolor=ft.Colors.BLUE_GREY_800,
-                        padding=10,
-                        border_radius=8,
-                        margin=ft.margin.only(top=10),
-                        rtl=True
-                    )
-                ],
-                tight=True
-            ),
-            actions=[
-                ft.TextButton(
-                    "فتح الملف",
-                    on_click=open_file,
-                    icon=ft.Icons.FILE_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.GREEN_300)
-                ),
-                ft.TextButton(
-                    "فتح المجلد",
-                    on_click=open_folder,
-                    icon=ft.Icons.FOLDER_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
-                ),
-                ft.TextButton(
-                    "إغلاق",
-                    on_click=close_dlg,
-                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.BLUE_GREY_900
+        
+        # Build options list
+        options = [
+            {
+                "text": "فتح ملف الشرائح",
+                "icon": ft.Icons.DESCRIPTION,
+                "color": ft.Colors.GREEN_700,
+                "on_click": open_slides_file,
+            },
+            {
+                "text": "فتح ملف البلوكات",
+                "icon": ft.Icons.INVENTORY_2,
+                "color": ft.Colors.BLUE_700,
+                "on_click": open_blocks_file,
+            },
+            {
+                "text": "فتح المجلد",
+                "icon": ft.Icons.FOLDER_OPEN,
+                "color": ft.Colors.ORANGE_700,
+                "on_click": open_folder,
+            },
+        ]
+        
+        # Show options bottom sheet
+        BottomSheetManager.show_options_bottom_sheet(
+            page=self.page,
+            title="تم الحفظ بنجاح",
+            description=message,
+            icon=ft.Icons.CHECK_CIRCLE,
+            icon_color=ft.Colors.GREEN_400,
+            options=options,
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
 
 
 def main():

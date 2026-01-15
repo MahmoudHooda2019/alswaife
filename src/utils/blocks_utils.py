@@ -37,16 +37,6 @@ TABLE3_WIDTH = [12, 10, 10, 10, 8, 10, 14, 14, 12, 14]
 # Starting column for slides table (directly after TABLE1, no gap)
 SLIDES_START_COL = len(TABLE1_COLUMNS) + 1  # +1 to start right after blocks table (now 16)
 
-# الفضل table columns (same structure as slides)
-TABLE_FADL_COLUMNS = [
-    "تاريخ النشر", "رقم البلوك", "النوع", "رقم المكينه",
-    "وقت الدخول", "وقت الخروج", "عدد الساعات",
-    "السمك", "العدد", "الطول", "الخصم", "الطول بعد",
-    "الارتفاع", "الكمية م2", "سعر المتر", "اجمالي السعر", "الاكرامية", "اجمالي التكلفة"
-]
-
-TABLE_FADL_WIDTH = [12, 12, 12, 10, 20, 20, 12, 8, 8, 10, 8, 12, 10, 12, 12, 14, 12, 14]
-
 # Productivity rates based on thickness
 PRODUCTIVITY_RATES = {
     "2سم": 29,
@@ -55,7 +45,16 @@ PRODUCTIVITY_RATES = {
 }
 
 def export_simple_blocks_excel(rows: List[Dict]) -> str:
-    """إنشاء أو تحديث ملف Excel لحساب مخزون البلوكات"""
+    """
+    إنشاء أو تحديث ملف Excel لحساب مخزون البلوكات
+    
+    Returns:
+        str: filepath if successful
+        
+    Raises:
+        ValueError: if duplicate block numbers are found
+        PermissionError: if file is locked
+    """
     documents_folder = os.path.join(
         os.path.expanduser("~"), "Documents", "alswaife", "البلوكات"
     )
@@ -67,6 +66,9 @@ def export_simple_blocks_excel(rows: List[Dict]) -> str:
         result = append_to_existing_file(filepath, rows)
         if result is False:  # File is locked
             raise PermissionError("File is currently open in Excel. Please close the file and try again.")
+        elif isinstance(result, list):  # Duplicate blocks found
+            duplicate_blocks = ", ".join(result)
+            raise ValueError(f"البلوكات التالية موجودة مسبقاً: {duplicate_blocks}")
     else:
         result = create_new_excel_file(filepath, rows)
         if result is False:  # File is locked
@@ -78,8 +80,13 @@ def export_simple_blocks_excel(rows: List[Dict]) -> str:
     return filepath
 
 
-def export_slides_to_blocks_excel(slides_data: List[Dict]) -> str:
-    """إضافة بيانات الشرائح إلى ملف البلوكات في جدول منفصل"""
+def export_slides_to_blocks_excel(slides_data: List[Dict]) -> List[str]:
+    """
+    إضافة بيانات الشرائح إلى ملف البلوكات في جدول منفصل
+    
+    Returns:
+        List[str]: قائمة بالتحذيرات (الشرائح التي لم يتم حفظها)
+    """
     documents_folder = os.path.join(
         os.path.expanduser("~"), "Documents", "alswaife", "البلوكات"
     )
@@ -87,9 +94,11 @@ def export_slides_to_blocks_excel(slides_data: List[Dict]) -> str:
     
     filepath = os.path.join(documents_folder, "مخزون البلوكات.xlsx")
     
+    warnings = []
+    
     if os.path.exists(filepath):
-        result = append_slides_to_existing_file(filepath, slides_data)
-        if result is False:
+        warnings = append_slides_to_existing_file(filepath, slides_data)
+        if warnings is False:
             raise PermissionError("File is currently open in Excel. Please close the file and try again.")
         # Update wastage sheet after adding slides
         update_wastage_sheet(filepath)
@@ -98,8 +107,12 @@ def export_slides_to_blocks_excel(slides_data: List[Dict]) -> str:
         result = create_new_excel_file_with_slides(filepath, [], slides_data)
         if result is False:
             raise PermissionError("File is currently open in Excel. Please close the file and try again.")
+        # result can be True (no slides) or a list of warnings (with slides)
+        warnings = result if isinstance(result, list) else []
+        # Update wastage sheet after creating file
+        update_wastage_sheet(filepath)
     
-    return filepath
+    return warnings
 
 
 def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
@@ -107,8 +120,13 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
     إضافة بيانات الشرائح إلى ملف موجود
     الشرائح A تُسجل في الصف الأول للبلوك
     الشرائح B تُسجل في الصف الثاني للبلوك
-    الشرائح F تُسجل في شيت الفضل (شيت منفصل)
+    الشرائح F تُسجل في الصف الوحيد للبلوك (لأن بلوكات الفضل تأخذ صف واحد)
+    
+    Returns:
+        List[str]: قائمة بالتحذيرات (الشرائح التي لم يتم حفظها)
     """
+    warnings = []
+    
     try:
         workbook = openpyxl.load_workbook(filepath)
         worksheet = workbook["البلوكات"]
@@ -140,36 +158,10 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
             "FFB3BA",  # Light Red-Pink
         ]
         
-        # الفضل table colors (different shade)
-        fadl_colors = [
-            "FFE4C9",  # Light Peach
-            "C9E4FF",  # Light Sky Blue
-            "E4C9FF",  # Light Violet
-            "C9FFE4",  # Light Mint
-            "FFE4E4",  # Light Rose
-            "E4FFE4",  # Light Green
-            "E4E4FF",  # Light Periwinkle
-            "FFF0C9",  # Light Gold
-            "F0C9FF",  # Light Orchid
-            "C9FFF0",  # Light Cyan
-            "FFC9E4",  # Light Pink
-            "E4FFC9",  # Light Lime
-            "C9E4E4",  # Light Teal
-            "E4C9E4",  # Light Mauve
-            "FFE4F0",  # Light Blush
-            "F0FFE4",  # Light Honeydew
-        ]
-        
         header_fill = PatternFill(start_color="7030A0", end_color="7030A0", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True, size=12)
         title_fill = PatternFill(start_color="9933FF", end_color="9933FF", fill_type="solid")
         title_font = Font(color="FFFFFF", bold=True, size=14)
-        
-        # الفضل header styles (different color)
-        fadl_header_fill = PatternFill(start_color="C65911", end_color="C65911", fill_type="solid")
-        fadl_title_fill = PatternFill(start_color="ED7D31", end_color="ED7D31", fill_type="solid")
-        
-        gap_fill = PatternFill(start_color="A6A6A6", end_color="A6A6A6", fill_type="solid")
         
         # Check if slides headers exist, if not add them
         slides_title_cell = worksheet.cell(row=1, column=SLIDES_START_COL)
@@ -195,92 +187,109 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
             for i, width in enumerate(TABLE2_WIDTH):
                 worksheet.column_dimensions[get_column_letter(SLIDES_START_COL + i)].width = width
         
-        # Create or get الفضل sheet (separate sheet)
-        if "الفضل" in workbook.sheetnames:
-            fadl_sheet = workbook["الفضل"]
-        else:
-            fadl_sheet = workbook.create_sheet("الفضل")
-            fadl_sheet.sheet_view.rightToLeft = True
-            
-            # Add الفضل title
-            fadl_sheet.merge_cells(start_row=1, start_column=1, 
-                                end_row=1, end_column=len(TABLE_FADL_COLUMNS))
-            title_cell = fadl_sheet.cell(row=1, column=1, value="الفضل")
-            title_cell.font = title_font
-            title_cell.fill = fadl_title_fill
-            title_cell.alignment = center_alignment
-            title_cell.border = thin_border
-            fadl_sheet.row_dimensions[1].height = 30
-            
-            # Add الفضل headers
-            for idx, col in enumerate(TABLE_FADL_COLUMNS):
-                cell = fadl_sheet.cell(row=2, column=1 + idx, value=col)
-                cell.font = header_font
-                cell.fill = fadl_header_fill
-                cell.alignment = center_alignment
-                cell.border = thin_border
-            fadl_sheet.row_dimensions[2].height = 25
-            
-            # Set column widths for الفضل
-            for i, width in enumerate(TABLE_FADL_WIDTH):
-                fadl_sheet.column_dimensions[get_column_letter(1 + i)].width = width
-            
-            # Freeze panes
-            fadl_sheet.freeze_panes = 'A3'
-        
-        # Build a map of block numbers to their row positions
+        # Build a map of block numbers to their row positions and check if they are fadl
         # Column 5 (E) contains block numbers in the blocks table
         block_row_map = {}  # {block_number: first_row_of_block}
-        for row in range(3, worksheet.max_row + 1):
+        block_is_fadl = {}  # {block_number: is_fadl_boolean}
+        
+        # First pass: identify all blocks and their rows
+        row = 3
+        while row <= worksheet.max_row:
             block_cell = worksheet.cell(row=row, column=5)
             if block_cell.value:
                 block_num = str(block_cell.value).strip()
-                if block_num and block_num not in block_row_map:
-                    block_row_map[block_num] = row
+                if block_num:
+                    # Check if this cell is part of a merged range
+                    is_merged = False
+                    merge_span = 1  # Default: 1 row (fadl)
+                    
+                    for merged_range in worksheet.merged_cells.ranges:
+                        if (merged_range.min_row <= row <= merged_range.max_row and
+                            merged_range.min_col <= 5 <= merged_range.max_col):
+                            # This cell is part of a merged range
+                            is_merged = True
+                            merge_span = merged_range.max_row - merged_range.min_row + 1
+                            # Make sure we're at the first row of the merge
+                            if row == merged_range.min_row:
+                                block_row_map[block_num] = row
+                                if merge_span == 2:
+                                    block_is_fadl[block_num] = False  # Normal block (2 rows)
+                                else:
+                                    block_is_fadl[block_num] = True  # Fadl block (1 row)
+                            break
+                    
+                    if not is_merged:
+                        # Not merged, so it's a fadl block (1 row)
+                        block_row_map[block_num] = row
+                        block_is_fadl[block_num] = True
+                        row += 1
+                    else:
+                        # Skip the merged rows
+                        row += merge_span
+                    continue
+            row += 1
         
         # Default discount
         DEFAULT_DISCOUNT = 0.20
         
-        # Separate slides data into A/B and F
-        ab_slides = []
-        f_slides = []
-        
+        # Process all slides data
         for slide_data in slides_data:
-            slide_block_number = str(slide_data.get('block_number', '')).strip().upper()
-            if slide_block_number.startswith('F'):
-                f_slides.append(slide_data)
-            else:
-                ab_slides.append(slide_data)
-        
-        # Add A/B slides data to الشرائح table
-        for slide_data in ab_slides:
-            # Get slide block number (e.g., "A11" or "B11")
+            # Get slide block number (e.g., "A11", "B11", "F11", "K11", etc.)
             slide_block_number = str(slide_data.get('block_number', '')).strip().upper()
             
             if not slide_block_number:
                 continue
             
-            # Determine if it's A or B and extract the base block number
-            is_side_a = slide_block_number.startswith('A')
-            is_side_b = slide_block_number.startswith('B')
+            # Determine the logic based on slide prefix:
+            # - If slide starts with A or B: extract base number, check if block is fadl
+            #   - If block is fadl: both A and B use row 0 (same row, will overwrite)
+            #   - If block is normal: A uses row 0, B uses row 1
+            # - If slide starts with anything else (F, K, or just number): 
+            #   - Use the slide number as block number, use row 0 (fadl blocks have 1 row)
+            
+            is_side_a = slide_block_number.startswith('A') and len(slide_block_number) > 1
+            is_side_b = slide_block_number.startswith('B') and len(slide_block_number) > 1
             
             if is_side_a:
                 base_block_number = slide_block_number[1:]  # Remove 'A' prefix
-                row_offset = 0  # A goes in first row
+                row_offset = 0  # A always goes in first row
             elif is_side_b:
                 base_block_number = slide_block_number[1:]  # Remove 'B' prefix
-                row_offset = 1  # B goes in second row
+                # Check if block is fadl
+                if base_block_number in block_is_fadl and block_is_fadl[base_block_number]:
+                    # Fadl block: B also goes in first row (will overwrite A if exists)
+                    row_offset = 0
+                else:
+                    # Normal block: B goes in second row
+                    row_offset = 1
             else:
-                # If no A/B prefix, treat as A
+                # No A/B prefix means this slide number IS the block number (F11, K11, or just 11)
                 base_block_number = slide_block_number
-                row_offset = 0
+                row_offset = 0  # These are always fadl blocks with 1 row
             
             # Find the block row
             if base_block_number not in block_row_map:
+                warning_msg = f"البلوك {base_block_number} غير موجود في ملف البلوكات"
+                warnings.append(f"{slide_block_number}: {warning_msg}")
                 continue
             
             block_first_row = block_row_map[base_block_number]
             excel_row = block_first_row + row_offset
+            
+            # Check if there's already data in this row's slides section
+            # If there's data and this is not overwriting the same slide, check if we should skip or overwrite
+            existing_slide_block = worksheet.cell(row=excel_row, column=SLIDES_START_COL + 1).value
+            if existing_slide_block:
+                if str(existing_slide_block).strip().upper() != slide_block_number:
+                    # There's already different slide data here
+                    # For fadl blocks with B, we allow overwriting A
+                    if is_side_b and block_is_fadl.get(base_block_number, False):
+                        # Continue to save, will overwrite
+                        pass
+                    else:
+                        warning_msg = f"الصف {excel_row} يحتوي بالفعل على {existing_slide_block}"
+                        warnings.append(f"{slide_block_number}: {warning_msg}")
+                        continue
             
             # Get values
             publishing_date = slide_data.get('publishing_date', '')
@@ -303,7 +312,7 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
             # Column data (single row, no merge)
             col_data = [
                 (publishing_date, False),
-                (slide_block_number, False),  # Keep full block number (A11 or B11)
+                (slide_block_number, False),  # Keep full slide number (A11, B11, or 11)
                 (material, False),
                 (machine_number, False),
                 (entry_time, False),
@@ -333,87 +342,17 @@ def append_slides_to_existing_file(filepath: str, slides_data: List[Dict]):
                                        end_color=slides_colors[col_idx % len(slides_colors)], fill_type="solid")
                 
                 # Number format for numeric columns
+                # col 0=تاريخ النشر - Date format
+                if col_idx == 0:
+                    cell.number_format = 'DD/MM/YYYY'
                 # col 8=العدد, col 14=سعر المتر, col 16=الاكرامية - أرقام صحيحة
-                if col_idx in [8, 14, 16]:
-                    cell.number_format = '#,##0'
-                elif col_idx in [6, 9, 10, 11, 12, 13, 15, 17]:
-                    cell.number_format = '#,##0.00'
-        
-        # Add F slides data to الفضل sheet (separate sheet)
-        # Find the next available row for الفضل data
-        fadl_next_row = 3  # Start after headers
-        for row in range(3, fadl_sheet.max_row + 1):
-            fadl_cell = fadl_sheet.cell(row=row, column=1)
-            if fadl_cell.value:
-                fadl_next_row = row + 1
-        
-        for slide_data in f_slides:
-            slide_block_number = str(slide_data.get('block_number', '')).strip().upper()
-            
-            if not slide_block_number:
-                continue
-            
-            excel_row = fadl_next_row
-            fadl_next_row += 1
-            
-            # Get values
-            publishing_date = slide_data.get('publishing_date', '')
-            material = slide_data.get('material', '')
-            machine_number = slide_data.get('machine_number', '')
-            entry_time = slide_data.get('entry_time', '')
-            exit_time = slide_data.get('exit_time', '')
-            # Add RTL mark (U+200F) for proper Arabic text display in Excel
-            if entry_time:
-                entry_time = '\u200F' + entry_time
-            if exit_time:
-                exit_time = '\u200F' + exit_time
-            hours_count = float(slide_data.get('hours_count', 0)) if slide_data.get('hours_count') else 0
-            thickness = slide_data.get('thickness', '')
-            quantity = int(slide_data.get('quantity', 0)) if slide_data.get('quantity') else 0
-            length = float(slide_data.get('length', 0)) if slide_data.get('length') else 0
-            height = float(slide_data.get('height', 0)) if slide_data.get('height') else 0
-            price_per_meter = float(slide_data.get('price_per_meter', 0)) if slide_data.get('price_per_meter') else 0
-            
-            # Column data for الفضل (starts from column 1 in separate sheet)
-            col_data = [
-                (publishing_date, False),
-                (slide_block_number, False),  # Keep full block number (F11)
-                (material, False),
-                (machine_number, False),
-                (entry_time, False),
-                (exit_time, False),
-                (hours_count, False),
-                (thickness, False),
-                (quantity, False),
-                (length, False),
-                (DEFAULT_DISCOUNT, False),
-                (f"={get_column_letter(10)}{excel_row}-{get_column_letter(11)}{excel_row}", True),  # الطول بعد الخصم
-                (height, False),
-                (f"={get_column_letter(12)}{excel_row}*{get_column_letter(13)}{excel_row}*{get_column_letter(9)}{excel_row}", True),  # الكمية م2
-                (price_per_meter, False),
-                (f"={get_column_letter(14)}{excel_row}*{get_column_letter(15)}{excel_row}", True),  # اجمالي السعر
-                (150, False),  # الاكرامية - القيمة الافتراضية 150
-                (f"={get_column_letter(16)}{excel_row}+{get_column_letter(17)}{excel_row}", True),  # اجمالي التكلفة = اجمالي السعر + الاكرامية
-            ]
-            
-            for col_idx, (value, is_formula) in enumerate(col_data):
-                col_num = 1 + col_idx  # Start from column 1 in separate sheet
-                
-                cell = fadl_sheet.cell(row=excel_row, column=col_num, value=value)
-                cell.border = thin_border
-                cell.alignment = center_alignment
-                cell.fill = PatternFill(start_color=fadl_colors[col_idx % len(fadl_colors)], 
-                                       end_color=fadl_colors[col_idx % len(fadl_colors)], fill_type="solid")
-                
-                # Number format for numeric columns
-                # col 8=العدد, col 14=سعر المتر, col 16=الاكرامية - أرقام صحيحة
-                if col_idx in [8, 14, 16]:
+                elif col_idx in [8, 14, 16]:
                     cell.number_format = '#,##0'
                 elif col_idx in [6, 9, 10, 11, 12, 13, 15, 17]:
                     cell.number_format = '#,##0.00'
         
         workbook.save(filepath)
-        return True
+        return warnings
         
     except PermissionError as e:
         log_error(f"File is locked: {e}")
@@ -500,36 +439,6 @@ def create_new_excel_file_with_slides(filepath: str, blocks_rows: List[Dict], sl
     for i, width in enumerate(TABLE2_WIDTH):
         worksheet.column_dimensions[get_column_letter(SLIDES_START_COL + i)].width = width
     
-    # === الفضل SHEET (separate sheet) ===
-    fadl_sheet = workbook.create_sheet("الفضل")
-    fadl_sheet.sheet_view.rightToLeft = True
-    
-    # Write الفضل title
-    fadl_sheet.merge_cells(start_row=1, start_column=1, 
-                         end_row=1, end_column=len(TABLE_FADL_COLUMNS))
-    title_cell = fadl_sheet.cell(row=1, column=1, value="الفضل")
-    title_cell.font = title_font
-    title_cell.fill = fadl_title_fill
-    title_cell.alignment = center_alignment
-    title_cell.border = thin_border
-    fadl_sheet.row_dimensions[1].height = 30
-    
-    # Write الفضل headers
-    for idx, col in enumerate(TABLE_FADL_COLUMNS):
-        cell = fadl_sheet.cell(row=2, column=1 + idx, value=col)
-        cell.font = header_font
-        cell.fill = fadl_header_fill
-        cell.alignment = center_alignment
-        cell.border = thin_border
-    fadl_sheet.row_dimensions[2].height = 25
-    
-    # Set الفضل column widths
-    for i, width in enumerate(TABLE_FADL_WIDTH):
-        fadl_sheet.column_dimensions[get_column_letter(1 + i)].width = width
-    
-    # Freeze panes for الفضل sheet
-    fadl_sheet.freeze_panes = 'A3'
-    
     # Freeze panes for main sheet
     worksheet.freeze_panes = 'A3'
     
@@ -537,10 +446,13 @@ def create_new_excel_file_with_slides(filepath: str, blocks_rows: List[Dict], sl
         workbook.save(filepath)
         
         # Add slides data if provided
+        warnings = []
         if slides_rows:
-            append_slides_to_existing_file(filepath, slides_rows)
+            warnings = append_slides_to_existing_file(filepath, slides_rows)
+            if warnings is False:
+                return False
         
-        return True
+        return warnings if slides_rows else True
     except PermissionError as e:
         log_error(f"File is locked: {e}")
         return False
@@ -559,11 +471,33 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
         new_rows (List[Dict]): List of dictionaries containing block data
     
     Returns:
-        bool: True if successful, False if file is locked
+        bool: True if successful
+        List[str]: List of duplicate block numbers if found
+        False: if file is locked
     """
     try:
         workbook = openpyxl.load_workbook(filepath)
         worksheet = workbook["البلوكات"]
+        
+        # Check for duplicate block numbers
+        existing_blocks = set()
+        for row in range(3, worksheet.max_row + 1):
+            block_cell = worksheet.cell(row=row, column=5)  # Column 5 = رقم البلوك
+            if block_cell.value:
+                block_num = str(block_cell.value).strip()
+                if block_num:
+                    existing_blocks.add(block_num)
+        
+        # Check if any new blocks already exist
+        duplicate_blocks = []
+        for block_data in new_rows:
+            block_num = str(block_data.get("block_number", "")).strip()
+            if block_num and block_num in existing_blocks:
+                duplicate_blocks.append(block_num)
+        
+        # If duplicates found, return them
+        if duplicate_blocks:
+            return duplicate_blocks
         
         # Starting row for new data (after existing data)
         start_row = worksheet.max_row + 1
@@ -599,160 +533,201 @@ def append_to_existing_file(filepath: str, new_rows: List[Dict]):
         ]
         
 
-        # Add new data - each block takes 2 rows (merged vertically)
+        # Add new data - check if fadl to determine row count
+        current_row = start_row
         for i, block_data in enumerate(new_rows):
-            excel_row = start_row + (i * 2)  # Each block takes 2 rows
+            is_fadl = block_data.get("is_fadl", False)
+            
+            if is_fadl:
+                # Fadl blocks take only 1 row (no merging)
+                excel_row = current_row
+                row_span = 1
+                current_row += 1
+            else:
+                # Normal blocks take 2 rows (merged vertically)
+                excel_row = current_row
+                row_span = 2
+                current_row += 2
             
             # --- الجدول الأول ---
             # Write values and set formulas for calculated fields
-            # All cells will be merged vertically (2 rows)
             
-            # Column 1: رقم النقله (merged 2 rows)
-            worksheet.merge_cells(start_row=excel_row, start_column=1, end_row=excel_row+1, end_column=1)
+            # Column 1: رقم النقله
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=1, end_row=excel_row+1, end_column=1)
             cell = worksheet.cell(row=excel_row, column=1, value=block_data.get("trip_number", ""))
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[0], end_color=column_colors[0], fill_type="solid")
-            # Apply border to merged cell bottom
-            worksheet.cell(row=excel_row+1, column=1).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=1).border = thin_border
             
-            # Column 2: عدد النقله (merged 2 rows)
+            # Column 2: عدد النقله
             trip_count = block_data.get("trip_count", "")
             if trip_count:
                 try:
                     trip_count = int(float(trip_count))
                 except (ValueError, TypeError):
                     trip_count = ""
-            worksheet.merge_cells(start_row=excel_row, start_column=2, end_row=excel_row+1, end_column=2)
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=2, end_row=excel_row+1, end_column=2)
             cell = worksheet.cell(row=excel_row, column=2, value=trip_count)
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[1], end_color=column_colors[1], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=2).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=2).border = thin_border
             
-            # Column 3: التاريخ (merged 2 rows)
-            worksheet.merge_cells(start_row=excel_row, start_column=3, end_row=excel_row+1, end_column=3)
+            # Column 3: التاريخ
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=3, end_row=excel_row+1, end_column=3)
             cell = worksheet.cell(row=excel_row, column=3, value=block_data.get("date", ""))
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[2], end_color=column_colors[2], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=3).border = thin_border
+            cell.number_format = 'DD/MM/YYYY'
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=3).border = thin_border
             
-            # Column 4: المحجر (merged 2 rows)
-            worksheet.merge_cells(start_row=excel_row, start_column=4, end_row=excel_row+1, end_column=4)
+            # Column 4: المحجر
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=4, end_row=excel_row+1, end_column=4)
             cell = worksheet.cell(row=excel_row, column=4, value=block_data.get("quarry", ""))
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[3], end_color=column_colors[3], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=4).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=4).border = thin_border
             
-            # Column 5: رقم البلوك (merged 2 rows)
-            worksheet.merge_cells(start_row=excel_row, start_column=5, end_row=excel_row+1, end_column=5)
+            # Column 5: رقم البلوك
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=5, end_row=excel_row+1, end_column=5)
             cell = worksheet.cell(row=excel_row, column=5, value=block_data.get("block_number", ""))
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[4], end_color=column_colors[4], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=5).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=5).border = thin_border
             
-            # Column 6: نوع البلوك (merged 2 rows) - يعتمد على الخامه
+            # Column 6: نوع البلوك - يعتمد على الخامه
             block_type = block_data.get("block_type", "")
-            worksheet.merge_cells(start_row=excel_row, start_column=6, end_row=excel_row+1, end_column=6)
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=6, end_row=excel_row+1, end_column=6)
             cell = worksheet.cell(row=excel_row, column=6, value=block_type)
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[5], end_color=column_colors[5], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=6).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=6).border = thin_border
             
-            # Column 7: الخامه (merged 2 rows)
-            worksheet.merge_cells(start_row=excel_row, start_column=7, end_row=excel_row+1, end_column=7)
+            # Column 7: الخامه
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=7, end_row=excel_row+1, end_column=7)
             cell = worksheet.cell(row=excel_row, column=7, value=block_data.get("material", ""))
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[6], end_color=column_colors[6], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=7).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=7).border = thin_border
             
-            # Column 8: الطول (merged 2 rows)
-            worksheet.merge_cells(start_row=excel_row, start_column=8, end_row=excel_row+1, end_column=8)
+            # Column 8: الطول
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=8, end_row=excel_row+1, end_column=8)
             cell = worksheet.cell(row=excel_row, column=8, value=block_data.get("length", ""))
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[7], end_color=column_colors[7], fill_type="solid")
             cell.number_format = '0.00'
-            worksheet.cell(row=excel_row+1, column=8).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=8).border = thin_border
             
-            # Column 9: العرض (merged 2 rows)
-            worksheet.merge_cells(start_row=excel_row, start_column=9, end_row=excel_row+1, end_column=9)
+            # Column 9: العرض
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=9, end_row=excel_row+1, end_column=9)
             cell = worksheet.cell(row=excel_row, column=9, value=block_data.get("width", ""))
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[8], end_color=column_colors[8], fill_type="solid")
             cell.number_format = '0.00'
-            worksheet.cell(row=excel_row+1, column=9).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=9).border = thin_border
             
-            # Column 10: الارتفاع (merged 2 rows)
-            worksheet.merge_cells(start_row=excel_row, start_column=10, end_row=excel_row+1, end_column=10)
+            # Column 10: الارتفاع
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=10, end_row=excel_row+1, end_column=10)
             cell = worksheet.cell(row=excel_row, column=10, value=block_data.get("height", ""))
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[9], end_color=column_colors[9], fill_type="solid")
             cell.number_format = '0.00'
-            worksheet.cell(row=excel_row+1, column=10).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=10).border = thin_border
             
-            # Column 11: م3 (volume) - Calculate using formula with ROUND (merged 2 rows)
+            # Column 11: م3 (volume) - Calculate using formula with ROUND
             length_cell = get_column_letter(8)
             width_cell = get_column_letter(9)
             height_cell = get_column_letter(10)
             formula_str = f'=ROUND({length_cell}{excel_row}*{width_cell}{excel_row}*{height_cell}{excel_row},2)'
-            worksheet.merge_cells(start_row=excel_row, start_column=11, end_row=excel_row+1, end_column=11)
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=11, end_row=excel_row+1, end_column=11)
             cell = worksheet.cell(row=excel_row, column=11)
             cell.value = formula_str
             cell.data_type = 'f'
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[10], end_color=column_colors[10], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=11).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=11).border = thin_border
             
-            # Column 12: الوزن (merged 2 rows)
-            worksheet.merge_cells(start_row=excel_row, start_column=12, end_row=excel_row+1, end_column=12)
+            # Column 12: الوزن
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=12, end_row=excel_row+1, end_column=12)
             cell = worksheet.cell(row=excel_row, column=12, value=block_data.get("weight_per_m3", ""))
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[11], end_color=column_colors[11], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=12).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=12).border = thin_border
             
-            # Column 13: وزن البلوك - Calculate using formula with ROUND (merged 2 rows)
+            # Column 13: وزن البلوك - Calculate using formula with ROUND
             volume_cell = get_column_letter(11)
             weight_per_m3_cell = get_column_letter(12)
             formula_str = f'=ROUND({volume_cell}{excel_row}*{weight_per_m3_cell}{excel_row},2)'
-            worksheet.merge_cells(start_row=excel_row, start_column=13, end_row=excel_row+1, end_column=13)
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=13, end_row=excel_row+1, end_column=13)
             cell = worksheet.cell(row=excel_row, column=13)
             cell.value = formula_str
             cell.data_type = 'f'
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[12], end_color=column_colors[12], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=13).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=13).border = thin_border
             
-            # Column 14: سعر الطن (merged 2 rows)
-            worksheet.merge_cells(start_row=excel_row, start_column=14, end_row=excel_row+1, end_column=14)
+            # Column 14: سعر الطن
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=14, end_row=excel_row+1, end_column=14)
             cell = worksheet.cell(row=excel_row, column=14, value=block_data.get("price_per_ton", ""))
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[13], end_color=column_colors[13], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=14).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=14).border = thin_border
             
-            # Column 15: اجمالي السعر - Calculate using formula (merged 2 rows)
+            # Column 15: اجمالي السعر - Calculate using formula
             block_weight_cell = get_column_letter(13)
             price_per_ton_cell = get_column_letter(14)
             formula_str = f'={block_weight_cell}{excel_row}*{price_per_ton_cell}{excel_row}'
-            worksheet.merge_cells(start_row=excel_row, start_column=15, end_row=excel_row+1, end_column=15)
+            if row_span == 2:
+                worksheet.merge_cells(start_row=excel_row, start_column=15, end_row=excel_row+1, end_column=15)
             cell = worksheet.cell(row=excel_row, column=15)
             cell.value = formula_str
             cell.data_type = 'f'
             cell.border = thin_border
             cell.alignment = center_alignment
             cell.fill = PatternFill(start_color=column_colors[14], end_color=column_colors[14], fill_type="solid")
-            worksheet.cell(row=excel_row+1, column=15).border = thin_border
+            if row_span == 2:
+                worksheet.cell(row=excel_row+1, column=15).border = thin_border
             
             
         workbook.save(filepath)
@@ -840,149 +815,192 @@ def create_new_excel_file(filepath: str, rows: List[Dict]):
     worksheet.row_dimensions[2].height = 25
 
     start_row = 3
+    current_row = start_row
     
     for i, block_data in enumerate(rows):
-        excel_row = start_row + (i * 2)  # Each block takes 2 rows
+        is_fadl = block_data.get("is_fadl", False)
         
-        # Column 1: رقم النقله (merged 2 rows)
-        worksheet.merge_cells(start_row=excel_row, start_column=1, end_row=excel_row+1, end_column=1)
+        if is_fadl:
+            # Fadl blocks take only 1 row (no merging)
+            excel_row = current_row
+            row_span = 1
+            current_row += 1
+        else:
+            # Normal blocks take 2 rows (merged vertically)
+            excel_row = current_row
+            row_span = 2
+            current_row += 2
+        
+        # Column 1: رقم النقله
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=1, end_row=excel_row+1, end_column=1)
         cell = worksheet.cell(row=excel_row, column=1, value=block_data.get("trip_number", ""))
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[0], end_color=column_colors[0], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=1).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=1).border = thin_border
         
-        # Column 2: عدد النقله (merged 2 rows)
+        # Column 2: عدد النقله
         trip_count = block_data.get("trip_count", "")
         if trip_count:
             try:
                 trip_count = int(float(trip_count))
             except (ValueError, TypeError):
                 trip_count = ""
-        worksheet.merge_cells(start_row=excel_row, start_column=2, end_row=excel_row+1, end_column=2)
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=2, end_row=excel_row+1, end_column=2)
         cell = worksheet.cell(row=excel_row, column=2, value=trip_count)
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[1], end_color=column_colors[1], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=2).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=2).border = thin_border
         
-        # Column 3: التاريخ (merged 2 rows)
-        worksheet.merge_cells(start_row=excel_row, start_column=3, end_row=excel_row+1, end_column=3)
+        # Column 3: التاريخ
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=3, end_row=excel_row+1, end_column=3)
         cell = worksheet.cell(row=excel_row, column=3, value=block_data.get("date", ""))
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[2], end_color=column_colors[2], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=3).border = thin_border
+        cell.number_format = 'DD/MM/YYYY'
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=3).border = thin_border
         
-        # Column 4: المحجر (merged 2 rows)
-        worksheet.merge_cells(start_row=excel_row, start_column=4, end_row=excel_row+1, end_column=4)
+        # Column 4: المحجر
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=4, end_row=excel_row+1, end_column=4)
         cell = worksheet.cell(row=excel_row, column=4, value=block_data.get("quarry", ""))
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[3], end_color=column_colors[3], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=4).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=4).border = thin_border
         
-        # Column 5: رقم البلوك (merged 2 rows)
-        worksheet.merge_cells(start_row=excel_row, start_column=5, end_row=excel_row+1, end_column=5)
+        # Column 5: رقم البلوك
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=5, end_row=excel_row+1, end_column=5)
         cell = worksheet.cell(row=excel_row, column=5, value=block_data.get("block_number", ""))
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[4], end_color=column_colors[4], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=5).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=5).border = thin_border
         
-        # Column 6: نوع البلوك (merged 2 rows) - يعتمد على الخامه
+        # Column 6: نوع البلوك - يعتمد على الخامه
         block_type = block_data.get("block_type", "")
-        worksheet.merge_cells(start_row=excel_row, start_column=6, end_row=excel_row+1, end_column=6)
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=6, end_row=excel_row+1, end_column=6)
         cell = worksheet.cell(row=excel_row, column=6, value=block_type)
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[5], end_color=column_colors[5], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=6).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=6).border = thin_border
         
-        # Column 7: الخامه (merged 2 rows)
-        worksheet.merge_cells(start_row=excel_row, start_column=7, end_row=excel_row+1, end_column=7)
+        # Column 7: الخامه
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=7, end_row=excel_row+1, end_column=7)
         cell = worksheet.cell(row=excel_row, column=7, value=block_data.get("material", ""))
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[6], end_color=column_colors[6], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=7).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=7).border = thin_border
         
-        # Column 8: الطول (merged 2 rows)
-        worksheet.merge_cells(start_row=excel_row, start_column=8, end_row=excel_row+1, end_column=8)
+        # Column 8: الطول
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=8, end_row=excel_row+1, end_column=8)
         cell = worksheet.cell(row=excel_row, column=8, value=block_data.get("length", ""))
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[7], end_color=column_colors[7], fill_type="solid")
         cell.number_format = '0.00'
-        worksheet.cell(row=excel_row+1, column=8).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=8).border = thin_border
         
-        # Column 9: العرض (merged 2 rows)
-        worksheet.merge_cells(start_row=excel_row, start_column=9, end_row=excel_row+1, end_column=9)
+        # Column 9: العرض
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=9, end_row=excel_row+1, end_column=9)
         cell = worksheet.cell(row=excel_row, column=9, value=block_data.get("width", ""))
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[8], end_color=column_colors[8], fill_type="solid")
         cell.number_format = '0.00'
-        worksheet.cell(row=excel_row+1, column=9).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=9).border = thin_border
         
-        # Column 10: الارتفاع (merged 2 rows)
-        worksheet.merge_cells(start_row=excel_row, start_column=10, end_row=excel_row+1, end_column=10)
+        # Column 10: الارتفاع
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=10, end_row=excel_row+1, end_column=10)
         cell = worksheet.cell(row=excel_row, column=10, value=block_data.get("height", ""))
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[9], end_color=column_colors[9], fill_type="solid")
         cell.number_format = '0.00'
-        worksheet.cell(row=excel_row+1, column=10).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=10).border = thin_border
         
-        # Column 11: م3 (volume) - Formula with ROUND (merged 2 rows)
+        # Column 11: م3 (volume) - Formula with ROUND
         length_col = get_column_letter(8)
         width_col = get_column_letter(9)
         height_col = get_column_letter(10)
         volume_formula = f'=ROUND({length_col}{excel_row}*{width_col}{excel_row}*{height_col}{excel_row},2)'
-        worksheet.merge_cells(start_row=excel_row, start_column=11, end_row=excel_row+1, end_column=11)
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=11, end_row=excel_row+1, end_column=11)
         cell = worksheet.cell(row=excel_row, column=11, value=volume_formula)
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[10], end_color=column_colors[10], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=11).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=11).border = thin_border
         
-        # Column 12: الوزن (merged 2 rows)
-        worksheet.merge_cells(start_row=excel_row, start_column=12, end_row=excel_row+1, end_column=12)
+        # Column 12: الوزن
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=12, end_row=excel_row+1, end_column=12)
         cell = worksheet.cell(row=excel_row, column=12, value=block_data.get("weight_per_m3", ""))
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[11], end_color=column_colors[11], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=12).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=12).border = thin_border
         
-        # Column 13: وزن البلوك - Formula with ROUND (merged 2 rows)
+        # Column 13: وزن البلوك - Formula with ROUND
         volume_col = get_column_letter(11)
         weight_per_m3_col = get_column_letter(12)
         weight_formula = f'=ROUND({volume_col}{excel_row}*{weight_per_m3_col}{excel_row},2)'
-        worksheet.merge_cells(start_row=excel_row, start_column=13, end_row=excel_row+1, end_column=13)
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=13, end_row=excel_row+1, end_column=13)
         cell = worksheet.cell(row=excel_row, column=13, value=weight_formula)
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[12], end_color=column_colors[12], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=13).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=13).border = thin_border
         
-        # Column 14: سعر الطن (merged 2 rows)
-        worksheet.merge_cells(start_row=excel_row, start_column=14, end_row=excel_row+1, end_column=14)
+        # Column 14: سعر الطن
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=14, end_row=excel_row+1, end_column=14)
         cell = worksheet.cell(row=excel_row, column=14, value=block_data.get("price_per_ton", ""))
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[13], end_color=column_colors[13], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=14).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=14).border = thin_border
         
-        # Column 15: اجمالي السعر - Formula (merged 2 rows)
+        # Column 15: اجمالي السعر - Formula
         block_weight_col = get_column_letter(13)
         price_per_ton_col = get_column_letter(14)
         total_price_formula = f'={block_weight_col}{excel_row}*{price_per_ton_col}{excel_row}'
-        worksheet.merge_cells(start_row=excel_row, start_column=15, end_row=excel_row+1, end_column=15)
+        if row_span == 2:
+            worksheet.merge_cells(start_row=excel_row, start_column=15, end_row=excel_row+1, end_column=15)
         cell = worksheet.cell(row=excel_row, column=15, value=total_price_formula)
         cell.border = thin_border
         cell.alignment = center_alignment
         cell.fill = PatternFill(start_color=column_colors[14], end_color=column_colors[14], fill_type="solid")
-        worksheet.cell(row=excel_row+1, column=15).border = thin_border
+        if row_span == 2:
+            worksheet.cell(row=excel_row+1, column=15).border = thin_border
     
     # Set column widths
     for i, width in enumerate(TABLE1_WIDTH, 1):

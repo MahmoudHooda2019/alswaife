@@ -15,6 +15,7 @@ from utils.update_utils import check_for_updates, download_update, install_updat
 from utils.invoice_utils import save_invoice, update_client_ledger
 from utils.log_utils import log_error, log_exception
 from utils.dialog_utils import DialogManager
+from utils.bottom_sheet_utils import BottomSheetManager
 
 
 def save_callback(filepath, op_num, client, driver, date_str, phone, items):
@@ -120,29 +121,33 @@ class DashboardView:
                     alignment=ft.alignment.center,
                     padding=20
                 ),
-                ft.GridView(
-                    controls=[
-                        self.create_menu_card("إدارة الفواتير", ft.Icons.RECEIPT_LONG, self.open_invoices, ft.Colors.BLUE_700),
-                        self.create_menu_card("إدارة الدفعات", ft.Icons.PAYMENTS, self.open_payments, ft.Colors.GREEN_700),
-                        self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.LIME_700),
-                        self.create_menu_card("إضافة بلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
-                        self.create_menu_card("مشتري", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
-                        self.create_menu_card("المخزون", ft.Icons.INVENTORY, self.open_inventory, ft.Colors.DEEP_PURPLE_700),
-                        self.create_menu_card("إضافة شرائح", ft.Icons.ADD, self.open_slides_add, ft.Colors.PINK_700),
-                        self.create_menu_card("التقارير", ft.Icons.ASSESSMENT, self.open_reports, ft.Colors.TEAL_700),
-                        self.create_menu_card("تحديث", ft.Icons.SYSTEM_UPDATE, self.open_update, ft.Colors.ORANGE_700),
-                        self.create_menu_card("مزامنة", ft.Icons.SYNC, self.open_sync, ft.Colors.LIGHT_BLUE_700),
-                        self.create_menu_card("عنا", ft.Icons.INFO, self.show_about_dialog, ft.Colors.PURPLE_700),
-                    ],
-                    runs_count=2,
-                    max_extent=200,
-                    spacing=20,
-                    run_spacing=20,
-                    padding=20,
+                ft.Container(
+                    content=ft.GridView(
+                        controls=[
+                            self.create_menu_card("إدارة الفواتير", ft.Icons.RECEIPT_LONG, self.open_invoices, ft.Colors.BLUE_700),
+                            self.create_menu_card("إدارة الدفعات", ft.Icons.PAYMENTS, self.open_payments, ft.Colors.GREEN_700),
+                            self.create_menu_card("الحضور والإنصراف", ft.Icons.PERSON, self.open_attendance, ft.Colors.LIME_700),
+                            self.create_menu_card("إضافة بلوكات", ft.Icons.VIEW_IN_AR, self.open_blocks, ft.Colors.AMBER_700),
+                            self.create_menu_card("مشتري", ft.Icons.SHOPPING_CART, self.open_purchases, ft.Colors.CYAN_700),
+                            self.create_menu_card("المخزون", ft.Icons.INVENTORY, self.open_inventory, ft.Colors.DEEP_PURPLE_700),
+                            self.create_menu_card("إضافة شرائح", ft.Icons.ADD, self.open_slides_add, ft.Colors.PINK_700),
+                            self.create_menu_card("التقارير", ft.Icons.ASSESSMENT, self.open_reports, ft.Colors.TEAL_700),
+                            self.create_menu_card("تحديث", ft.Icons.SYSTEM_UPDATE, self.open_update, ft.Colors.ORANGE_700),
+                            self.create_menu_card("مزامنة", ft.Icons.SYNC, self.open_sync, ft.Colors.LIGHT_BLUE_700),
+                            self.create_menu_card("عنا", ft.Icons.INFO, self.show_about_dialog, ft.Colors.PURPLE_700),
+                        ],
+                        runs_count=2,
+                        max_extent=200,
+                        spacing=20,
+                        run_spacing=20,
+                        padding=20,
+                    ),
+                    expand=True,
                 )
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=20,
+            scroll=ft.ScrollMode.AUTO,
             expand=True
         )
 
@@ -1132,109 +1137,33 @@ class DashboardView:
         self.page.update()
 
     def open_inventory(self, e):
-        """Open inventory dialog with options to add or disburse - card style"""
-        def close_dlg(e):
-            DialogManager.close_dialog(self.page, dlg)
+        """Open inventory bottom sheet with options to add or disburse"""
+        options = [
+            {
+                "text": "إضافة للمخزون",
+                "subtext": "إضافة أصناف جديدة",
+                "icon": ft.Icons.ADD_SHOPPING_CART,
+                "color": ft.Colors.GREEN_700,
+                "on_click": lambda e: self.open_inventory_add(None),
+            },
+            {
+                "text": "صرف من المخزون",
+                "subtext": "صرف أصناف موجودة",
+                "icon": ft.Icons.REMOVE_SHOPPING_CART,
+                "color": ft.Colors.RED_700,
+                "on_click": lambda e: self.open_inventory_disburse(None),
+            },
+        ]
         
-        def open_add(e):
-            close_dlg(e)
-            self.open_inventory_add(None)
-        
-        def open_disburse(e):
-            close_dlg(e)
-            self.open_inventory_disburse(None)
-        
-        # Card for adding to inventory
-        add_card = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Icon(ft.Icons.ADD_SHOPPING_CART, size=40, color=ft.Colors.WHITE),
-                        ft.Text("إضافة للمخزون", size=15, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER),
-                        ft.Text("إضافة أصناف جديدة", size=11, color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=8,
-                    tight=True,
-                ),
-                padding=15,
-                alignment=ft.alignment.center,
-                bgcolor=ft.Colors.GREEN_700,
-                border_radius=15,
-                ink=True,
-                on_click=open_add,
-                width=150,
-                height=130,
-            ),
-            elevation=8,
+        BottomSheetManager.show_options_bottom_sheet(
+            page=self.page,
+            title="المخزون",
+            options=options,
+            icon=ft.Icons.INVENTORY,
+            icon_color=ft.Colors.DEEP_PURPLE_400,
+            description="اختر العملية المطلوبة:",
         )
-        
-        # Card for disbursing from inventory
-        disburse_card = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Icon(ft.Icons.REMOVE_SHOPPING_CART, size=40, color=ft.Colors.WHITE),
-                        ft.Text("صرف من المخزون", size=15, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER),
-                        ft.Text("صرف أصناف موجودة", size=11, color=ft.Colors.GREY_400, text_align=ft.TextAlign.CENTER),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=8,
-                    tight=True,
-                ),
-                padding=15,
-                alignment=ft.alignment.center,
-                bgcolor=ft.Colors.RED_700,
-                border_radius=15,
-                ink=True,
-                on_click=open_disburse,
-                width=150,
-                height=130,
-            ),
-            elevation=8,
-        )
-        
-        dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.INVENTORY, color=ft.Colors.DEEP_PURPLE_400, size=28),
-                    ft.Text("المخزون", weight=ft.FontWeight.BOLD, color=ft.Colors.DEEP_PURPLE_200, size=18),
-                ],
-                spacing=10,
-            ),
-            content=ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Text("اختر العملية المطلوبة:", size=14, color=ft.Colors.GREY_400),
-                        ft.Container(height=15),
-                        ft.Row(
-                            controls=[add_card, disburse_card],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=20,
-                        ),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    tight=True,
-                ),
-                padding=10,
-            ),
-            actions=[
-                ft.TextButton(
-                    "إغلاق",
-                    on_click=close_dlg,
-                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.CENTER,
-            bgcolor=ft.Colors.GREY_900,
-            shape=ft.RoundedRectangleBorder(radius=15),
-        )
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+
 
     def open_inventory_add(self, e):
         """Open add inventory dialog"""

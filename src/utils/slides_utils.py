@@ -416,7 +416,8 @@ def add_slides_inventory_from_publishing(file_path, publishing_data):
             # N(14): الكمية م2 (formula), O(15): سعر المتر, P(16): اجمالي السعر (formula)
             
             # Set static values
-            add_sheet.cell(row=row_num, column=1, value=publishing_date)  # تاريخ النشر
+            cell = add_sheet.cell(row=row_num, column=1, value=publishing_date)  # تاريخ النشر
+            cell.number_format = 'DD/MM/YYYY'
             add_sheet.cell(row=row_num, column=2, value=block_number)     # رقم البلوك
             add_sheet.cell(row=row_num, column=3, value=material)         # النوع
             add_sheet.cell(row=row_num, column=4, value=machine_number)   # رقم المكينه
@@ -484,14 +485,21 @@ def add_slides_inventory_from_publishing(file_path, publishing_data):
         convert_existing_slides_inventory_to_formulas(file_path)
         
         # Also save to blocks Excel file
+        blocks_save_warnings = []
         try:
             from utils.blocks_utils import export_slides_to_blocks_excel
-            export_slides_to_blocks_excel(publishing_data)
+            blocks_save_warnings = export_slides_to_blocks_excel(publishing_data)
         except Exception as blocks_error:
             log_error(f"Could not save slides to blocks file: {blocks_error}")
-            # Don't fail the main operation if blocks file fails
+            # Extract block numbers from publishing_data
+            failed_blocks = [entry.get('block_number', 'غير معروف') for entry in publishing_data]
+            blocks_save_warnings = [
+                f"فشل حفظ الشرائح في ملف مخزون البلوكات",
+                f"الشرائح المتأثرة: {', '.join(failed_blocks)}",
+                f"السبب: {str(blocks_error)}"
+            ]
         
-        return entries_added
+        return entries_added, blocks_save_warnings
     except Exception as e:
         log_exception(f"Failed to add slides inventory from publishing: {e}")
         raise
@@ -589,6 +597,60 @@ def disburse_slides_inventory_entry(
     except Exception as e:
         log_exception(f"Failed to add slides disbursement entry: {e}")
         raise
+
+
+def get_slide_quantity_by_block(block_number, thickness=None):
+    """
+    Get available quantity for a specific slide block number (ignores thickness)
+    
+    Args:
+        block_number (str): Block number (e.g., "A11", "B11", "F11")
+        thickness (str, optional): Not used - kept for compatibility
+        
+    Returns:
+        int: Available quantity (0 if not found or file doesn't exist)
+    """
+    try:
+        documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
+        slides_path = os.path.join(documents_path, "الشرائح")
+        file_path = os.path.join(slides_path, "مخزون الشرائح.xlsx")
+        
+        if not os.path.exists(file_path):
+            return 0
+        
+        # Normalize block number
+        from utils.utils import normalize_block_number
+        normalized_block = normalize_block_number(block_number, reorder=True)
+        
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+        inventory_sheet = wb["مخزون الشرائح"]
+        
+        total_quantity = 0
+        
+        # Search through inventory sheet - sum all thicknesses for this block
+        for row_num in range(2, inventory_sheet.max_row + 1):
+            row_block_number = inventory_sheet.cell(row=row_num, column=2).value
+            current_balance = inventory_sheet.cell(row=row_num, column=6).value or 0
+            
+            if not row_block_number:
+                continue
+            
+            # Normalize the row block number for comparison
+            normalized_row_block = normalize_block_number(str(row_block_number), reorder=True)
+            
+            # Check if block numbers match (ignore thickness)
+            if normalized_row_block.upper() == normalized_block.upper():
+                try:
+                    total_quantity += int(float(current_balance))
+                except (ValueError, TypeError):
+                    pass
+        
+        wb.close()
+        return total_quantity
+        
+    except Exception:
+        # Return 0 if any error occurs
+        return 0
 
 
 def get_slides_inventory_summary(file_path):
@@ -995,7 +1057,9 @@ def _add_slides_disbursement_with_merge(file_path, invoice_number, invoice_date,
             # Column 1: رقم الفاتورة (will be merged)
             disburse_sheet.cell(row=row_num, column=1, value=invoice_number if idx == 0 else "")
             # Column 2: تاريخ الصرف (will be merged)
-            disburse_sheet.cell(row=row_num, column=2, value=invoice_date if idx == 0 else "")
+            cell = disburse_sheet.cell(row=row_num, column=2, value=invoice_date if idx == 0 else "")
+            if idx == 0:
+                cell.number_format = 'DD/MM/YYYY'
             # Column 3: اسم العميل (will be merged)
             disburse_sheet.cell(row=row_num, column=3, value=client_name if idx == 0 else "")
             # Column 4: اسم الصنف

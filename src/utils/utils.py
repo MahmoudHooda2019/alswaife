@@ -173,8 +173,8 @@ def normalize_block_number(block_value, reorder=True):
     
     يقوم بتحويل الحروف المختلفة إلى الحروف الصحيحة:
     - A: ِ, ش, a, أ
-    - B: لآ, لا, b, ب  
-    - F: f, [, ب
+    - B: لآ, لا, b
+    - F: f, [, ب (الحرف العربي ب)
     - K: k, ن, ،
     
     ثم يعيد ترتيب رقم البلوك ليبدأ بالحروف ثم الأرقام (مثل: "12A" -> "A12")
@@ -195,14 +195,14 @@ def normalize_block_number(block_value, reorder=True):
         return ""
     
     # تحويل الحروف إلى A, B, F, K
-    # A: ِ, ش, a, أ
-    new_val = val.replace('ِ', 'A').replace('ش', 'A').replace('a', 'A').replace('أ', 'A')
+    # A: ِ, ش, a
+    new_val = val.replace('ِ', 'A').replace('ش', 'A').replace('a', 'A')
     
-    # B: لآ, لا, b, ب
-    new_val = new_val.replace('لآ', 'B').replace('لا', 'B').replace('b', 'B').replace('ب', 'B')
+    # B: لآ, لا, b
+    new_val = new_val.replace('لآ', 'B').replace('لا', 'B').replace('b', 'B')
     
-    # F: f, [, ب (ملاحظة: ب مكررة في B و F، سنعطي الأولوية لـ B)
-    new_val = new_val.replace('f', 'F').replace('[', 'F')
+    # F: f, [, ب
+    new_val = new_val.replace('f', 'F').replace('[', 'F').replace('ب', 'F')
     
     # K: k, ن, ،
     new_val = new_val.replace('k', 'K').replace('ن', 'K').replace('،', 'K')
@@ -220,47 +220,6 @@ def normalize_block_number(block_value, reorder=True):
             new_val = letters + numbers
     
     return new_val
-
-def handle_arabic_decimal_input(text_field):
-    """
-    معالجة الفواصل العشرية العربية وتحويلها إلى نقطة عشرية
-    
-    يقوم بتحويل:
-    - الفاصلة العربية (،) إلى نقطة (.)
-    - حرف الزين (ز) إلى نقطة (.)
-    - الأرقام العربية إلى أرقام إنجليزية
-    
-    Args:
-        text_field: حقل النص المراد معالجته
-        
-    Returns:
-        bool: True إذا تم تغيير القيمة، False إذا لم يتم تغييرها
-    """
-    if not text_field or not text_field.value:
-        return False
-    
-    original_value = text_field.value
-    new_value = original_value
-    
-    # تحويل الفواصل العشرية العربية إلى نقطة
-    new_value = new_value.replace('،', '.')  # الفاصلة العربية
-    new_value = new_value.replace('ز', '.')  # حرف الزين (يُستخدم أحياناً كفاصلة عشرية)
-    
-    # تحويل الأرقام العربية إلى أرقام إنجليزية
-    arabic_digits = {
-        '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', 
-        '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
-    }
-    
-    for arabic_digit, english_digit in arabic_digits.items():
-        new_value = new_value.replace(arabic_digit, english_digit)
-    
-    # تحديث القيمة إذا تغيرت
-    if new_value != original_value:
-        text_field.value = new_value
-        return True
-    
-    return False
 
 
 def normalize_numeric_input(value):

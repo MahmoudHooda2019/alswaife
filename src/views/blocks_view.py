@@ -5,6 +5,7 @@ from utils.blocks_utils import export_simple_blocks_excel
 from utils.log_utils import log_exception
 from utils.utils import is_excel_running, get_current_date, is_file_locked
 from utils.dialog_utils import DialogManager
+from utils.bottom_sheet_utils import BottomSheetManager
 
 class BlockRow:
     """Row UI for block entry with improved styling"""
@@ -113,10 +114,37 @@ class BlockRow:
             icon=ft.Icons.NUMBERS
         )
         
+        # Fadl checkbox - styled to match input fields with fixed width
+        self.fadl_checkbox = ft.Container(
+            content=ft.Checkbox(
+                label="فضل",
+                value=False,
+                on_change=self._on_fadl_change,
+                fill_color={
+                    ft.ControlState.DEFAULT: ft.Colors.BLUE_GREY_800,
+                    ft.ControlState.SELECTED: ft.Colors.AMBER_700,
+                },
+                check_color=ft.Colors.WHITE,
+                label_style=ft.TextStyle(
+                    size=14,
+                    weight=ft.FontWeight.W_500,
+                    color=ft.Colors.WHITE
+                ),
+            ),
+            bgcolor=ft.Colors.BLUE_GREY_900,
+            border_radius=10,
+            padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            border=ft.border.all(1, ft.Colors.GREY_700),
+            width=100,  # Fixed width to prevent expansion
+        )
+
+        
         # Block type options for نيو حلايب
         self.BLOCK_TYPE_OPTIONS = [
             ft.dropdown.Option("A"),
             ft.dropdown.Option("B"),
+            ft.dropdown.Option("F"),
+            ft.dropdown.Option("K")
         ]
         
         # Block type dropdown (for نيو حلايب - user selects A or B)
@@ -305,6 +333,7 @@ class BlockRow:
                             self.block_number,
                             self.block_type_container,
                             self.material_dropdown,
+                            self.fadl_checkbox,
                         ],
                         spacing=15,
                         wrap=True
@@ -450,8 +479,15 @@ class BlockRow:
     
     def _handle_arabic_decimal_input(self, text_field):
         """Handle Arabic decimal separator (Zein letter) and replace with decimal point"""
-        from utils.utils import handle_arabic_decimal_input
-        return handle_arabic_decimal_input(text_field)
+        from utils.utils import normalize_numeric_input
+        if not text_field or not text_field.value:
+            return False
+        original_value = text_field.value
+        new_value = normalize_numeric_input(original_value)
+        if new_value != original_value:
+            text_field.value = new_value
+            return True
+        return False
     
     def _on_material_change(self, e=None):
         """Handle material change and update weight per m3, price per ton, and block type"""
@@ -498,16 +534,70 @@ class BlockRow:
         self._calculate_values()
         self.page.update()
     
+    def _on_fadl_change(self, e=None):
+        """Handle fadl checkbox change"""
+        # Just update the page, the actual logic is in get_block_type() and to_dict()
+        self.page.update()
+    
     def get_block_type(self):
         """Get the current block type value"""
         material = self.material_dropdown.value
+        # Access checkbox value from container
+        is_fadl = self.fadl_checkbox.content.value if hasattr(self.fadl_checkbox, 'content') else False
+        
         if material == "نيو حلايب":
-            return self.block_type_dropdown.value or "A"
+            block_type = self.block_type_dropdown.value or "A"
+            if is_fadl:
+                return f"{block_type} - فضل"
+            return block_type
         elif material == "جندولا":
+            if is_fadl:
+                return "جندولا - فضل"
             return "جندولا"
         elif material == "احمر اسوان":
+            if is_fadl:
+                return "احمر - فضل"
             return "احمر"
         return ""
+    
+    def is_fadl_block(self):
+        """Check if this block is marked as fadl"""
+        if hasattr(self, 'fadl_checkbox'):
+            # Access checkbox value from container
+            if hasattr(self.fadl_checkbox, 'content'):
+                return self.fadl_checkbox.content.value
+        return False
+    
+    def get_editable_fields(self):
+        """Return list of editable fields in order for navigation"""
+        return [
+            self.trip_number,      # 0
+            self.trip_count,       # 1
+            self.date_field,       # 2
+            self.quarry,           # 3
+            self.block_number,     # 4
+            self.block_type_dropdown if self.material_dropdown.value == "نيو حلايب" else self.block_type_text,  # 5
+            self.material_dropdown,  # 6
+            self.length_field,     # 7
+            self.width_field,      # 8
+            self.height_field,     # 9
+            self.weight_per_m3_field,  # 10
+            self.price_per_ton_field,  # 11
+        ]
+    
+    def focus_field(self, field_index):
+        """Focus a specific field by index"""
+        fields = self.get_editable_fields()
+        if 0 <= field_index < len(fields):
+            field = fields[field_index]
+            try:
+                field.focus()
+                if self.page:
+                    self.page.update()
+                return True
+            except Exception:
+                return False
+        return False
     
     def _calculate_values(self):
         """Calculate all dependent values with error handling"""
@@ -529,13 +619,17 @@ class BlockRow:
             
             # Calculate total price = price_per_ton * block_weight
             total_price = price_per_ton * block_weight
-            self.total_price_field.value = f"{total_price:.2f}"
+            # Format: show decimals only if needed, with thousands separator
+            if total_price == int(total_price):
+                self.total_price_field.value = f"{int(total_price):,}"
+            else:
+                self.total_price_field.value = f"{total_price:,.2f}"
             
         except ValueError:
             # If any field contains non-numeric values, set calculated fields to 0
             self.volume_field.value = "0.00"
             self.block_weight_field.value = "0.00"
-            self.total_price_field.value = "0.00"
+            self.total_price_field.value = "0"
         
         self.page.update()
     
@@ -571,6 +665,7 @@ class BlockRow:
             'block_weight': self.block_weight_field.value,  # Calculated: volume * weight_per_m3
             'price_per_ton': self.price_per_ton_field.value,  # Based on material
             'total_price': self.total_price_field.value,  # Calculated: price_per_ton * block_weight
+            'is_fadl': self.is_fadl_block(),  # Whether this is a fadl block (single row instead of merged)
         }
 
 
@@ -592,6 +687,10 @@ class BlocksView:
             scroll=ft.ScrollMode.AUTO,
             expand=True
         )
+        
+        # Navigation tracking
+        self._current_row_idx = 0
+        self._current_field_idx = 0
 
     @classmethod
     def get_instance(cls):
@@ -613,6 +712,9 @@ class BlocksView:
 
     def build_ui(self):
         """Build the main UI with enhanced styling"""
+        
+        # Add keyboard event handler for arrow navigation
+        self.page.on_keyboard_event = self.on_keyboard_event
         
         # Create AppBar with title and actions
         app_bar = ft.AppBar(
@@ -677,6 +779,107 @@ class BlocksView:
         
         self.page.update()
         return main_column
+    
+    def on_keyboard_event(self, e: ft.KeyboardEvent):
+        """Handle keyboard events for arrow navigation"""
+        # Check if the '+' key was pressed to add a new row
+        if e.key == '+' or e.key == '=':
+            if not e.ctrl and not e.shift and not e.alt:
+                self.add_row()
+                return
+        
+        # Arrow key navigation
+        if e.key in ["Arrow Down", "Arrow Up", "Arrow Left", "Arrow Right"]:
+            self._handle_arrow_navigation(e.key)
+    
+    def _skip_dropdown(self, row_idx, field_idx, direction=1):
+        """Skip dropdown fields in the given direction (1=forward, -1=backward)"""
+        if row_idx < 0 or row_idx >= len(self.rows):
+            return row_idx, field_idx
+        
+        fields = self.rows[row_idx].get_editable_fields()
+        
+        # Check current field
+        while 0 <= field_idx < len(fields):
+            if not isinstance(fields[field_idx], ft.Dropdown):
+                return row_idx, field_idx
+            field_idx += direction
+        
+        # If we've exhausted current row, return boundary
+        if direction > 0:
+            return row_idx, len(fields) - 1
+        else:
+            return row_idx, 0
+    
+    def _handle_arrow_navigation(self, key):
+        """Handle arrow key navigation between fields (skipping dropdowns)"""
+        if not self.rows:
+            return
+        
+        # Ensure indices are valid
+        if self._current_row_idx < 0 or self._current_row_idx >= len(self.rows):
+            self._current_row_idx = 0
+        
+        current_row = self.rows[self._current_row_idx]
+        fields = current_row.get_editable_fields()
+        
+        if self._current_field_idx < 0 or self._current_field_idx >= len(fields):
+            self._current_field_idx = 0
+            # Skip dropdown if starting field is dropdown
+            self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+        
+        if key == "Arrow Right":
+            # Move to previous field (RTL)
+            self._current_field_idx -= 1
+            if self._current_field_idx < 0:
+                # Move to previous row, last non-dropdown field
+                if self._current_row_idx > 0:
+                    self._current_row_idx -= 1
+                    self._current_field_idx = len(self.rows[self._current_row_idx].get_editable_fields()) - 1
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+                else:
+                    self._current_field_idx = 0
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+            else:
+                # Skip dropdown if needed
+                self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+        
+        elif key == "Arrow Left":
+            # Move to next field (RTL)
+            self._current_field_idx += 1
+            if self._current_field_idx >= len(fields):
+                # Move to next row, first non-dropdown field
+                if self._current_row_idx < len(self.rows) - 1:
+                    self._current_row_idx += 1
+                    self._current_field_idx = 0
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+                else:
+                    # Stay at last non-dropdown field
+                    self._current_field_idx = len(fields) - 1
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+            else:
+                # Skip dropdown if needed
+                self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+        
+        elif key == "Arrow Down":
+            # Move to next non-dropdown field in same row
+            self._current_field_idx += 1
+            if self._current_field_idx >= len(fields):
+                # Wrap to first non-dropdown field in same row
+                self._current_field_idx = 0
+            self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+        
+        elif key == "Arrow Up":
+            # Move to previous non-dropdown field in same row
+            self._current_field_idx -= 1
+            if self._current_field_idx < 0:
+                # Wrap to last non-dropdown field in same row
+                self._current_field_idx = len(fields) - 1
+            self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+        
+        # Focus the target field
+        if 0 <= self._current_row_idx < len(self.rows):
+            self.rows[self._current_row_idx].focus_field(self._current_field_idx)
 
     def go_back(self, e):
         """Navigate back to previous view"""
@@ -762,6 +965,9 @@ class BlocksView:
             
             self._show_success_dialog(file_path)
             
+        except ValueError as e:
+            # Duplicate block numbers found
+            self._show_dialog("خطأ - بلوكات مكررة", str(e), ft.Colors.RED_400)
         except PermissionError:
             self._show_dialog("خطأ", "الملف مفتوح حالياً في برنامج Excel. يرجى إغلاق الملف والمحاولة مرة أخرى.", ft.Colors.RED_400)
         except Exception as e:
@@ -810,70 +1016,10 @@ class BlocksView:
             DialogManager.show_info_dialog(self.page, message, title=title)
 
     def _show_success_dialog(self, filepath: str):
-        """Show success dialog with file actions"""
-        def open_file(e=None):
-            DialogManager.close_dialog(self.page, dlg)
-            try:
-                os.startfile(filepath)
-            except Exception:
-                pass
-
-        def open_folder(e=None):
-            DialogManager.close_dialog(self.page, dlg)
-            try:
-                folder = os.path.dirname(filepath)
-                os.startfile(folder)
-            except Exception:
-                pass
-        
-        def close_dlg(e=None):
-            DialogManager.close_dialog(self.page, dlg)
-
-        actions = [
-            ft.TextButton(
-                "فتح الملف",
-                on_click=open_file,
-                icon=ft.Icons.FILE_OPEN,
-                style=ft.ButtonStyle(color=ft.Colors.GREEN_300)
-            ),
-            ft.TextButton(
-                "فتح المجلد",
-                on_click=open_folder,
-                icon=ft.Icons.FOLDER_OPEN,
-                style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
-            ),
-            ft.TextButton(
-                "إغلاق",
-                on_click=close_dlg,
-                style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-            ),
-        ]
-
-        dlg = DialogManager.show_custom_dialog(
-            self.page,
-            "تم الحفظ بنجاح",
-            ft.Column(
-                rtl=True,
-                controls=[
-                    ft.Text("تم إنشاء الملف بنجاح:", size=14, rtl=True),
-                    ft.Container(
-                        content=ft.Text(
-                            os.path.basename(filepath),
-                            size=13,
-                            color=ft.Colors.BLUE_200,
-                            weight=ft.FontWeight.W_500
-                        ),
-                        bgcolor=ft.Colors.BLUE_GREY_800,
-                        padding=10,
-                        border_radius=8,
-                        margin=ft.margin.only(top=10),
-                        rtl=True
-                    )
-                ],
-                tight=True
-            ),
-            actions,
-            icon=ft.Icons.CHECK_CIRCLE,
-            icon_color=ft.Colors.GREEN_400,
-            title_color=ft.Colors.GREEN_300
+        """Show success bottom sheet with file actions"""
+        BottomSheetManager.show_success_bottom_sheet(
+            page=self.page,
+            message="تم إضافة البلوكات إلى السجل بنجاح",
+            filepath=filepath,
+            title="تم الحفظ بنجاح",
         )

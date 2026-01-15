@@ -3,6 +3,7 @@ import flet as ft
 from utils.purchases_utils import export_purchases_to_excel, load_item_names_from_excel
 from utils.utils import is_excel_running, get_current_date, is_file_locked
 from utils.db_utils import get_purchases_zoom_level, set_purchases_zoom_level
+from utils.bottom_sheet_utils import BottomSheetManager
 
 
 class PurchaseRow:
@@ -13,6 +14,29 @@ class PurchaseRow:
         self.delete_callback = delete_callback
         self.items_list = items_list or []
         self._build_controls()
+    
+    def get_editable_fields(self):
+        """Return list of editable fields in order for navigation"""
+        return [
+            self.date_field,         # 0
+            self.quantity_field,     # 1
+            self.item_name_field,    # 2
+            self.total_price_field,  # 3
+        ]
+    
+    def focus_field(self, field_index):
+        """Focus a specific field by index"""
+        fields = self.get_editable_fields()
+        if 0 <= field_index < len(fields):
+            field = fields[field_index]
+            try:
+                field.focus()
+                if self.page:
+                    self.page.update()
+                return True
+            except Exception:
+                return False
+        return False
 
     def _create_styled_textfield(self, label, width, **kwargs):
         """Create a consistently styled text field"""
@@ -268,6 +292,9 @@ class PurchasesView:
     def build_ui(self):
         """Build the main UI"""
         
+        # Add keyboard event handler for arrow navigation
+        self.page.on_keyboard_event = self.on_keyboard_event
+        
         # Create AppBar
         app_bar = ft.AppBar(
             leading=ft.IconButton(
@@ -491,79 +518,14 @@ class PurchasesView:
         self.page.update()
 
     def _show_success_dialog(self, filepath: str):
-        """Show success dialog with file actions"""
-        def close_dlg(e=None):
-            dlg.open = False
-            self.page.update()
-
-        def open_file(e=None):
-            close_dlg()
-            try:
-                os.startfile(filepath)
-            except Exception:
-                pass
-
-        def open_folder(e=None):
-            close_dlg()
-            try:
-                folder = os.path.dirname(filepath)
-                os.startfile(folder)
-            except Exception:
-                pass
-
-        dlg = ft.AlertDialog(
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=30),
-                    ft.Text("تم الحفظ بنجاح", color=ft.Colors.GREEN_300, weight=ft.FontWeight.BOLD),
-                ],
-                rtl=True,
-                spacing=10
-            ),
-            content=ft.Column(
-                rtl=True,
-                controls=[
-                    ft.Text("تم إضافة المصروف إلى السجل:", size=14, rtl=True),
-                    ft.Container(
-                        content=ft.Text(
-                            os.path.basename(filepath),
-                            size=13,
-                            color=ft.Colors.BLUE_200,
-                            weight=ft.FontWeight.W_500
-                        ),
-                        bgcolor=ft.Colors.BLUE_GREY_800,
-                        padding=10,
-                        border_radius=8,
-                        margin=ft.margin.only(top=10),
-                        rtl=True
-                    )
-                ],
-                tight=True
-            ),
-            actions=[
-                ft.TextButton(
-                    "فتح الملف",
-                    on_click=open_file,
-                    icon=ft.Icons.FILE_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.GREEN_300)
-                ),
-                ft.TextButton(
-                    "فتح المجلد",
-                    on_click=open_folder,
-                    icon=ft.Icons.FOLDER_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.BLUE_300)
-                ),
-                ft.TextButton(
-                    "إغلاق",
-                    on_click=close_dlg,
-                    style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.BLUE_GREY_900
+        """Show success bottom sheet with file actions"""
+        BottomSheetManager.show_success_bottom_sheet(
+            page=self.page,
+            message="تم إضافة المصروف إلى السجل بنجاح",
+            filepath=filepath,
+            title="تم الحفظ بنجاح",
         )
-        self.page.overlay.append(dlg)
-        dlg.open = True
+
         self.page.update()
 
     def zoom_in(self, e=None):
@@ -587,3 +549,53 @@ class PurchasesView:
         for row in self.rows:
             row.update_scale(self.scale_factor)
         self.page.update()
+
+    def on_keyboard_event(self, e: ft.KeyboardEvent):
+        """Handle keyboard events for arrow navigation"""
+        # Check if the '+' key was pressed to add a new row
+        if e.key == "+" and not e.shift and not e.ctrl and not e.alt:
+            self.add_row()
+            return
+        
+        # Only handle arrow keys
+        if e.key not in ["Arrow Down", "Arrow Up", "Arrow Left", "Arrow Right"]:
+            return
+        
+        # Find currently focused element
+        focused_row_idx = None
+        focused_field_idx = None
+        
+        for row_idx, row in enumerate(self.rows):
+            fields = row.get_editable_fields()
+            for field_idx, field in enumerate(fields):
+                try:
+                    if hasattr(field, 'focus') and field == self.page.focused_control:
+                        focused_row_idx = row_idx
+                        focused_field_idx = field_idx
+                        break
+                except:
+                    pass
+            if focused_row_idx is not None:
+                break
+        
+        # If no field is focused, do nothing
+        if focused_row_idx is None or focused_field_idx is None:
+            return
+        
+        # Calculate new position based on arrow key
+        new_row_idx = focused_row_idx
+        new_field_idx = focused_field_idx
+        
+        if e.key == "Arrow Down":
+            new_row_idx = min(focused_row_idx + 1, len(self.rows) - 1)
+        elif e.key == "Arrow Up":
+            new_row_idx = max(focused_row_idx - 1, 0)
+        elif e.key == "Arrow Right":
+            new_field_idx = max(focused_field_idx - 1, 0)  # RTL: right goes to previous field
+        elif e.key == "Arrow Left":
+            fields_count = len(self.rows[focused_row_idx].get_editable_fields())
+            new_field_idx = min(focused_field_idx + 1, fields_count - 1)  # RTL: left goes to next field
+        
+        # Focus the new field
+        if new_row_idx < len(self.rows):
+            self.rows[new_row_idx].focus_field(new_field_idx)

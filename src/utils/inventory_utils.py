@@ -250,7 +250,9 @@ def add_inventory_entry(file_path, item_name, quantity, unit_price, notes="", en
             cell.border = border
             cell.alignment = alignment
             # Apply number formatting for numeric columns
-            if col_num == 4:  # Quantity
+            if col_num == 2:  # Date
+                cell.number_format = 'DD/MM/YYYY'
+            elif col_num == 4:  # Quantity
                 cell.number_format = '#,##0' if qty_is_int else '#,##0.00'
             elif col_num == 5:  # Unit Price
                 cell.number_format = '#,##0' if price_is_int else '#,##0.00'
@@ -341,7 +343,9 @@ def disburse_inventory_entry(file_path, item_name, quantity, unit_price, notes="
             cell.border = border
             cell.alignment = alignment
             # Apply number formatting for numeric columns
-            if col_num == 4:  # Quantity
+            if col_num == 2:  # Date
+                cell.number_format = 'DD/MM/YYYY'
+            elif col_num == 4:  # Quantity
                 cell.number_format = '#,##0' if qty_is_int else '#,##0.00'
             elif col_num == 5:  # Unit Price
                 cell.number_format = '#,##0' if price_is_int else '#,##0.00'

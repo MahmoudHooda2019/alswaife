@@ -51,6 +51,9 @@ class AttendanceView:
     def build_ui(self):
         """Build the attendance tracking UI"""
         
+        # Add keyboard event handler
+        self.page.on_keyboard_event = self.on_keyboard_event
+        
         # Create AppBar with title and actions
         app_bar = ft.AppBar(
             leading=ft.IconButton(
@@ -986,3 +989,58 @@ class AttendanceView:
             self.show_message(f"فشل في فتح المسار: {ex}", error=True)
         finally:
             self.close_dialog()
+
+    def on_keyboard_event(self, e: ft.KeyboardEvent):
+        """Handle keyboard events for navigation"""
+        # Handle Ctrl+S for save
+        if e.key == "s" and e.ctrl:
+            self.save_to_excel(None)
+            return
+        
+        # Handle arrow keys for navigation between checkboxes
+        if e.key not in ["Arrow Down", "Arrow Up"]:
+            return
+        
+        # Find currently focused checkbox
+        focused_idx = None
+        if hasattr(self, 'employees_container') and self.employees_container:
+            for idx, control in enumerate(self.employees_container.controls):
+                if isinstance(control, ft.Container):
+                    # Find checkbox in the container
+                    try:
+                        row = control.content
+                        if isinstance(row, ft.Row):
+                            for item in row.controls:
+                                if isinstance(item, ft.Checkbox):
+                                    if item == self.page.focused_control:
+                                        focused_idx = idx
+                                        break
+                    except:
+                        pass
+                if focused_idx is not None:
+                    break
+        
+        if focused_idx is None:
+            return
+        
+        # Calculate new position
+        new_idx = focused_idx
+        if e.key == "Arrow Down":
+            new_idx = min(focused_idx + 1, len(self.employees_container.controls) - 1)
+        elif e.key == "Arrow Up":
+            new_idx = max(focused_idx - 1, 0)
+        
+        # Focus the new checkbox
+        if new_idx != focused_idx and new_idx < len(self.employees_container.controls):
+            try:
+                control = self.employees_container.controls[new_idx]
+                if isinstance(control, ft.Container):
+                    row = control.content
+                    if isinstance(row, ft.Row):
+                        for item in row.controls:
+                            if isinstance(item, ft.Checkbox):
+                                item.focus()
+                                self.page.update()
+                                break
+            except:
+                pass

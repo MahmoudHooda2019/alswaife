@@ -1100,7 +1100,9 @@ def update_client_ledger(folder_path: str, client_name: str, date_str: str, op_n
                         sheet.merge_cells(start_row=start_row, start_column=2, end_row=end_row, end_column=2)
 
                     # 3. Date
-                    sheet.cell(row=start_row, column=3).value = date_str
+                    cell = sheet.cell(row=start_row, column=3)
+                    cell.value = date_str
+                    cell.number_format = 'DD/MM/YYYY'
                     if num_items > 1:
                         sheet.merge_cells(start_row=start_row, start_column=3, end_row=end_row, end_column=3)
 

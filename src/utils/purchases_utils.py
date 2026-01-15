@@ -416,6 +416,7 @@ def append_to_income(filepath: str, new_records: List[Dict]):
             cell.border = thin_border
             cell.fill = current_fill
             cell.alignment = center_alignment
+            cell.number_format = 'DD/MM/YYYY'
         
         workbook.save(filepath)
         workbook.close()
@@ -516,6 +517,7 @@ def append_to_expenses(filepath: str, new_records: List[Dict]):
             cell.border = thin_border
             cell.fill = current_fill
             cell.alignment = center_alignment
+            cell.number_format = 'DD/MM/YYYY'
         
         workbook.save(filepath)
         workbook.close()

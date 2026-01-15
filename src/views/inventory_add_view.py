@@ -13,6 +13,7 @@ from utils.inventory_utils import (
     add_inventory_entry,
     convert_existing_inventory_to_formulas,
 )
+from utils.bottom_sheet_utils import BottomSheetManager
 
 
 class InventoryRow:
@@ -147,6 +148,54 @@ class InventoryRow:
             self.total_price_field.value = "0"
         self.page.update()
 
+    def get_editable_fields(self):
+        """Return list of editable fields in order for navigation"""
+        return [
+            self.date_field,         # 0
+            self.item_name_field,    # 1
+            self.quantity_field,     # 2
+            self.unit_price_field,   # 3
+            self.notes_field,        # 4
+        ]
+    
+    def focus_field(self, field_index):
+        """Focus a specific field by index"""
+        fields = self.get_editable_fields()
+        if 0 <= field_index < len(fields):
+            field = fields[field_index]
+            try:
+                field.focus()
+                if self.page:
+                    self.page.update()
+                return True
+            except Exception:
+                return False
+        return False
+    
+    def get_editable_fields(self):
+        """Return list of editable fields in order for navigation"""
+        return [
+            self.date_field,         # 0
+            self.item_name_field,    # 1
+            self.quantity_field,     # 2
+            self.unit_price_field,   # 3
+            self.notes_field,        # 4
+        ]
+    
+    def focus_field(self, field_index):
+        """Focus a specific field by index"""
+        fields = self.get_editable_fields()
+        if 0 <= field_index < len(fields):
+            field = fields[field_index]
+            try:
+                field.focus()
+                if self.page:
+                    self.page.update()
+                return True
+            except Exception:
+                return False
+        return False
+    
     def to_dict(self):
         """Convert row data to dictionary"""
         return {
@@ -180,6 +229,10 @@ class InventoryAddView:
         self.page.title = "مصنع السويفي - إضافة مخزون"
         self.page.rtl = True
         self.page.theme_mode = ft.ThemeMode.DARK
+        
+        # Navigation tracking
+        self._current_row_idx = 0
+        self._current_field_idx = 0
 
         # Initialize paths
         self.documents_path = os.path.join(os.path.expanduser("~"), "Documents", "alswaife")
@@ -191,6 +244,9 @@ class InventoryAddView:
 
     def build_ui(self):
         """Build the inventory add UI"""
+        # Add keyboard event handler
+        self.page.on_keyboard_event = self.on_keyboard_event
+        
         app_bar = ft.AppBar(
             leading=ft.IconButton(
                 icon=ft.Icons.ARROW_BACK, on_click=self.go_back, tooltip="العودة"
@@ -376,56 +432,110 @@ class InventoryAddView:
         self.page.open(dlg)
 
     def _show_success_dialog(self, filepath: str, count: int):
-        """Show success dialog"""
-        def close_dlg(e=None):
-            self.page.run_task(self._delayed_close, dlg)
-
-        def open_file(e=None):
-            self.page.close(dlg)
-            try:
-                os.startfile(filepath)
-            except:
-                pass
-
-        def open_folder(e=None):
-            self.page.close(dlg)
-            try:
-                os.startfile(os.path.dirname(filepath))
-            except:
-                pass
-
-        dlg = ft.AlertDialog(
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400, size=30),
-                    ft.Text(
-                        "تم الحفظ بنجاح",
-                        color=ft.Colors.GREEN_300,
-                        weight=ft.FontWeight.BOLD,
-                    ),
-                ],
-                rtl=True,
-                spacing=10,
-            ),
-            content=ft.Text(f"تم حفظ {count} صنف في المخزون", size=14, rtl=True),
-            actions=[
-                ft.TextButton(
-                    "فتح الملف",
-                    on_click=open_file,
-                    icon=ft.Icons.FILE_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.GREEN_300),
-                ),
-                ft.TextButton(
-                    "فتح المجلد",
-                    on_click=open_folder,
-                    icon=ft.Icons.FOLDER_OPEN,
-                    style=ft.ButtonStyle(color=ft.Colors.BLUE_300),
-                ),
-                ft.TextButton(
-                    "إغلاق", on_click=close_dlg, style=ft.ButtonStyle(color=ft.Colors.GREY_400)
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.BLUE_GREY_900,
+        """Show success bottom sheet"""
+        BottomSheetManager.show_success_bottom_sheet(
+            page=self.page,
+            message=f"تم حفظ {count} صنف في المخزون",
+            filepath=filepath,
+            title="تم الحفظ بنجاح",
         )
-        self.page.open(dlg)
+
+    def on_keyboard_event(self, e: ft.KeyboardEvent):
+        """Handle keyboard events for arrow navigation"""
+        # Check if the '+' key was pressed to add a new row
+        if e.key == '+' or e.key == '=':
+            if not e.ctrl and not e.shift and not e.alt:
+                self.add_row()
+                return
+        
+        # Arrow key navigation
+        if e.key in ["Arrow Down", "Arrow Up", "Arrow Left", "Arrow Right"]:
+            self._handle_arrow_navigation(e.key)
+    
+    def _skip_dropdown(self, row_idx, field_idx, direction=1):
+        """Skip dropdown fields in the given direction (1=forward, -1=backward)"""
+        if row_idx < 0 or row_idx >= len(self.rows):
+            return row_idx, field_idx
+        
+        fields = self.rows[row_idx].get_editable_fields()
+        
+        # Check current field
+        while 0 <= field_idx < len(fields):
+            if not isinstance(fields[field_idx], ft.Dropdown):
+                return row_idx, field_idx
+            field_idx += direction
+        
+        # If we've exhausted current row, return boundary
+        if direction > 0:
+            return row_idx, len(fields) - 1
+        else:
+            return row_idx, 0
+    
+    def _handle_arrow_navigation(self, key):
+        """Handle arrow key navigation between fields (skipping dropdowns)"""
+        if not self.rows:
+            return
+        
+        # Ensure indices are valid
+        if self._current_row_idx < 0 or self._current_row_idx >= len(self.rows):
+            self._current_row_idx = 0
+        
+        current_row = self.rows[self._current_row_idx]
+        fields = current_row.get_editable_fields()
+        
+        if self._current_field_idx < 0 or self._current_field_idx >= len(fields):
+            self._current_field_idx = 0
+            self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+        
+        if key == "Arrow Right":
+            # Move to previous field (RTL)
+            self._current_field_idx -= 1
+            if self._current_field_idx < 0:
+                # Move to previous row, last non-dropdown field
+                if self._current_row_idx > 0:
+                    self._current_row_idx -= 1
+                    self._current_field_idx = len(self.rows[self._current_row_idx].get_editable_fields()) - 1
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+                else:
+                    self._current_field_idx = 0
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+            else:
+                # Skip dropdown if needed
+                self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+        
+        elif key == "Arrow Left":
+            # Move to next field (RTL)
+            self._current_field_idx += 1
+            if self._current_field_idx >= len(fields):
+                # Move to next row, first non-dropdown field
+                if self._current_row_idx < len(self.rows) - 1:
+                    self._current_row_idx += 1
+                    self._current_field_idx = 0
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+                else:
+                    # Stay at last non-dropdown field
+                    self._current_field_idx = len(fields) - 1
+                    self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+            else:
+                # Skip dropdown if needed
+                self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+        
+        elif key == "Arrow Down":
+            # Move to next non-dropdown field in same row
+            self._current_field_idx += 1
+            if self._current_field_idx >= len(fields):
+                # Wrap to first non-dropdown field in same row
+                self._current_field_idx = 0
+            self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, 1)
+        
+        elif key == "Arrow Up":
+            # Move to previous non-dropdown field in same row
+            self._current_field_idx -= 1
+            if self._current_field_idx < 0:
+                # Wrap to last non-dropdown field in same row
+                self._current_field_idx = len(fields) - 1
+            self._current_row_idx, self._current_field_idx = self._skip_dropdown(self._current_row_idx, self._current_field_idx, -1)
+        
+        # Focus the target field
+        if 0 <= self._current_row_idx < len(self.rows):
+            self.rows[self._current_row_idx].focus_field(self._current_field_idx)
